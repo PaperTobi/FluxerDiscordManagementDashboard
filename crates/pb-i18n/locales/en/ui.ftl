@@ -484,3 +484,7 @@ ui-in-every-community = in every community
 ui-part-recorder = Writing the event log
 ui-part-enforcer = Actions and messages
 audit-by-id = someone (ID { $id })
+
+## Voice lines: where a line comes from
+ui-vl-own = Own line
+ui-vl-uses = uses “{ $line }” ({ $from })

@@ -82,6 +82,51 @@ fn lines(scope: Scope) -> Vec<LineKey> {
     out
 }
 
+/// The lines the bot tries for `key`, in the order of `pb_voicelines::resolve`: a warning for its type and step, the
+/// same step for any type, the type at any step, any type at any step; an action, then any action.
+fn tried(key: &LineKey) -> Vec<LineKey> {
+    match key.0 {
+        Line::Warning { label, step } => {
+            let labels = match label {
+                Sel::Is(l) => vec![Sel::Is(l), Sel::Any],
+                Sel::Any => vec![Sel::Any],
+            };
+            let mut out = Vec::new();
+            if let Sel::Is(n) = step {
+                out.extend(labels.iter().map(|l| Line::Warning {
+                    label: *l,
+                    step: Sel::Is(n),
+                }));
+            }
+            out.extend(labels.iter().map(|l| Line::Warning {
+                label: *l,
+                step: Sel::Any,
+            }));
+            out.into_iter().map(LineKey).collect()
+        }
+        Line::Action { kind: Sel::Is(k) } => vec![
+            LineKey(Line::Action { kind: Sel::Is(k) }),
+            LineKey(Line::Action { kind: Sel::Any }),
+        ],
+        _ => vec![key.clone()],
+    }
+}
+
+/// The slot the bot uses for `key` at `scope`: the first line tried that is set, each looked up from this scope up
+/// (`None`: the built-in text). Languages are left out; the preview plays what one gives.
+fn used_slot(tree: &pb_settings::SettingsTree, scope: Scope, key: &LineKey) -> Option<(Scope, LineKey)> {
+    tried(key).into_iter().find_map(|k| {
+        std::iter::once(scope)
+            .chain(scopes_above(scope))
+            .find(|s| {
+                tree.voice_lines(*s)
+                    .and_then(|x| x.get(&k))
+                    .is_some_and(|x| !x.is_empty())
+            })
+            .map(|s| (s, k))
+    })
+}
+
 /// The scopes a scope inherits from, nearest first.
 fn scopes_above(scope: Scope) -> Vec<Scope> {
     match scope {
@@ -150,15 +195,19 @@ fn LineRow(key: LineKey, scope: Scope, v: Viewer, back: String, clips: Vec<ClipR
     let loc = v.locale;
     let tree = app().engine.settings().current();
     let here: Option<Slot> = tree.voice_lines(scope).and_then(|s| s.get(&key)).cloned();
-    let inherited = scopes_above(scope).into_iter().find(|s| {
-        tree.voice_lines(*s)
-            .and_then(|x| x.get(&key))
-            .is_some_and(|x| !x.is_empty())
-    });
-    let badge = match (&here, inherited) {
-        (Some(_), _) => text(loc, "ui-set-here", &[]),
-        (None, Some(s)) => text(loc, "ui-inherited", &[("from", scope_name(loc, s).into())]),
-        (None, None) => text(loc, "ui-built-in", &[]),
+    // What the bot uses for this line here, in the order it looks (a type's line may come from "any type").
+    let badge = match used_slot(&tree, scope, &key) {
+        Some((s, k)) if k == key && s == scope => text(loc, "ui-vl-own", &[]),
+        Some((s, k)) if k == key => text(loc, "ui-inherited", &[("from", scope_name(loc, s).into())]),
+        Some((s, k)) => text(
+            loc,
+            "ui-vl-uses",
+            &[
+                ("line", line_title(loc, &k.0).into()),
+                ("from", scope_name(loc, s).into()),
+            ],
+        ),
+        None => text(loc, "ui-built-in", &[]),
     };
     let line = key.to_string();
     let preview = format!("/media/preview?scope={}&line={line}", scope_param(scope));

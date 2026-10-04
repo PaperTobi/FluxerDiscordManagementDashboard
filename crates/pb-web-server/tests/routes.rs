@@ -1850,3 +1850,57 @@ async fn no_page_has_an_element_id_twice() {
     }
     w.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_voice_line_says_which_line_the_bot_uses() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let lines = format!("/c/{G}/voice-lines");
+    let row = |page: &str, line: &str| {
+        let at = page.find(&format!("id=\"line-{line}\"")).expect("the line");
+        page[at..]
+            .split("class=\"vline-head\"")
+            .nth(1)
+            .unwrap()
+            .split("</div>")
+            .next()
+            .unwrap()
+            .to_owned()
+    };
+    let page = w.get(&lines, Some(&owner)).await.body;
+    assert!(
+        row(&page, "warning.profanity.any").contains("built in"),
+        "nothing set: the built-in texts"
+    );
+    // A line for any type at Alpha is what a profanity warning there says.
+    w.post(
+        "/voice-lines",
+        Some(&owner),
+        &[
+            ("csrf", &csrf),
+            ("scope", &format!("server:{G}")),
+            ("line", "warning.any.any"),
+            ("op", "set_text"),
+            ("lang", "en"),
+            ("text", "{name}, language!"),
+            ("back", "/"),
+        ],
+    )
+    .await;
+    let page = w.get(&lines, Some(&owner)).await.body;
+    assert!(
+        row(&page, "warning.any.any").contains("Own line"),
+        "{}",
+        row(&page, "warning.any.any")
+    );
+    let profanity = row(&page, "warning.profanity.any");
+    assert!(
+        profanity.contains("uses “Warning · any type · every step” (this community)"),
+        "{profanity}"
+    );
+    // Max's page: Alpha's line, by the same rule.
+    let person = w.get(&format!("/c/{G}/p/{MAX}/voice-lines"), Some(&owner)).await.body;
+    assert!(row(&person, "warning.any.any").contains("from this community"));
+    w.stop().await;
+}

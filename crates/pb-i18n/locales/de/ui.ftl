@@ -484,3 +484,7 @@ ui-in-every-community = in jeder Community
 ui-part-recorder = Ereignisprotokoll schreiben
 ui-part-enforcer = Maßnahmen und Nachrichten
 audit-by-id = jemand (ID { $id })
+
+## Sprachtexte: woher ein Sprachtext kommt
+ui-vl-own = Eigener Sprachtext
+ui-vl-uses = nutzt „{ $line }“ ({ $from })
