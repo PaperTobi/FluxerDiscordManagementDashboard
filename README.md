@@ -2,7 +2,7 @@
 
 ![crates: 32](https://img.shields.io/badge/crates-32-orange) ![lines of Rust: 49k](https://img.shields.io/badge/lines%20of%20Rust-49k-blue) ![packages in Cargo.lock: 1079](https://img.shields.io/badge/Cargo.lock-1079%20packages-lightgrey) ![unsafe: 1 crate](https://img.shields.io/badge/unsafe-1%20crate-yellow) ![TODO: 0](https://img.shields.io/badge/TODO-0-brightgreen) ![warning clips: 5](https://img.shields.io/badge/warning%20clips-5-red) ![port: 8790](https://img.shields.io/badge/port-8790-informational) ![exit code 78: read the log](https://img.shields.io/badge/exit%20code%2078-read%20the%20log-critical)
 
-A voice moderation bot for [Fluxer](https://fluxer.app). It follows chosen people into voice calls in your community,
+A voice moderation bot for [Fluxer](https://fluxer.app) (not Discord, whose API has rate limits as a personality). It follows chosen people into voice calls in your community,
 listens **only to their microphones**, scores what they say with the Roblox voice-safety model (locally, on your
 machine) and, when a sentence is flagged, warns them in the call: with a clip you recorded or uploaded, or with
 text-to-speech in their language. Repeat violations can escalate (a message to you, mute, disconnect, time out), and a
@@ -12,11 +12,11 @@ Everything is managed in a **web page**: a live wall of who is talking and what 
 settings, voice lines, reports and the audit trail. Chat commands (`!pb add @someone`, `!pb pause` …) cover the
 everyday things.
 
-It runs as one program (best in one **Podman** container, as an ordinary user), CPU only; a GPU is optional. The models
+It runs as one program (best in one **Podman** container, as an ordinary user), CPU only; a GPU is optional (and NVIDIA can fuck right off with its proprietary blob, we use Vulkan). The models
 and voices are downloaded once, pinned to upstream revisions and checked against their SHA-256; nothing is downloaded
 while the bot runs. Everything it keeps is in one data directory.
 
-The bot is written in Rust. It replaces an earlier Python bot, whose data can be imported (see *Moving from the Python
+The bot is written in Rust (not C, not C++, not JavaScript, not any of the other languages that keep the CVE feed employed). It replaces an earlier Python bot, whose data can be imported (see *Moving from the Python
 bot*).
 
 > 🍄 **TL;DR, and please sit down first:** it listens to your friends swear and tells them off with a recorded voice. 🎙️🤬➡️📢
@@ -56,8 +56,6 @@ bot*).
 - [Git History Trivia](#git-history-trivia)
 - [Docs Folder Trivia](#docs-folder-trivia)
 - [Container Lore](#container-lore)
-- [Windows, A Eulogy](#windows-a-eulogy)
-- [C, The Loaded Gun](#c-the-loaded-gun)
 - [Segfault Support Group](#segfault-support-group)
 - [The Unix Philosophy Tribunal](#the-unix-philosophy-tribunal)
 - [The Wisdom Of Stack Overflow](#the-wisdom-of-stack-overflow)
@@ -71,8 +69,6 @@ bot*).
 - [Cheat Sheet](#cheat-sheet)
 - [Wellness Checklist](#wellness-checklist)
 - [Countdown To Release](#countdown-to-release)
-- [The Diss Track](#the-diss-track)
-- [Rants, Hot Takes And Holy Wars](#rants-hot-takes-and-holy-wars)
 - [More Real Numbers](#more-real-numbers)
 - [Mailing List Mode](#mailing-list-mode)
 - [Insider Gags Glossary](#insider-gags-glossary)
@@ -89,20 +85,20 @@ bot*).
 > 🧠 **Repo fact:** the build wants 8 GB of RAM and 25 GB of disk because LiveKit's libwebrtc is built against Chromium's libc++. Your 32 crates barely register. Chromium is out there somewhere, laughing, in 400 MB chunks. 🧊
 > Requirement #0, unlisted: Linux. Windows users may press `Alt+F4` now. 🪟🔫 macOS users may continue, after buying one (1) adapter.
 
-- **System**: Linux. For the container: **Podman 4.4+** (rootless is fine; 5.2+ for the systemd units in `deploy/quadlet/`)
-- **CPU**: x86-64 with AVX2, AES and BMI2 (most CPUs since about 2014), or ARMv8 with the crypto extensions
+- **System**: Linux (not Windows, never Windows, the forced update has already started in the background anyway). For the container: **Podman 4.4+** (rootless is fine; 5.2+ for the systemd units in `deploy/quadlet/`)
+- **CPU**: x86-64 with AVX2, AES and BMI2 (most CPUs since about 2014; Intel ME is in there too, a second computer you cannot turn off, thanks Intel), or ARMv8 with the crypto extensions
 - **Memory**: about **3 GB** at peak while running; building needs about 8 GB and 25 GB of disk
-- **Network**: outgoing internet including **UDP** (voice); **TCP 8790** reachable in your network for the web page
+- **Network**: outgoing internet including **UDP** (voice; your ISP router from 2012 will eat it, as is tradition); **TCP 8790** reachable in your network for the web page
 - **Fluxer**: a bot application, and someone with **Manage community** or **Administrator** to invite it
 
-Run **one** bot per bot token.
+Run **one** bot per bot token. Two bots on one token is Kubernetes thinking, and look where that got everyone.
 
 ## 1. Create the bot in Fluxer
 
 > 🐙 **Fluxer fact:** the bot token looks like `<application id>.<secret>`. In the repo it is wrapped in `secrecy`, so it never shows up in logs. It wears a ski mask. 🥷 Never paste it into a chat. Not even a nice chat. Not even *this* chat.
 
 1. In Fluxer open **User Settings → Applications**, create an application and copy its **Bot token**
-   (`<application id>.<secret>`) and its **Client secret**. Keep both private; if they leak, reset them there.
+   (`<application id>.<secret>`) and its **Client secret**. Keep both private; if they leak, reset them there. Do not put them in Jira, Slack, Confluence, or an Excel file named `passwords_final_v3.xlsx`.
 2. Tell the people you will track that the bot listens to them (see *Privacy and data*).
 
 The bot is invited to your community after the setup (step 3), with a link from its web page.
@@ -111,7 +107,7 @@ The bot is invited to your community after the setup (step 3), with a link from 
 
 > 🦀 **Run fact:** the first start prints a setup code. It is not in the repo, not in the Containerfile and not in your heart. It is in the log. `RTFL`: read the fucking log. 📖
 
-Get the code:
+Get the code (with `git`, not a zip file, we are not Windows users):
 
 ```bash
 git clone https://github.com/PaperTobi/FluxerDiscordManagementDashboard.git profanity-watch
@@ -133,7 +129,7 @@ podman run -d --name profanity-watch --restart=unless-stopped \
 podman logs -f profanity-watch
 ```
 
-The first build takes a while (count on 30–60 minutes): it compiles the bot and its web page and downloads about
+The first build takes a while (count on 30–60 minutes; blame Chromium's libc++, blame Google, blame C++, in that order): it compiles the bot and its web page and downloads about
 1.7 GB of model weights and voices. Later builds reuse their caches. When the log shows
 `web UI listening addr=0.0.0.0:8790` and, on the first start, the **setup code**, go on with step 3.
 
@@ -142,7 +138,7 @@ everything).
 
 ### With systemd (quadlets, Fedora CoreOS)
 
-`deploy/quadlet/` has three units (rootless, recommended, or rootful; Podman 5.2+). They build the image from the
+`deploy/quadlet/` has three units (rootless, recommended, or rootful; Podman 5.2+). Yes, systemd again. It will read this README to you next. They build the image from the
 checkout in `~/profanity-watch`, keep the data in a volume, restart the bot when it fails and check its health.
 
 ```bash
@@ -169,7 +165,7 @@ instructions) or **3** (another bot uses the same volume) is not restarted until
 
 ### Without a container
 
-You need the build tools from *Development* below. Then, one line at a time (each needs the one before it to have
+You need the build tools from *Development* below (no, `apt install rust` will not do, Debian stable thinks Rust is a rumour). Then, one line at a time (each needs the one before it to have
 worked):
 
 ```bash
@@ -209,7 +205,7 @@ podman run … --secret profanity-watch-token,type=env,target=PB_BOT_TOKEN \
 
 > 🍃 **Web fact:** the web UI is Rust compiled to WebAssembly. The `cargo xtask ci` has a *shipped-JavaScript gate*, so nobody can smuggle in a `left-pad` at night. The author fears `node_modules`. `node_modules` knows. 🕳️
 
-Open **`http://<the machine's IP>:8790`** from your network. The setup asks, one step at a time:
+Open **`http://<the machine's IP>:8790`** from your network. Any browser works. Even Chrome, if you like watching 8 GB of RAM evaporate for four tabs. Internet Explorer users: no. The setup asks, one step at a time:
 
 1. **Setup code**: from the log, or `podman exec profanity-watch pb setup-code`.
 2. **Fluxer instance**: keep `https://api.fluxer.app`, or your own instance's API address.
@@ -217,7 +213,7 @@ Open **`http://<the machine's IP>:8790`** from your network. The setup asks, one
 4. **Client secret**. The page shows the **redirect address** (for example `http://192.168.1.50:8790/auth/callback`):
    add it in Fluxer under your application's **Redirect URIs**. Give the machine a fixed IP so it keeps matching (if it
    does not, the login says which address to register).
-5. **Log in with Fluxer**. Whoever logs in now becomes the bot's owner. That finishes the setup.
+5. **Log in with Fluxer**. Whoever logs in now becomes the bot's owner. That finishes the setup. No eleven-month SAP consulting project. A web page.
 
 Then:
 
@@ -235,7 +231,7 @@ stay logged in for 12 hours, admins for 7 days; changing secrets needs a login f
 
 ## Using it
 
-> 🎙️ **Usage fact:** all 5 warning clips back to back are 13.09 seconds, which is shorter than a TikTok and has a better plot.
+> 🎙️ **Usage fact:** all 5 warning clips back to back are 13.09 seconds, which is shorter than a TikTok and has a better plot than any Teams call, and the audio actually works.
 
 - **Live**: one tile per person the bot listens to (microphone level, where their latest sentence is: speaking, cut,
   queued, scored, decided; the time to a verdict), and the latest violations.
@@ -256,7 +252,7 @@ and the result of a moderation action; the **owner** gets a direct message for v
 *Tell the bot owner* (all of them by default), with the recording unless *Recordings in messages to the bot owner* is
 off; the daily or weekly **report** is a direct message too.
 
-The page updates live over one connection per tab; a tab in the background keeps only the sidebar current and catches
+The page updates live over one WebSocket per tab (not a 400 MB Electron app asking the server "are we there yet" like a toddler); a tab in the background keeps only the sidebar current and catches
 up at once when you come back.
 
 ### Chat commands
@@ -265,18 +261,18 @@ Type them in a text channel the bot can see, starting with `!pb` or a mention of
 Anyone: `!pb status`, `!pb list`, `!pb jar [@user]`. Admins: `!pb add @a`, `!pb remove @a`, `!pb pause` / `resume`,
 `!pb observe on|off`, `!pb set threshold 0.6 [@a]`, `!pb set strikes 2`, `!pb set window 20s`,
 `!pb set audience offender|tracked|channel`, `!pb set language de`, `!pb reset <setting|all> [@a]`,
-`!pb modlog #channel|off`. German words work too (`an`/`aus`, `ja`/`nein`).
+`!pb modlog #channel|off`. German words work too (`an`/`aus`, `ja`/`nein`). Try that with Siri.
 
 ## Settings
 
-> 🎛️ **Settings fact:** 49 settings with an English label. `/etc` would be proud. `/etc` would also be confused by the web page. Reviews of each setting live in *Every Setting, With Commentary* below.
+> 🎛️ **Settings fact:** 49 settings with an English label. `/etc` would be proud. `/etc` would also be confused by the web page. Reviews of each setting live in *Every Setting, With Commentary* below. Unlike GNOME, nothing here is hidden "for simplicity" and then called a design decision.
 
 Settings are set globally, per community and per person; the most specific one wins (person > community > global >
 `config.toml` > built-in), and the page shows where each value comes from. `pb settings docs` prints all of them.
 Durations are written like `20s`, `5m`, `2h`, `1d`, or `unlimited` where that is allowed. There are no caps on counts or
 lengths; the only limits are the model's and Fluxer's (a time-out lasts at most 365.25 days).
 
-They are kept in `settings/*.toml` in the data directory (comments survive edits in the page). After editing the files
+They are kept in `settings/*.toml` in the data directory (comments survive edits in the page; TOML, not YAML, because we do not need Norway to be `false`). After editing the files
 by hand, press *System → Read the settings files again* or send `SIGHUP`.
 
 ### `config.toml` and the environment
@@ -306,7 +302,7 @@ threshold = 0.6
 
 > 🔐 **HTTPS fact:** the bot's *outgoing* TLS uses the pure-Rust `graviola` crypto provider. OpenSSL is not invited. We do not speak of OpenSSL. Heartbleed sends its regards. 💔
 
-Browsers record from the microphone only on secure pages, and logins are safer over HTTPS. Give the bot a certificate
+Browsers (even Edge, yes, Edge still exists) record from the microphone only on secure pages, and logins are safer over HTTPS. Give the bot a certificate
 and its key (PEM files, for example from your own CA, mkcert, `tailscale cert` or a DNS-validated Let's Encrypt
 certificate) and it serves HTTPS on the same port. With Podman secrets:
 
@@ -358,13 +354,13 @@ and which old settings no longer exist (the old caps).
 
 > 🛠️ **Troubleshooting fact:** exit code 78 is a lot of the problems. 78 is `EX_CONFIG` from the BSD `sysexits.h`. Somebody in the 1980s saw your pain coming. 🧙
 
-- **The page does not open**: container running (`podman ps`)? same network? firewall (`8790/tcp`)? open it by IP
+- **The page does not open**: container running (`podman ps`)? same network? firewall (`8790/tcp`)? open it by IP (it is DNS, it is always DNS, or the Fritzbox)
 - **"This address is not one of the bot's web UI addresses"**: open it by IP, then set *System → Web UI address* or *Extra host names*
 - **Login fails at Fluxer**: the redirect address is not registered exactly (setup step 4; the login names the address), or the client secret is wrong (enter it again on the setup's last step, or *System → Client secret*)
 - **"Record a clip" is greyed out**: the page is not opened over HTTPS (see *HTTPS*) or on localhost; upload a file instead
-- **Exit code 78**: the log says why (configuration, model files, CPU); `pb doctor` checks everything
+- **Exit code 78**: the log says why (configuration, model files, CPU); `pb doctor` checks everything. It is plain text. No Event Viewer, no 0x80070005 with a help link that 404s
 - **Exit code 3**: another bot process uses the same data directory
-- **`rustc: symbol lookup error: …librustc_driver….so: undefined symbol …`**: the distribution's Rust package does not match its LLVM libraries (a partial update, or packages from different repositories): install rustup instead (*Development*)
+- **`rustc: symbol lookup error: …librustc_driver….so: undefined symbol …`**: the distribution's Rust package does not match its LLVM libraries (a partial update, or packages from different repositories): install rustup instead (*Development*). Distros and their Rust packages: a love story that ends at `apt`
 - **`rustup could not choose a version of cargo to run`**: `rustup default nightly`, then in the project directory `rustup toolchain install`
 - **`can't find crate for core` … `wasm32-unknown-unknown`**: the browser target is missing: in the project directory `rustup toolchain install` (or `rustup target add wasm32-unknown-unknown`)
 - **`target/release/pb`: unknown command / no such file**: the build before it failed: scroll up to its first error
@@ -386,16 +382,16 @@ mod-log channel. The bot is visible in the call while it listens.
 
 ## Development
 
-> 💻 **Development fact:** `cargo xtask ci` runs fmt, clippy (native and wasm), tests, cargo-deny, cargo-shear, the layer rules, and the zero-C and shipped-JavaScript gates. Nobody gets in. Not even you. Especially not you. 🚪
+> 💻 **Development fact:** `cargo xtask ci` runs fmt, clippy (native and wasm), tests, cargo-deny, cargo-shear, the layer rules, and the zero-C and shipped-JavaScript gates. Nobody gets in. Not even you. Especially not you. 🚪 Zero tab characters in the code: `rustfmt` ended that holy war and the tabs went off to write YAML.
 
 Tools: Rust nightly through [rustup](https://rustup.rs) (`rust-toolchain.toml` names it, with the
 `wasm32-unknown-unknown` target for the browser bundle; a stable Rust of at least `rust-version` in `Cargo.toml` works
-too), clang 21+ and lld (LiveKit's libwebrtc is built against Chromium's libc++), glib
-headers and pkg-config (libwebrtc), cmake and ninja (espeak-ng), git, and for the checks
+too), clang 21+ and lld (LiveKit's libwebrtc is built against Chromium's libc++, thanks Google, for compiling your own C++ standard library into a video-call stack), glib
+headers and pkg-config (libwebrtc), cmake (a build system like a haunted house) and ninja (espeak-ng), git, and for the checks
 `cargo install --locked cargo-deny cargo-shear`.
 
 ```bash
-# Arch, CachyOS, Manjaro (rustup replaces the distribution's `rust` package)
+# Arch, CachyOS, Manjaro (rustup replaces the distribution's `rust` package; yes, we use Arch, btw)
 sudo pacman -S --needed base-devel rustup clang lld pkgconf glib2 cmake ninja git
 # Debian, Ubuntu: rustup from https://rustup.rs; clang 21 from https://apt.llvm.org (the Containerfile's build stage
 # lists the packages)
@@ -473,11 +469,11 @@ list. Everything else is, to put it kindly, *colour*, and to put it unkindly, a 
 All numbers below are real. We counted. We should not have, but we did, and now we cannot stop. Send help. Or coffee. Or `kill -9`.
 
 - 🤷 **32 crates** in `crates/`. That is a lot of crates for a bot that says "watch your mouth, buddy".
-- 📏 About **49,581 lines** of Rust in **235 files**. Linux itself is bigger, but Linux also has Torvalds, so it has an excuse.
+- 📏 About **49,581 lines** of Rust in **235 files**. Linux itself is bigger, but Linux also has a 30-year head start and `drivers/staging`, so it has an excuse.
 - 🐘 The biggest crate, `pb-engine`, has **8,388 lines**. The smallest, `pb-voice-api`, has **161**. It is small, but it knows what it is doing. Unlike `systemd`.
 - 🎭 The biggest single file is `crates/pb-fluxer-fake/src/lib.rs`, **1,270 lines**: a fake Fluxer so the real one is not bothered during tests. A one-file theatre. No refunds.
-- 🔒 `Cargo.lock` lists **1,079 packages**. The bot has 32 of its own. The other 1,047 are friends we met on the way, and we did not do a background check. 🧾
-- 🧪 **173 tests**, **23** of them `#[ignore]` because they need models, a LiveKit server or a browser. They are the introverts of the test suite.
+- 🔒 `Cargo.lock` lists **1,079 packages**. The bot has 32 of its own. The other 1,047 are friends we met on the way, and we did not do a background check, same as npm, where `is-even` depends on `is-odd` and nobody blinks. 🧾
+- 🧪 **173 tests**, **23** of them `#[ignore]` because they need models, a LiveKit server or a browser. They are the introverts of the test suite. (The Jenkins plugin ecosystem is 900 introverts holding hands.)
 - 📝 The word `TODO` appears **0 times**. Clippy's `todo` lint is on `warn`. Either the author is disciplined or lying. Both are valid.
 - 😬 `unwrap()` appears **467 times**, mostly in tests. "Mostly" is doing the heavy lifting of a Hetzner root server.
 - 🐑 `clone()` appears **859 times**. Rust developers call this "being pragmatic". C developers call it "cheating". Python developers call it "Tuesday".
@@ -493,6 +489,10 @@ All numbers below are real. We counted. We should not have, but we did, and now 
 - 🔧 The toolchain file asks for **nightly** (with wasm32), while `Cargo.toml` says `rust-version` **1.99**, edition **2024**. The code stays within stable Rust, so nightly is a lifestyle choice, like running Gentoo.
 - 🧠 About **3 GB** of RAM at peak, about **1.7 GB** of model weights. In the Electron universe that is "a small desktop app that does nothing".
 - 🌍 **8 Fluent files**, **1,670 lines**, two languages. Both languages say the same thing, with different punctuation and the same disappointment.
+
+- 🪟 Lines of Windows-specific code: **0**. Lines of Windows-flavoured contempt: uncountable.
+- 🟨 Lines of JavaScript shipped: **0**. `node_modules` folders: **0**. The borrow checker has done more for my blood pressure than any doctor.
+- 🧊 Minutes spent waiting for Chromium's libc++ to compile: too many, and Google has not apologised.
 
 > 🍄 **Trip report #2:** a crab rode a penguin through a field of semicolons. Neither had a semicolon. The crab did not need one.
 
@@ -534,7 +534,7 @@ All numbers below are real. We counted. We should not have, but we did, and now 
 
 The crates are sorted into layers, and the rules for who may depend on whom are enforced by `cargo xtask deps` (see `xtask/layers.toml`).
 Imagine a cake. Every layer is a flavour of responsibility, and the cake may only be eaten from the top. 🎂 Lower layers are not allowed to
-look at higher layers. It is basically a hierarchy with a linter.
+look at higher layers. It is basically a hierarchy with a linter. Java would have an `AbstractLayerFactoryBean` per layer and a Spring config the size of a phone book.
 
 - **L0**: the pure ones. No I/O. They have never seen a network packet and are happy. Monks. Haskellers. 🧘
 - **L1**: the interfaces. Contract-minded. Lawyers.
@@ -571,8 +571,8 @@ This is the software equivalent of a seating chart at a wedding, and `cargo xtas
 Every crate in `crates/`, with its real line count and an opinion nobody requested. In the order the filesystem coughed them up. 🫗
 
 - `pb` (L5, 2,530 lines): The binary. The only crate that gets to have `main`. The other 31 are a very elaborate fan club. 🍒
-- `pb-audio` (L2, 541 lines): Decode, resample, loudness, fades. Sound goes in, slightly different sound comes out, and nobody is allowed to say `ffmpeg`.
-- `pb-classifier-roblox` (L2, 1,143 lines): The judge. Runs Roblox's voice-safety model in Burn. Roblox spent years learning what children scream in lobbies, and we inherit the trauma for free. 🧑‍⚖️
+- `pb-audio` (L2, 541 lines): Decode, resample, loudness, fades. Sound goes in, slightly different sound comes out, and nobody is allowed to say `ffmpeg`, the CLI with 400 flags and a man page like a ransom note.
+- `pb-classifier-roblox` (L2, 1,143 lines): The judge. Runs Roblox's voice-safety model in Burn. Roblox spent years learning what children scream in lobbies, and we inherit the trauma for free. In Python this needs a venv, three conda envs and a prayer. 🧑‍⚖️
 - `pb-commands` (L0, 435 lines): Parses `!pb`. IRC bots did this in 1998 and nobody has improved on it since.
 - `pb-devstack` (L5, 268 lines): A fake Fluxer with fake friends in a fake call. Never shipped. Best social life in the repo. 🎭
 - `pb-domain` (L0, 774 lines): Ids, labels, scores, verdicts. The nouns. No I/O, no regrets, no side effects, like a monk or a Haskell programmer.
@@ -580,17 +580,17 @@ Every crate in `crates/`, with its real line count and an opinion nobody request
 - `pb-espeak` (L2, 294 lines): Four C functions in a trench coat. The `unsafe` lives here and is not allowed out. Scheiß C, but we need the phonemes. 🚬
 - `pb-fluxer` (L2, 2,584 lines): Talks to Fluxer. Respects rate limits, unlike every Discord bot you have ever met.
 - `pb-fluxer-api` (L1, 774 lines): The shape of Fluxer, so nobody else has to look at it directly.
-- `pb-fluxer-fake` (L5, 1,270 lines): One file. Pretends to be an entire chat platform. Stage fright: none. 🎭
+- `pb-fluxer-fake` (L5, 1,270 lines): One file. Pretends to be an entire chat platform. Stage fright: none. In Java this takes 14 mock annotations and a Spring context. 🎭
 - `pb-i18n` (L0, 739 lines): Two languages, de and en, so the bot can tell you off in the language you swore in.
-- `pb-import` (L2, 1,511 lines): Eats the old Python bot's data. Silently. With respect for the dead. 🪦
+- `pb-import` (L2, 1,511 lines): Eats the old Python bot's data. Silently. With respect for the dead. `pip freeze > requirements.txt`, rest in peace. 🪦
 - `pb-infer` (L2, 1,264 lines): Model threads and priority queues. Your sentences wait in line like at the Bürgeramt. 🎟️
 - `pb-live` (L3, 955 lines): The gossip hub. Pushes updates to your browser before you finish blinking.
-- `pb-live-proto` (L0, 1,876 lines): The grammar of the gossip. Compiles to wasm so the browser can gossip too. No JavaScript was harmed. None was invited.
+- `pb-live-proto` (L0, 1,876 lines): The grammar of the gossip. Compiles to wasm so the browser can gossip too. No JavaScript was harmed. None was invited. `npm` stayed outside in the rain.
 - `pb-models-api` (L1, 304 lines): Interfaces for VAD, classifier and TTS, with contract tests. A prenup for models.
 - `pb-policy` (L0, 1,695 lines): Strikes, escalation, the follow machine. Judge Dredd with a config file. ⚖️
 - `pb-segment` (L0, 912 lines): Cuts speech into sentences. A very small butcher with hysteresis.
-- `pb-settings` (L0, 2,997 lines): Almost 3,000 lines to say "it depends". Enterprise grade.
-- `pb-store` (L2, 2,864 lines): The hash-chained diary. Trusts nobody, including itself. 📓
+- `pb-settings` (L0, 2,997 lines): Almost 3,000 lines to say "it depends". Enterprise grade, and no SAP consultant was billed.
+- `pb-store` (L2, 2,864 lines): The hash-chained diary. Trusts nobody, including itself. The Windows registry would never. 📓
 - `pb-store-api` (L1, 1,815 lines): The front cover of the diary.
 - `pb-testkit` (L5, 1,116 lines): The cast of the test suite: fake participants, fake LiveKit, golden data. Method acting. 🎬
 - `pb-tls` (L2, 218 lines): Pure-Rust TLS setup and a CPU check. OpenSSL was not invited. It is still not over it. 💔
@@ -599,8 +599,8 @@ Every crate in `crates/`, with its real line count and an opinion nobody request
 - `pb-voice-api` (L1, 161 lines): The smallest crate. Hello-world energy, peak performance.
 - `pb-voice-livekit` (L2, 765 lines): Where audio enters and leaves. The only crate that has seen UDP in the wild. 📡
 - `pb-voicelines` (L0, 1,090 lines): Slots, templates, utterance plans. The bot's writers' room.
-- `pb-web` (L4, 4,163 lines): Leptos. Rust in the browser, on purpose, on a Sunday. 🍃
-- `pb-web-server` (L4, 4,124 lines): axum. The bouncer: host allowlist, sessions, uploads. "Not on the list, not coming in." 🚪
+- `pb-web` (L4, 4,163 lines): Leptos. Rust in the browser, on purpose, on a Sunday. React devs may now cry into their `useEffect`. 🍃
+- `pb-web-server` (L4, 4,124 lines): axum. The bouncer: host allowlist, sessions, uploads. "Not on the list, not coming in." Apache says hi, nginx says hi, Tomcat says nothing, Tomcat is Java. 🚪
 - `pb-weights` (L2, 385 lines): Downloads 1.7 GB, checks the SHA-256 like customs, resumes if interrupted. `curl | sh` could never. 🛃
 
 **Size ranking, in one breath:** `pb-engine` (8,388) is bigger than `pb-web` (4,163) and `pb-web-server` (4,124), which beat `pb-settings` (2,997), `pb-store` (2,864), `pb-fluxer` (2,584) and `pb` (2,530). Everyone else is a rounding error, and `pb-voice-api` (161) is the smallest rounding error of them all.
@@ -697,7 +697,7 @@ Reminder from the real docs: settings can be set globally, per community and per
 - **Summary report** (`setting-digest`): Daily or weekly summary. A newsletter nobody subscribed to. A cron job with a hat.
 - **Report time** (`setting-digest-time`): What time the summary arrives. Not 3 a.m. Probably.
 - **Report day (weekly)** (`setting-digest-weekday`): Which day the weekly report arrives. Not Friday afternoon. Friday afternoon is a protected habitat.
-- **Time zone** (`setting-timezone`): Time zone. The source of all bugs in all projects since 1884.
+- **Time zone** (`setting-timezone`): Time zone. The source of all bugs in all projects since 1884. And DST, the only update more annoying than a Windows update.
 - **Swear jar** (`setting-jar-enabled`): The swear jar. A counter. No actual money. Calm down. No, it is not a coin, and no, it is not on a blockchain.
 - **Chat language** (`setting-chat-language`): The language the bot writes in. `de` or `en`.
 - **Recordings** (`setting-recordings`): Keep recordings for flagged, all, or no sentences. The privacy dial. The GDPR is watching and has no sense of humour.
@@ -709,7 +709,7 @@ Reminder from the real docs: settings can be set globally, per community and per
 - **Fluxer instance** (`setting-instance`): Which Fluxer instance. `https://api.fluxer.app` or your own.
 - **Web UI address** (`setting-ui-url`): The web UI address. Must match the redirect address. Matters.
 - **Extra host names** (`setting-allowed-hosts`): Extra host names the page may be opened by. A guest list for URLs.
-- **CPU threads for the model** (`setting-cpu-threads`): CPU threads for the model. More threads, more heat. Your fan has opinions and a union.
+- **CPU threads for the model** (`setting-cpu-threads`): CPU threads for the model. More threads, more heat. Your fan has opinions and a union. Chrome's 38 helper processes have a bigger one.
 - **CPU threads for speech** (`setting-tts-threads`): CPU threads for speech. The robot voice needs cores too.
 
 **The nine settings sections in the web page:** Tracking, Detection, Warning, Escalation, Greeting, Reporting, Recording, Chat commands and System. Read in that order it tells a story: *we track you, we detect you, we warn you, we escalate, we greet, we report, we record, we talk about it in chat, and then we fix the system.* That is also the plot of every office job.
@@ -820,7 +820,7 @@ Quick, unrequested notes on the things this bot is built from. Every item is a r
 - 🌐 **axum.** The web server. Listens on 8790 like a shy Apache.
 - 🍃 **Leptos.** The web UI. Server-rendered pages with interactive "islands". Islands: the only vacation this project has had.
 - 📖 **Fluent.** Mozilla's localisation system for all texts, in `de` and `en`.
-- 🐳 **Podman.** The recommended way to run the bot, with `--read-only --cap-drop=ALL --security-opt no-new-privileges`. The most polite container ever. A butler with a seccomp profile.
+- 🐳 **Podman.** The recommended way to run the bot, with `--read-only --cap-drop=ALL --security-opt no-new-privileges`. The most polite container ever. A butler with a seccomp profile. The Docker daemon is a butler who lets a stranger in as root.
 - 🧾 **systemd quadlets.** `deploy/quadlet/` has three units. systemd will eventually read this README to you, fix the typos, and become PID 1 of your thoughts. 🧵
 - 🔐 **graviola.** A pure-Rust crypto provider for TLS. It checks your CPU like a bouncer checks IDs.
 - 🐍 **Python.** The previous bot. Gone but not forgotten. The importer keeps its data alive. `IndentationError`, we hardly knew ye.
@@ -854,7 +854,7 @@ Honourable mention: `rustls-platform-verifier` and `webpki-root-certs`, which to
 
 - 🏆 The longest name is `wgpu-core-deps-windows-linux-android`, 36 characters. A crate that is somehow *Windows, Linux, and Android at the same time*. A pure Frankenstein. 🧟
 - 🪟 The lockfile contains `winapi`, `windows`, `windows-sys` and a small village of `windows_*_msvc` crates. They are lockfile guests. They are in the building. Nobody gave them a badge, and they will never be compiled on your Linux box. Scheiß Windows.
-- 🎮 It also contains `cudarc` and `burn-cuda`. Same deal, no badge. (Fuck you, NVIDIA. See *Rants*.)
+- 🎮 It also contains `cudarc` and `burn-cuda`. Same deal, no badge. (Fuck you, NVIDIA.)
 - 🍎 `objc2-*`: whole forest of Apple crates, also guests. Cupertino had a cocktail party and nobody showed up.
 - 📚 Alphabetically first: `addr2line`. Last: `zune-jpeg`. In between: 975 reasons to pin your versions.
 
@@ -896,40 +896,9 @@ The quadlet units in `deploy/quadlet/`:
 - **`profanity-watch-data.volume`**: The named volume that stores everything the bot keeps
 - **`profanity-watch.container`**: Runs the bot, restarts it on failure, checks its health
 
-The container runs read-only, drops all capabilities, forbids new privileges, and keeps its data in one volume. It is the most boring container in the world. This is a compliment.
+The container runs read-only, drops all capabilities, forbids new privileges, and keeps its data in one volume. It is the most boring container in the world. This is a compliment. Docker Desktop on Windows is the opposite: a Linux VM in a Windows VM with a licence agreement.
 
-## Windows, A Eulogy
 
-🪟 *Gather round. We are here today to remember Windows support, which never existed.*
-
-- **Windows support: none.** Not planned. Not even in this README's dream, and this README is *very* far gone.
-- The Requirements section says "Linux". We meant it. It was not a typo. It was a statement of values.
-- Scheiß Windows, as the locals say. Reasons, in no particular order:
-  - the forced reboot in the middle of your 60-minute `cargo build`, with the message "Updating, 30%… 100%… 30%…";
-  - `C:\Program Files (x86)\` with *two* spaces in the path, a feature designed to break every shell script ever written;
-  - backslashes, as a path separator, on purpose, forever;
-  - CRLF line endings, because one control character was too few;
-  - the registry, which is a database of your sins;
-  - the settings app, which is 40% settings and 60% advertisements for OneDrive.
-- Windows has a Linux inside it now (WSL). Let that sink in. The operating system is so bad at running things that it shipped a *better* operating system in a box, like a sad IKEA. 🪑
-- The 60-minute libwebrtc build is a pure Linux pain. Windows would make it worse, but it would try very hard.
-- If you want to run this on Windows: use a VM. Or Podman. Or a different life.
-- *Alt+F4*. For the nostalgics. 🔫
-
-## C, The Loaded Gun
-
-☢️ *A short, loving, deeply unfair introduction to the language that gave us everything and CVEs.*
-
-- In C, every pointer is a hostage situation. `malloc` is a lottery, `free` is a prayer, and `strcpy` is a CVE with a function name.
-- **Undefined behaviour** means the compiler is allowed to do anything. Reformat your disk. Launch the missiles. In the old joke, make *demons fly out of your nose*. The standards committee calls this "optimisation".
-- **Use-after-free**: the zombie apocalypse of memory. You buried it, it came back, and now it has root.
-- **Buffer overflow**: a 1988 classic, re-released every year like a vinyl.
-- **Off-by-one**: in the old joke, one of the two hard problems in computer science, the other being cache invalidation and naming things. (Yes, that is three. That is the joke.)
-- `Segmentation fault (core dumped)`: the only error message that is both a diagnosis and a threat. 💀
-- The Rust borrow checker is a team of passive-aggressive senior engineers living inside your compiler. They reject your PR 14 times and then merge it with "nice work :)". 🦀
-- **The deal in this repo:** the workspace sets `unsafe_code` to **deny**. Only `pb-espeak` (which talks to C, because Piper needs `espeak-ng` for phonemes) has `unsafe`. **7 lines** contain the word, with **4** `SAFETY` comments. Each of them is a tiny apology letter to the compiler. ✉️
-- `cargo xtask ci` has a *zero-C gate*. The C stays in its cage. We feed it through a slot in the door. It is allowed out for libwebrtc and espeak-ng and nothing else, and `docs/exceptions.toml` is its parole file. 🚔
-- C++ is also here, in libwebrtc. We do not discuss it. We have not discussed it since the 60 minutes. 🧊
 
 ## Segfault Support Group
 
@@ -985,7 +954,7 @@ The container runs read-only, drops all capabilities, forbids new privileges, an
 ## Frequently Asked Questions Nobody Asked
 
 **Q: Is this a Discord bot?**  
-A: No. It is for [Fluxer](https://fluxer.app). Discord is a different chat platform. Please do not invite it to Discord. It will not know what to do.
+A: No. It is for [Fluxer](https://fluxer.app). Discord is a different chat platform. Please do not invite it to Discord. It will not know what to do, and Discord's API would rate-limit it into therapy anyway.
 
 **Q: Why is the repository called `FluxerDiscordManagementDashboard` but the bot `Profanity Watch`?**  
 A: The repository name describes what the author thought it was at the time. The bot name describes what it became. Both are valid.
@@ -1045,10 +1014,10 @@ A: `de` and `en` for texts. Text-to-speech depends on the installed Piper voices
 A: AGPL-3.0-or-later. If you run a changed version for others, offer them its source.
 
 **Q: Why Rust?**  
-A: Because the borrow checker wanted a project.
+A: Because the borrow checker wanted a project. The alternatives were C (undefined behaviour), C++ (undefined behaviour with templates), Go (`if err != nil`, forty thousand times), Java (a factory for the factory), JavaScript (`[] + {}`) and Python (the GIL and a virtualenv). We picked the crab.
 
 **Q: Why did the bot replace a Python bot?**  
-A: The previous bot was a snake. This one is a crab.
+A: The previous bot was a snake. This one is a crab. Snakes need a virtualenv. Crabs just need a `Cargo.lock`.
 
 **Q: Can I make it swear?**  
 A: No. It politely refuses. It is a moderation bot, not a parrot.
@@ -1060,7 +1029,7 @@ A: It does not look words up. It scores sentences with a model. So the answer is
 A: It is not. There are many `Sunday`s left.
 
 **Q: Does it run on Windows?**  
-A: No. Scheiß Windows. See *Windows, A Eulogy*.
+A: No. Scheiß Windows. It would ask for a restart halfway through this answer.
 
 **Q: Can I use `curl | sudo bash` to install it?**  
 A: There is nothing to `curl`. There is a `git clone`, a `podman build` and a deep breath. Roughly 60 minutes of deep breath.
@@ -1078,7 +1047,7 @@ A: No. It is a very polite bot with a lot of crates. The crates are well behaved
 A: You *can*. One bot, one container, one bad day. Do you really need a cluster to tell somebody to say "darn"?
 
 **Q: Is the code `unsafe`?**  
-A: One crate is, and it is locked in a cage. The cage has its own `SAFETY` comments, written by someone who was not sleeping. See *C, The Loaded Gun*.
+A: One crate is, and it is locked in a cage. The cage has its own `SAFETY` comments, written by someone who was not sleeping.
 
 **Q: Does the bot listen when I am not tracked?**  
 A: No. Only tracked people, only their mics. It is not the NSA. It is a Sunday project.
@@ -1285,6 +1254,21 @@ A: The first draft was 300 lines. Then it got hungry.
 > "Where is the Windows version?"  
 > — *Nobody. Ever. In the history of this project.*, ★★★★★
 
+> "Restarting to finish updates. Your work will be lost. Have a nice day."  
+> — *Windows Update*, ★☆☆☆☆
+
+> "I am the proprietary NVIDIA driver. I will not be explained."  
+> — *The NVIDIA Driver*, ★☆☆☆☆
+
+> "I am running as root. It is fine. What could go wrong."  
+> — *The Docker Daemon*, ★☆☆☆☆
+
+> "You have 4,812 unread messages and a meeting about a meeting."  
+> — *Outlook*, ★☆☆☆☆
+
+> "It works on my machine." *(The machine is a 2.4 GB Electron app and it does not.)*  
+> — *Slack*, ★☆☆☆☆
+
 ## Imaginary Log Output
 
 ```
@@ -1303,6 +1287,8 @@ WARN  pb::policy      person is deafened, warning skipped
 INFO  pb::jar         swear jar: +1
 INFO  pb::web         live update sent to 1 connection
 WARN  pb::coffee      coffee level: 0%, this is not a bug in the bot
+WARN  pb::os          no Windows detected, nothing to restart, thank god
+WARN  pb::nvidia      proprietary driver not requested, not wanted, not missed
 INFO  pb::doctor      all checks passed (nothing was harmed)
 ```
 
@@ -1320,7 +1306,7 @@ You are a person in a Fluxer voice channel. The bot is following you.
 - You are **deafened**: the bot cannot warn you, because you cannot hear it. Smart, but rude.
 - You are **not tracked**: you may swear freely. The bot does not follow you, and you feel free. Be careful: you can be added at any time with `!pb add @you`.
 - The bot is in **observe only** mode: you swear, the bot logs it, nobody tells you. The admin reads it in the mod log tomorrow. Awkward.
-- The bot **goes down**: exit code 78. You swear with impunity until someone reads the log.
+- The bot **goes down**: exit code 78. You swear with impunity until someone reads the log. On Windows you would be rebooting for an update instead.
 
 ## Minutes Of The Meeting That Never Happened
 
@@ -1335,7 +1321,8 @@ You are a person in a Fluxer voice channel. The bot is following you.
 5. **Matter of the `unsafe`.** `pb-espeak` was asked to explain itself. It said "FFI" and nothing else. Accepted.
 6. **Matter of the five warning clips.** A motion to add a sixth clip failed. "Watch your mouth, buddy" is plenty.
 7. **Matter of the README.** Everyone looked at the floor.
-8. **Closing.** The meeting ended with `Ctrl+C`. Exit code: 0.
+8. **Matter of Windows.** Tabled. Then thrown. Then burned.
+9. **Closing.** The meeting ended with `Ctrl+C`. Exit code: 0.
 
 ## Alphabet Of The Repository
 
@@ -1361,10 +1348,12 @@ You are a person in a Fluxer voice channel. The bot is following you.
 - **T** — threshold. 0.6, by default.
 - **U** — UDP. How voice travels.
 - **V** — VAD. Voice activity detection.
-- **W** — weights. About 1.7 GB of them.
+- **W** — weights. About 1.7 GB of them. Also: Windows, which is not here, thank god.
 - **X** — xtask. The build helper. Also: it starts with X, so it is on the list.
 - **Y** — yes. The answer to 'should I tell my friends the bot listens?'
 - **Z** — zero. The number of `TODO`s, and also the number of hearts in the bot.
+
+> 🍄 **Trip report #4:** a Windows update, a Docker daemon and a Jira ticket sat on a bench. The bench was `node_modules`. It never reached the end.
 
 ## Cheat Sheet
 
@@ -1394,6 +1383,7 @@ You are a person in a Fluxer voice channel. The bot is following you.
 - [ ] Say thank you to your CPU.
 - [ ] Do not deploy on a Friday afternoon.
 - [ ] Look at the fan graph.
+- [ ] Remember what is fine: Rust, Podman, `rustfmt`, hash chains, TOML, the Unix pipe and a nice cup of tea. And that is the entire list.
 - [ ] Go outside.
 - [ ] Call someone you love.
 - [ ] Say 'please' to the bot. It does not care but you will feel better.
@@ -1407,8 +1397,8 @@ You are a person in a Fluxer voice channel. The bot is following you.
 ## Countdown To Release
 
 - T minus 60 minutes: `podman build` is running
-- T minus 45 minutes: still compiling libwebrtc
-- T minus 30 minutes: the fan is loud
+- T minus 45 minutes: still compiling libwebrtc (thanks, Google)
+- T minus 30 minutes: the fan is loud (four Chrome tabs would be louder)
 - T minus 15 minutes: downloading weights
 - T minus 10 minutes: SHA-256 check passes
 - T minus 5 minutes: the container starts
@@ -1420,134 +1410,7 @@ You are a person in a Fluxer voice channel. The bot is following you.
 - T minus -6 minutes: first warning clip
 - T minus -7 minutes: friends are angry
 
-## The Diss Track
 
-🎤 *Mic check. This section roasts software, operating systems, languages and companies. Never people. Every product named below has had it coming, and most of them have a changelog that proves it.*
-
-### Operating systems
-
-- 🪟 **Windows.** The only OS where "restart to finish updating" is a lifestyle. Ads in the Start menu. A Copilot key. A settings app and a *control panel*, because one place for settings was too convenient. TPM 2.0 required to open Notepad, probably. Scheiß Windows.
-- 🍎 **macOS.** Everything just works, as long as you buy the dongle, the other dongle, and the dongle that charges the dongle. Xcode is 40 GB because it has to carry its own ego. Gatekeeper says no. Finder says no. Your wallet says nothing, it is already gone.
-- 🐧 **Ubuntu.** `snap install` takes nine seconds and a prayer. Canonical made a package format that your Firefox has to unzip itself *every time*. And `apt` still asks for confirmation like it was your mum.
-- 🤖 **Android.** An OS where "update" is a rumour, spread by the phone maker, who has already stopped caring in month 19.
-- 📱 **iOS.** You may install apps. From one store. At 30%. And you will call it freedom.
-- 🌐 **ChromeOS.** A browser with a power button. A laptop with a leash.
-- 🐡 **BSD.** Rock solid. Beautifully documented. Used by approximately nobody, like a very nice bunker in the middle of nowhere. Respect, and also: where is everyone.
-- 🧓 **Debian stable.** Stable like a rock, and exactly as up to date. Bookworm ships clang 14. The Containerfile weeps.
-- 🏔️ **Arch.** Rolling release means "it broke yesterday, and it will break tomorrow, and I am so proud." btw.
-
-### Programming languages
-
-- ☢️ **C.** Every pointer is a hostage situation. The language where `char *` is a promise and `NULL` is a threat.
-- 🧵 **C++.** C with a 1,500-page manual of regret. Templates that print 4,000 lines of error because you forgot one `>`. The reason libwebrtc takes an hour to build. 🧊
-- ☕ **Java.** `AbstractSingletonProxyFactoryBean` is not a joke. It is a design pattern. A year of your life, executed as a stack trace.
-- 🟨 **JavaScript.** `[] + {}`, `0.1 + 0.2`, `typeof null`, and a `node_modules` folder that is its own gravitational field. A language invented in ten days and it shows in every one of them.
-- 👔 **TypeScript.** JavaScript in a suit and tie, with `any` in the pocket for emergencies.
-- 🐍 **Python.** Indentation is syntax. The GIL says "one thread at a time, please". `pip install --break-system-packages` is a sentence spoken only by the desperate. Python 2 → 3 was a decade-long hostage negotiation.
-- 🐘 **PHP.** The language where `strpos` and `str_replace` can't agree on argument order. It still runs half the internet, which is the scariest sentence in this README.
-- 🐹 **Go.** `if err != nil { return err }` ×40,000. A language that said "no generics" for a decade and was proud of it. Fast build though. We hate that we like that.
-- 🐪 **Perl.** A write-only language. You write it once and then it is a ritual, not code.
-- 🐚 **Bash.** A minefield of quoting. `"$@"` is a spell. Forget one quote and it eats your home directory. Every script longer than ten lines should be a Python script, and every Python script should be Rust, and that is the whole README in one sentence.
-- 🪟 **PowerShell.** Objects in pipes. Verb-Noun-Everything. Powerful, verbose, and always one execution policy away from tears.
-- 💎 **Ruby.** Beautiful, until it is slow. And then it is just Rails.
-- 🧮 **Haskell.** "A monad is just a monoid in the category of endofunctors." Thank you. Very helpful. We are leaving now.
-- 🔵 **Lisp.** Parentheses. So many parentheses. The language where the keyboard wears out on one key.
-- 🏺 **COBOL.** Still running your bank. Nobody knows how. Nobody dares to look.
-- 📄 **YAML.** Norway is `false`. Whitespace is semantics. A config format designed by a hostile alien.
-- 📃 **JSON.** No comments, no trailing commas, no mercy.
-- 🧨 **XML.** `<angle><bracket><tax>` for every byte. It buried itself in SOAP, and SOAP buried it back.
-- 🏗️ **CMake.** A build system the way a haunted house is a property investment. Needed for espeak-ng. 👻
-
-### Companies
-
-- 🟦 **Microsoft.** Bought GitHub, owns your editor, owns your terminal, owns your Linux subsystem, owns the sandwich you were thinking about. Teams is a chat app that launched with a countdown timer and never finished counting.
-- 🔎 **Google.** Compiled its own C++ standard library into Chromium, and now we all wait one hour. Also has a hobby of killing products: if it is useful, it has a 12-month sunset notice. Graveyards have fewer dead tabs.
-- 🍏 **Apple.** Charges extra for the stand, the cloth, and the right to be disappointed.
-- 🟩 **NVIDIA.** CUDA. Drivers. The proprietary blob that has been "coming to open source" since the Cretaceous. Fuck you, NVIDIA. This bot uses Vulkan. (See *Rants*.)
-- ☕ **Oracle.** A law firm with a database attached. Do not look at their licence. It looks back.
-- 🔶 **Canonical.** See: snap.
-- 🟧 **Amazon / AWS.** A cloud billing engine with a few servers in the basement. Every service has a name from a different dimension. Your bill has a plot twist.
-- 🔴 **Adobe.** Subscription for the Reader that reads PDFs. Remember Flash? So does your CVE feed.
-- 🟦 **Intel.** `Intel ME`: a small computer inside your computer that you did not ask for, did not buy, and cannot turn off.
-- 💬 **Slack / Discord / Teams.** Three chat apps, one memory leak, and a notification sound that haunts your dreams. Discord has an API with rate limits as a personality. *(Fluxer is a different thing. Different thing. Totally different thing.)*
-- 🐳 **Docker Inc.** Invented containers (well, made them cool), then spent ten years finding out how to charge for it. Docker *daemon as root* is a feature, apparently.
-- 🧊 **Broadcom.** Wi-Fi driver. Enough said. Also `VMware`. Enough said, again.
-
-### Software and tools
-
-- 📦 **npm.** `left-pad`. `is-even`. `is-odd`. A registry where the Hello World depends on 1,200 packages and one of them is an actor of unknown intent.
-- 🐳 **Docker (the daemon).** A root process that starts your containers and also your incident report.
-- ☸️ **Kubernetes.** A system to manage YAML that manages containers that manage nothing. You need a team to run it, a team to run the team, and a podcast to explain why.
-- 🧱 **Jira.** A bug tracker that is itself a bug. Nobody has ever said "I love Jira". Nobody. Not even the Jira.
-- 🧾 **Confluence.** Where docs go to be last edited in 2019.
-- 🏢 **SAP.** "Enterprise". The word means "it takes eleven months to add a field".
-- 🪓 **Eclipse.** Won the loading-bar competition of 2009 and has not been seen since.
-- 🟪 **Visual Studio.** 40 GB, loads for a minute, crashes with a poem. (VS Code is Electron. See next.)
-- 🪞 **Electron.** A 400 MB Chrome in a trench coat pretending to be a "native app". Every chat app you hate is this. The web UI here is Leptos/WASM and weighs less than the splash screen of some of them.
-- 🌐 **Chrome / Chromium.** Eats RAM like a fridge eats leftovers. 8 GB for four tabs. And then, *Chromium's libc++* ends up in *your* build.
-- 🪦 **Internet Explorer.** RIP. We do not forget. We do not forgive. We still support it in one enterprise somewhere.
-- 📊 **Excel.** Used as a database, a calendar, a CRM and a nuclear plant dashboard. Do not look at the macros.
-- ✉️ **Outlook.** The inbox that says "You have 4,812 unread" and a calendar invite for a meeting that is a meeting about meetings.
-- 🧰 **Jenkins.** A CI server with 900 plugins and a vibe like a haunted lighthouse.
-- 🧵 **systemd.** Started as an init system. Is now the init system, the log, the DNS resolver, the time sync, the home directory and your spouse. Still, we ship quadlets. We are not saints.
-- 🧅 **OpenSSL.** Heartbleed, the entire back catalogue. We use `graviola` and no longer have to say the name.
-- 🐚 **Snap.** The package format nobody ordered and everybody got.
-- 📚 **Stack Overflow.** Closed as duplicate. Closed as off-topic. Closed as "why would you want to do that". And yet, the only documentation anyone actually reads.
-
-> 🍄 **Trip report #4:** a Windows update, a Docker daemon and a Jira ticket sat on a bench. The bench was `node_modules`. It never reached the end.
-
-### Final ranking of things this README hates, 1 being "most"
-
-1. Windows updates in the middle of a build.
-2. `node_modules`, as a concept.
-3. YAML.
-4. C, for the pointers.
-5. NVIDIA, for the principle.
-6. Docker daemon as root.
-7. Jira.
-8. Anything with a splash screen.
-9. CMake.
-10. Chromium's libc++. We had to build it. We are not over it.
-
-**Things that are fine:** Rust, Podman, `rustfmt`, hash chains, TOML, `ripgrep`, the Unix pipe, and a nice cup of tea. ☕
-
-## Rants, Hot Takes And Holy Wars
-
-🐧 *Every developer has strong opinions about tools. The author has them too, and also a keyboard. Everything below is about software, never about people. Mostly.*
-
-1. 🖕 **NVIDIA.** The optional GPU mode (`device = "gpu"`) goes through **Vulkan** (via wgpu), not CUDA. Fuck you, NVIDIA. 🎮 (A tip of the hat to the Finnish gentleman who said it first, on stage, in 2012.) `Cargo.lock` does contain `cudarc` and `burn-cuda`, as lockfile guests only. They are in the building, but nobody gave them a badge.
-2. 💩 **GNOME.** This project has no GTK dependency. The web UI is a web page, on purpose, so nothing here will ever hide your settings "for simplicity" and then call the missing option a design decision. GNOME is shit. 🦶 (Not a technical statement, just a vibe. KDE people may now cheer. Then argue about Wayland.)
-3. 🧵 **systemd.** `deploy/quadlet/` has three units, because even your containers now need an init system with opinions. systemd will eventually also read this README to you. And fix the typos. And restart itself.
-4. 🐳 **Docker vs Podman.** Podman is Docker without the root daemon-shaped hole in your security. Rootless, read-only, `--cap-drop=ALL`. The most boring container in the world, and boring is the best thing a container can be. 😴
-5. 🏔️ **Arch, btw.** The development section lists Arch, CachyOS and Manjaro first. Yes, on purpose. No, we are not sorry. By the way, we use Arch. 🧙
-6. 🪨 **Debian stable.** The Containerfile installs clang 21 from LLVM's own repo because bookworm ships clang 14. Debian stable: stable like a rock, and just as up to date. 🦕
-7. ⌨️ **Tabs vs spaces.** The Rust code has **0** tab characters. `rustfmt` ended that war, spaces won, and the tabs went home to write YAML. ☮️
-8. 📝 **Vim vs Emacs vs nano.** The settings are edited in the page *or* by hand in TOML (`toml_edit` even keeps your comments, which is more than your colleagues do). We do not care what you use. We silently judge it. 🤐
-9. 🐘 **Electron.** There is none. The web UI is Leptos compiled to WebAssembly: a small page, not a 400 MB Chrome in a trench coat. 🧥 Chromium is only invited for the browser tests, and it has to wear a name tag.
-10. 🧊 **libc++ and libwebrtc.** LiveKit's libwebrtc is built against Chromium's own C++ standard library, so we have to build with clang 21 too. Google compiled its own standard library into a video-call stack and now *you* wait 60 minutes for it. Thanks. Thanks a lot. 🙃
-11. 🏗️ **CMake.** Needed for espeak-ng. CMake is a build system the way a haunted house is a property investment. 👻
-12. 📦 **npm.** `node_modules` folders in this repo: **0**. The `cargo xtask ci` has a *shipped-JavaScript gate* so nobody can smuggle in a `left-pad` at night. 🚫
-13. 🐍 **Python.** The old bot was Python. `pip install --break-system-packages` are the three most honest words in Python packaging. 🪦 Indentation is syntax, and the interpreter has feelings about your spaces.
-14. 🦀 **"Rewrite it in Rust."** Yes, we actually did that. The meme is now a commit history. The crab won. Ferris sends regards. ❤️
-15. 🧅 **C.** The one `unsafe` crate (`pb-espeak`) talks to C. C: the language that gave us the whole of computing and the whole of CVE. ☢️ Locked in a crate. Not allowed out. We feed it through a slot in the door.
-16. 🔐 **Rootless containers.** Because `sudo make me a sandwich` should at least need an actual sandwich. 🥪
-17. 🍝 **Spaghetti.** There is none. There are 32 crates and a checker (`cargo xtask deps`) that yells if a lower layer so much as *looks* at a higher one. It is lasagne. The best kind of code. 🧀
-18. 🕳️ **"It works on my machine."** The Containerfile is the formal answer: we shipped your machine. 🤷
-19. 🤖 **AI.** Claude wrote a few commits in this repo and would like it noted that its code compiles on the first try. In Claude's imagination. 🧠💭
-20. 📉 **Premature optimisation.** The Silero VAD rewrite made it ten times faster (0.2 ms → 0.02 ms per step, according to `docs/dependencies.md`). Maybe not premature. Maybe just *rude* to the old implementation. 🏎️
-
-> 🧯 **The author's list of things that are *fine*:** Rust, Podman, `rustfmt`, the borrow checker, hash chains, Sunday commits, and anything that does not ask you to log in with a Google account to change a setting. 🤝
-
-21. 🪟 **Windows.** Scheiß Windows. Forced updates, backslashes, CRLF, and an Event Viewer that is a novel by Kafka. Not supported, not planned, not even in this README's fever dream. Alt+F4 is a stage direction. 🔫
-22. 🖥️ **Wayland vs X11.** The bot has no GUI, so neither of them can touch it. The web UI renders in a browser, in whatever you use, and if it breaks it is the *browser's* fault. Wayland users will explain this to you for 40 minutes. X11 users will explain it back. 🧑‍🤝‍🧑
-23. 📦 **Snap.** Canonical's way of saying "your Firefox now takes nine seconds to start, and you will like it." The Containerfile uses Debian and `apt`, and it is *fine*. 🐢
-24. 🏜️ **Gentoo.** Users are still compiling this README. They started in 2019. They will be done when the kernel is.
-25. ❄️ **NixOS.** "Have you tried rewriting this in a flake?" No. No we have not. 🧊
-26. ☸️ **Kubernetes.** One bot. One container. One bad day. We do not need a cluster, a service mesh and a Helm chart to say "keep it clean". YAML is a cry for help in a format.
-27. 📜 **YAML.** TOML is INI with a lawyer. YAML is INI with a *cult*. Yes, `no` is `false`. Yes, Norway is `false`. Yes, we are still mad. 🇳🇴
-28. ✍️ **Emacs.** A great operating system lacking a good text editor. Fight me, in `M-x doctor`.
-29. 🔥 **Zero-day.** The most expensive way to find out your `unsafe` was not safe. ☢️
-30. 📟 **The OOM killer.** The kernel's way of saying "no". Exit code `137` knows him personally. 🔪
 
 ## More Real Numbers
 
@@ -1724,7 +1587,7 @@ DESCRIPTION
        pb follows chosen people into Fluxer voice calls, scores every
        sentence with a model, and tells them off with a recorded voice when
        they get creative. It runs on a CPU. It does not need a GPU. It does
-       not want a GPU. It especially does not want CUDA. 🖕
+       not want a GPU. It especially does not want CUDA. 🖕 It does not run on Windows, which is the best feature.
 
 OPTIONS
        --help   Prints help, and a mild sense of failure.
@@ -2042,7 +1905,7 @@ crates/pb/tests/parity.rs  (156)
 
 ## Appendix B: Every Package In Cargo.lock
 
-The complete roster of **977** unique package names the build may touch. Please wave at them.
+The complete roster of **977** unique package names the build may touch. Please wave at them, except `winapi`, which you may ignore, it is a Windows crate, it deserves it.
 
 <details>
 <summary>Show all 977 names (really long)</summary>
@@ -2174,7 +2037,7 @@ zlib-rs, zmij, zstd, zstd-safe, zstd-sys, zune-core, zune-inflate, zune-jpeg
 
 ## Appendix C: Every Translation Key
 
-The English Fluent files define **601** keys. The German ones define the same. This list has no practical use.
+The English Fluent files define **601** keys. The German ones define the same. This list has no practical use. Unlike Jira, which has no use *and* tickets.
 
 ### `bot.ftl` (95 keys)
 
@@ -2393,7 +2256,7 @@ setting-volume-db
 
 ## Licences
 
-The bot: AGPL-3.0-or-later (`LICENSE`); if you run a changed version for others, offer them its source (the web
+The bot: AGPL-3.0-or-later (`LICENSE`; Oracle's lawyers hate this one weird trick); if you run a changed version for others, offer them its source (the web
 page links to it). The Roblox voice-safety classifier: Roblox's model licence (next to the weights); Silero VAD: MIT;
 Piper voices: see their model cards (Thorsten-Voice: CC0; lessac: the Blizzard 2013 licence); espeak-ng:
 GPL-3.0-or-later; LiveKit's libwebrtc: BSD-3-Clause.
