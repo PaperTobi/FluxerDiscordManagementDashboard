@@ -424,8 +424,10 @@ impl FollowMachine {
                 }
                 ConnState::Joining => {
                     let text = format!(
-                        "no voice grant for {chan} within {:.0}s. Fluxer refuses silently; check the bot has View Channel and Connect in that \
-                         channel (and Speak to talk), the channel is not full and the bot is not timed out",
+                        "no voice grant for {chan} within {:.0}s; trying again. Fluxer refuses without saying why: the bot needs View \
+                         Channel and Connect there (Speak to talk), the channel must not be full, the bot not timed out, and it may \
+                         hold at most the channel's voice connection limit (5 by default), counting joins of the last minutes that \
+                         have not expired yet (frequent removals and rejoins add up)",
                         self.cfg.join_timeout_s
                     );
                     acts.extend(self.fail(chan, NoticeKind::JoinTimeout, text));

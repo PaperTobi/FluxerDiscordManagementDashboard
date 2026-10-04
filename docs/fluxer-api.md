@@ -51,7 +51,12 @@ Op 4 `{guild_id, channel_id, connection_id?, self_mute, self_deaf, self_video, s
 nothing. A join is pending for 30 s and becomes active when the bot joins the LiveKit room (or a second op 4 with the same
 channel and connection) [source: `fluxer_gateway/src/guild/voice/guild_voice_connection_join.erl`,
 `guild_voice_connection_confirm.erl`]. LiveKit room `guild_{g}_channel_{c}`, participant identity
-`user_{uid}_{connection_id}`. Without SPEAK the bot is admitted suppressed. Bots may join end-to-end encrypted channels
+`user_{uid}_{connection_id}`. Without SPEAK the bot is admitted suppressed. One user holds at most the channel's
+`voice_connection_limit` connections (default 5, 1..100), pending ones counting until they expire; op 4 runs the first two
+per session per second at once, then one per 500 ms from a queue of 64 (a newer one for the same guild and connection
+replaces a queued one) [source: docs.fluxer.app/gateway/limits-and-rate-limits]. Moving the bot to another channel (a
+moderator, observed on a self-hosted instance 2026-10-04) ends its connection and grants a new one in the target channel:
+the old voice state disappears, a new grant arrives for the other channel within milliseconds. Bots may join end-to-end encrypted channels
 and switch E2EE off for the channel. Fluxer announced (2026-09-28) a QUIC transport with DAVE E2EE to replace LiveKit,
 no date; `pb-voice-api` keeps the transport replaceable.
 
