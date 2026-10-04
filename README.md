@@ -19,6 +19,11 @@ while the bot runs. Everything it keeps is in one data directory.
 The bot is written in Rust. It replaces an earlier Python bot, whose data can be imported (see *Moving from the Python
 bot*).
 
+> 🐧 **TL;DR, kernel-mailing-list edition:** it listens to your friends swear and tells them off with a recorded voice. 🎙️🤬➡️📢
+> It is written in Rust 🦀 because the borrow checker wanted a project, runs in rootless Podman 🐳 because running things as root is
+> for people who enjoy incident reports, and it has an *unreasonable* amount of README below. 📜 The useful part is at the top.
+> The rest is a cry for help with footnotes. 🆘
+
 - [Requirements](#requirements)
 - [1. Create the bot in Fluxer](#1-create-the-bot-in-fluxer)
 - [2. Run it](#2-run-it): [Podman](#with-podman), [systemd / Fedora CoreOS](#with-systemd-quadlets-fedora-coreos),
@@ -30,41 +35,49 @@ bot*).
 
 **Everything else (mostly unnecessary):**
 
-- [Prologue](#prologue)
-- [Quick Facts Nobody Asked For](#quick-facts-nobody-asked-for)
-- [Repository Statistics Dashboard](#repository-statistics-dashboard)
-- [The Layer Cake](#the-layer-cake)
-- [The Crate Gallery](#the-crate-gallery)
-- [Biggest Files In The Repository](#biggest-files-in-the-repository)
-- [The Five Warning Clips](#the-five-warning-clips)
-- [Every Setting, With Commentary](#every-setting-with-commentary)
-- [The Eight Labels](#the-eight-labels)
-- [The Threshold Table](#the-threshold-table)
-- [The Ladder Of Consequences](#the-ladder-of-consequences)
-- [Chat Commands, Reviewed](#chat-commands-reviewed)
-- [The CLI, Reviewed](#the-cli-reviewed)
-- [Exit Codes](#exit-codes)
-- [Tech Stack Trivia](#tech-stack-trivia)
-- [Dependency Roster](#dependency-roster)
-- [Cargo.lock Trivia](#cargolock-trivia)
-- [Git History Trivia](#git-history-trivia)
-- [Docs Folder Trivia](#docs-folder-trivia)
-- [Container Lore](#container-lore)
-- [Frequently Asked Questions Nobody Asked](#frequently-asked-questions-nobody-asked)
-- [Haikus About The Repository](#haikus-about-the-repository)
-- [Testimonials](#testimonials)
-- [Imaginary Log Output](#imaginary-log-output)
-- [Choose Your Own Adventure](#choose-your-own-adventure)
-- [Minutes Of The Meeting That Never Happened](#minutes-of-the-meeting-that-never-happened)
-- [Alphabet Of The Repository](#alphabet-of-the-repository)
-- [Cheat Sheet](#cheat-sheet)
-- [Wellness Checklist](#wellness-checklist)
-- [Countdown To Release](#countdown-to-release)
-- [Appendix A: Every Rust File In This Repository](#appendix-a-every-rust-file-in-this-repository)
-- [Appendix B: Every Package In Cargo.lock](#appendix-b-every-package-in-cargolock)
-- [Appendix C: Every Translation Key](#appendix-c-every-translation-key)
-- [Appendix D: The Settings In Alphabetical Order Of Their Keys](#appendix-d-the-settings-in-alphabetical-order-of-their-keys)
-- [Appendix E: Numbers That Appear In The Docs](#appendix-e-numbers-that-appear-in-the-docs)
+- 📖 [Prologue](#prologue)
+- 🧠 [Quick Facts Nobody Asked For](#quick-facts-nobody-asked-for)
+- 📊 [Repository Statistics Dashboard](#repository-statistics-dashboard)
+- 🎂 [The Layer Cake](#the-layer-cake)
+- 🖼️ [The Crate Gallery](#the-crate-gallery)
+- 🐘 [Biggest Files In The Repository](#biggest-files-in-the-repository)
+- 📢 [The Five Warning Clips](#the-five-warning-clips)
+- 🎛️ [Every Setting, With Commentary](#every-setting-with-commentary)
+- 🏷️ [The Eight Labels](#the-eight-labels)
+- 🌡️ [The Threshold Table](#the-threshold-table)
+- 🪜 [The Ladder Of Consequences](#the-ladder-of-consequences)
+- 💬 [Chat Commands, Reviewed](#chat-commands-reviewed)
+- ⌨️ [The CLI, Reviewed](#the-cli-reviewed)
+- 🚪 [Exit Codes](#exit-codes)
+- 🧰 [Tech Stack Trivia](#tech-stack-trivia)
+- 📦 [Dependency Roster](#dependency-roster)
+- 🔒 [Cargo.lock Trivia](#cargolock-trivia)
+- 🕰️ [Git History Trivia](#git-history-trivia)
+- 📚 [Docs Folder Trivia](#docs-folder-trivia)
+- 🐳 [Container Lore](#container-lore)
+- ❓ [Frequently Asked Questions Nobody Asked](#frequently-asked-questions-nobody-asked)
+- 🌸 [Haikus About The Repository](#haikus-about-the-repository)
+- ⭐ [Testimonials](#testimonials)
+- 🪵 [Imaginary Log Output](#imaginary-log-output)
+- 🗺️ [Choose Your Own Adventure](#choose-your-own-adventure)
+- 🤝 [Minutes Of The Meeting That Never Happened](#minutes-of-the-meeting-that-never-happened)
+- 🔤 [Alphabet Of The Repository](#alphabet-of-the-repository)
+- 📝 [Cheat Sheet](#cheat-sheet)
+- 🧘 [Wellness Checklist](#wellness-checklist)
+- 🚀 [Countdown To Release](#countdown-to-release)
+- 🐧 [Rants, Hot Takes And Holy Wars](#rants-hot-takes-and-holy-wars)
+- 🔢 [More Real Numbers](#more-real-numbers)
+- 📧 [Mailing List Mode](#mailing-list-mode)
+- 🤓 [Insider Gags Glossary](#insider-gags-glossary)
+- 🎯 [Developer Bingo](#developer-bingo)
+- 📜 [The Man Page](#the-man-page)
+- 🛋️ [Compiler Error Therapy](#compiler-error-therapy)
+- 🏆 [Commit Message Hall Of Fame](#commit-message-hall-of-fame)
+- 🗂️ [Appendix A: Every Rust File In This Repository](#appendix-a-every-rust-file-in-this-repository)
+- 📚 [Appendix B: Every Package In Cargo.lock](#appendix-b-every-package-in-cargolock)
+- 🌍 [Appendix C: Every Translation Key](#appendix-c-every-translation-key)
+- 🔡 [Appendix D: The Settings In Alphabetical Order Of Their Keys](#appendix-d-the-settings-in-alphabetical-order-of-their-keys)
+- 🔢 [Appendix E: Numbers That Appear In The Docs](#appendix-e-numbers-that-appear-in-the-docs)
 
 ## Prologue
 
@@ -78,6 +91,10 @@ The first thing to know: this README is long. The second thing to know: most of 
 2. Skip to **Requirements** if you want to run the bot.
 3. Ignore the rest unless you have time. You do not.
 
+> ⚠️ **Content warning:** from here on there is some swearing, aimed at *software*, never at people. 🤬 The repo is a profanity
+> bot, so this README would absolutely get the author warned by their own model. The irony has been noted, framed and hung on
+> the wall. 🖼️
+
 **Legend:**
 
 | Symbol | Meaning |
@@ -88,33 +105,40 @@ The first thing to know: this README is long. The second thing to know: most of 
 | 🎙️ | Voice-related nonsense |
 | 📢 | A warning clip is mentioned |
 | 🚫 | Do not do this |
+| 🐧 | A Linux-flavoured rant |
+| 🤬 | The author yells at a piece of software (affectionately) |
+| 💩 | A strong opinion about tooling |
+| 🔥 | A hot take |
+| 💀 | Pain, mostly from the build |
+| 🪦 | The Python bot, rest in peace |
+| 🍝 | Spaghetti (there is none, see the layer cake) |
 
 ## Quick Facts Nobody Asked For
 
 All numbers below are real. We counted. We should not have, but we did.
 
-- This repository has **32 crates** in `crates/`. That is a lot of crates for a bot that tells people to stop swearing.
-- Those crates contain about **49,581 lines** of Rust across **235 files**. For comparison, this README alone is a weird fraction of that.
-- The biggest crate, `pb-engine`, has **8,388 lines**. The smallest, `pb-voice-api`, has **161**. It is small, but it knows what it is doing.
-- The biggest single file is `crates/pb-fluxer-fake/src/lib.rs` with **1,270 lines**: a fake Fluxer so the real one is not bothered during tests.
-- `Cargo.lock` lists **1,079 packages**. The bot has 32 of its own. The rest are friends we met on the way.
-- There are **173 tests** in the source, and **23** of them are marked `#[ignore]` because they need models, a LiveKit server or a browser. They are the introverts of the test suite.
-- The word `TODO` appears **0 times** in the Rust code. Clippy's `todo` lint is set to `warn`. The author is either disciplined or lying.
-- `unwrap()` appears **467** times (mostly in tests, we hope). Clippy's `unwrap_used` lint is also set to `warn`.
-- `clone()` appears **859** times. Rust developers call this "being pragmatic".
-- `async fn` appears **483** times. Waiting is the main job of this bot.
-- There are **435** `struct` mentions, **144** `enum` mentions and **21** `trait` mentions. That is 3.0 structs per enum. Enums are the minority. Enums feel left out.
-- The code has **2,091** `///` doc-comment lines. The author really wanted you to understand.
-- The workspace forbids `unsafe_code` (set to `deny`). The only `unsafe` lives in the crate that talks to C, `pb-espeak`. It is the designated smoking area.
-- The bot's default threshold is **0.6**. In a sense, it is 60% judgemental by default.
-- The default web port is **8790**. Prime factors: 2 × 3 × 5 × 293. The number is not prime. Neither is the bot.
-- The `Containerfile` has **3 stages** (`build`, `weights`, and the final image) and runs the bot as user `10001`, not root.
-- The bot's output is **5 warning clips** totalling **13.09 seconds**. That is less time than it takes to read this bullet point out loud twice.
-- The repository so far has **25 commits** on its main line, by 3 different authors, if you count the AI ones.
-- Every single one of those commits was made on a **Sunday**. The bot is a Sunday project. The weekend was the product.
-- The Rust toolchain file asks for **nightly** (with the wasm32 target), while `rust-version` in `Cargo.toml` says **1.99** and the edition is **2024**, resolver **3**. The code stays within stable Rust, so nightly is a lifestyle choice, not a need.
-- The bot needs about **3 GB of RAM** and downloads about **1.7 GB** of model weights. Per kilobyte of RAM, it is shy.
-- All user-facing text lives in **8 Fluent files**, **1,670 lines** in total, in two languages. Both languages say the same thing, just with different punctuation.
+- 🤷 This repository has **32 crates** in `crates/`. That is a lot of crates for a bot that tells people to stop swearing.
+- 📏 Those crates contain about **49,581 lines** of Rust across **235 files**. For comparison, this README alone is a weird fraction of that.
+- 🐘 The biggest crate, `pb-engine`, has **8,388 lines**. The smallest, `pb-voice-api`, has **161**. It is small, but it knows what it is doing.
+- 🎭 The biggest single file is `crates/pb-fluxer-fake/src/lib.rs` with **1,270 lines**: a fake Fluxer so the real one is not bothered during tests.
+- 🔒 `Cargo.lock` lists **1,079 packages**. The bot has 32 of its own. The rest are friends we met on the way.
+- 🧪 There are **173 tests** in the source, and **23** of them are marked `#[ignore]` because they need models, a LiveKit server or a browser. They are the introverts of the test suite.
+- 📝 The word `TODO` appears **0 times** in the Rust code. Clippy's `todo` lint is set to `warn`. The author is either disciplined or lying.
+- 😬 `unwrap()` appears **467** times (mostly in tests, we hope). Clippy's `unwrap_used` lint is also set to `warn`.
+- 🐑 `clone()` appears **859** times. Rust developers call this "being pragmatic".
+- ⏳ `async fn` appears **483** times. Waiting is the main job of this bot.
+- 🏗️ There are **435** `struct` mentions, **144** `enum` mentions and **21** `trait` mentions. That is 3.0 structs per enum. Enums are the minority. Enums feel left out.
+- 📚 The code has **2,091** `///` doc-comment lines. The author really wanted you to understand.
+- ☢️ The workspace forbids `unsafe_code` (set to `deny`). The only `unsafe` lives in the crate that talks to C, `pb-espeak`. It is the designated smoking area.
+- ⚖️ The bot's default threshold is **0.6**. In a sense, it is 60% judgemental by default.
+- 🔌 The default web port is **8790**. Prime factors: 2 × 3 × 5 × 293. The number is not prime. Neither is the bot.
+- 🐳 The `Containerfile` has **3 stages** (`build`, `weights`, and the final image) and runs the bot as user `10001`, not root.
+- 📢 The bot's output is **5 warning clips** totalling **13.09 seconds**. That is less time than it takes to read this bullet point out loud twice.
+- 📅 The repository so far has **25 commits** on its main line, by 3 different authors, if you count the AI ones.
+- 📅 Every single one of those commits was made on a **Sunday**. The bot is a Sunday project. The weekend was the product.
+- 🔧 The Rust toolchain file asks for **nightly** (with the wasm32 target), while `rust-version` in `Cargo.toml` says **1.99** and the edition is **2024**, resolver **3**. The code stays within stable Rust, so nightly is a lifestyle choice, not a need.
+- 🧠 The bot needs about **3 GB of RAM** and downloads about **1.7 GB** of model weights. Per kilobyte of RAM, it is shy.
+- 🌍 All user-facing text lives in **8 Fluent files**, **1,670 lines** in total, in two languages. Both languages say the same thing, just with different punctuation.
 
 ## Repository Statistics Dashboard
 
@@ -190,38 +214,38 @@ Every crate in `crates/`, with its real line count and a personal opinion that n
 
 | Crate | Layer | Lines | Files | What it is | Opinion |
 | ----- | ----- | ----: | ----: | ---------- | ------- |
-| `pb` | L5 | 2,530 | 10 | The pb binary | The binary. The one that actually runs. Everyone else is a cheering section. |
-| `pb-audio` | L2 | 541 | 4 | Audio decode, WAV, resampling, loudness, limiting, fades | Decode, resample, loudness, limiting, fades. Sound goes in, slightly different sound comes out. |
-| `pb-classifier-roblox` | L2 | 1,143 | 8 | Roblox voice-safety-classifier v3 in Burn | The judge. Runs the Roblox voice-safety classifier in Burn. Quietly disapproves of you. |
-| `pb-commands` | L0 | 435 | 2 | Chat command parser and permission levels (pure) | Parses `!pb`. So that typing 'add' feels like having power. |
-| `pb-devstack` | L5 | 268 | 2 | A fake Fluxer instance with a local LiveKit server and people talking in a call, for trying the bot and its web UI (never shipped) | A fake Fluxer with fake friends talking in a fake call. Never shipped. Best social life in the repo. |
-| `pb-domain` | L0 | 774 | 7 | Domain types: ids, labels, languages, scores, verdicts, decisions, scopes (pure, no I/O) | Ids, labels, scores, verdicts. The nouns of the project. Has no I/O and no regrets. |
-| `pb-engine` | L3 | 8,388 | 28 | The bot: Fluxer session lifecycle, voice following, listening, decisions, warnings, moderation, reports, chat commands | The big one. Follows people into voice and decides what to do about them. |
-| `pb-espeak` | L2 | 294 | 3 | espeak-ng (C library, pinned to Piper's commit) phonemization for Piper voices | Four C functions in a trench coat. The `unsafe` lives here and is not allowed out. |
-| `pb-fluxer` | L2 | 2,584 | 6 | Fluxer client: discovery, gateway, REST with rate limits, OAuth2 | Talks to Fluxer. Respects rate limits. Is polite to the gateway. |
-| `pb-fluxer-api` | L1 | 774 | 10 | The Fluxer interface the engine uses: gateway events, commands, REST operations, permissions | The shape of Fluxer, so nobody else has to know Fluxer. |
-| `pb-fluxer-fake` | L5 | 1,270 | 1 | A fake Fluxer (discovery, REST, gateway with resume and voice joins, OAuth2) for tests | One file. Pretends to be an entire chat platform. A one-man theatre. |
-| `pb-i18n` | L0 | 739 | 3 | Fluent bundles (de, en) for bot text and the web UI (pure) | Two languages (de, en). 1,670 lines of Fluent. Both are correct. |
-| `pb-import` | L2 | 1,511 | 6 | One-time import of the Python bot's data directory | Eats the old Python bot's data. Silently. With respect for the dead. |
-| `pb-infer` | L2 | 1,264 | 6 | Model threads, priority job queues and the inference handle | Model threads and priority job queues. Sentences queue up like at a bakery. |
-| `pb-live` | L3 | 955 | 5 | The live-update hub: topic cells, consistent snapshots, deltas, per-connection sessions | The live-update hub. Basically the gossip department. |
-| `pb-live-proto` | L0 | 1,876 | 8 | Live update wire protocol, client reducer, conveyor stage function (pure, wasm-safe) | The grammar of the gossip. Compiles to wasm so the browser can gossip too. |
-| `pb-models-api` | L1 | 304 | 6 | Interfaces for the VAD, classifier and text-to-speech models, with contract tests | Interfaces for VAD, classifier and TTS, with contract tests. A prenuptial agreement for models. |
-| `pb-policy` | L0 | 1,695 | 7 | Decider (strikes, escalation), FollowMachine (voice join/leave), channel policy (pure) | Strikes, escalation, follow machine. Judge Dredd, but with a config file. |
-| `pb-segment` | L0 | 912 | 9 | Audio framing, PCM ring, hysteresis sentence segmenter, echo guard, windowing (pure) | Cuts speech into sentences. A very small butcher with a hysteresis. |
-| `pb-settings` | L0 | 2,997 | 7 | Typed settings schema, layered resolution with sources, TOML editing (pure) | A typed schema with layered resolution. A lot of code to say 'it depends'. |
-| `pb-store` | L2 | 2,864 | 16 | Hash-chained event log, Turso index, blob store, TOML settings, sessions | The hash-chained diary. Trusts nobody, including itself. |
-| `pb-store-api` | L1 | 1,815 | 9 | Interfaces for the event log, query index, blobs, settings and sessions, with contract tests | The interface to the diary. A diary needs a front cover. |
-| `pb-testkit` | L5 | 1,116 | 6 | Test helpers: local LiveKit server, tokens, participants, an in-process voice transport, stand-in models, golden data | Fake participants, local LiveKit, golden data. The cast of the test suite. |
-| `pb-tls` | L2 | 218 | 2 | The bot's TLS client setup: graviola crypto (pure Rust), the system's trusted roots plus Mozilla's, a CPU check | Pure-Rust TLS setup. Also checks if your CPU is fancy enough. |
-| `pb-tts-piper` | L2 | 836 | 6 | Piper text-to-speech on rten with espeak-ng phonemes | Makes the bot talk. Piper voices on rten with espeak-ng phonemes. The bot did not ask for a voice. |
-| `pb-vad-silero` | L2 | 790 | 2 | Silero VAD v6.2, a hand-written forward pass | Voice activity detection with a hand-written forward pass. Answers 'human or fridge?' ten times faster than it used to. |
-| `pb-voice-api` | L1 | 161 | 2 | Interface to the voice transport (rooms, tracks, audio in/out), with contract tests | The smallest crate. Proud of it. Interface to the voice transport. |
-| `pb-voice-livekit` | L2 | 765 | 3 | Voice transport on the official LiveKit Rust SDK | Voice transport on the official LiveKit Rust SDK. Where audio enters and leaves. |
-| `pb-voicelines` | L0 | 1,090 | 8 | Voice lines: slots, resolution, templates, utterance plans, prediction (pure) | Slots, templates, utterance plans. The bot's script writers. |
-| `pb-web` | L4 | 4,163 | 24 | Leptos web app: pages (server-rendered) and islands (live parts, editors) | Leptos web app. Rust in the browser, on purpose. |
-| `pb-web-server` | L4 | 4,124 | 17 | axum server: host allowlist, sessions and login, setup, forms, uploads, media, the live socket | axum. Host allowlist, sessions, login, uploads. The front door and the bouncer. |
-| `pb-weights` | L2 | 385 | 2 | Pinned model and voice downloads with sha256 verification | Downloads about 1.7 GB, verifies the SHA-256 like a customs officer, and resumes if interrupted. |
+| `pb` | L5 | 2,530 | 10 | The pb binary | 🍒 The binary. The one that actually runs. Everyone else is a cheering section. |
+| `pb-audio` | L2 | 541 | 4 | Audio decode, WAV, resampling, loudness, limiting, fades | ⚙️ Decode, resample, loudness, limiting, fades. Sound goes in, slightly different sound comes out. |
+| `pb-classifier-roblox` | L2 | 1,143 | 8 | Roblox voice-safety-classifier v3 in Burn | ⚙️ The judge. Runs the Roblox voice-safety classifier in Burn. Quietly disapproves of you. |
+| `pb-commands` | L0 | 435 | 2 | Chat command parser and permission levels (pure) | 🧱 Parses `!pb`. So that typing 'add' feels like having power. |
+| `pb-devstack` | L5 | 268 | 2 | A fake Fluxer instance with a local LiveKit server and people talking in a call, for trying the bot and its web UI (never shipped) | 🍒 A fake Fluxer with fake friends talking in a fake call. Never shipped. Best social life in the repo. |
+| `pb-domain` | L0 | 774 | 7 | Domain types: ids, labels, languages, scores, verdicts, decisions, scopes (pure, no I/O) | 🧱 Ids, labels, scores, verdicts. The nouns of the project. Has no I/O and no regrets. |
+| `pb-engine` | L3 | 8,388 | 28 | The bot: Fluxer session lifecycle, voice following, listening, decisions, warnings, moderation, reports, chat commands | 🧠 The big one. Follows people into voice and decides what to do about them. |
+| `pb-espeak` | L2 | 294 | 3 | espeak-ng (C library, pinned to Piper's commit) phonemization for Piper voices | ⚙️ Four C functions in a trench coat. The `unsafe` lives here and is not allowed out. |
+| `pb-fluxer` | L2 | 2,584 | 6 | Fluxer client: discovery, gateway, REST with rate limits, OAuth2 | ⚙️ Talks to Fluxer. Respects rate limits. Is polite to the gateway. |
+| `pb-fluxer-api` | L1 | 774 | 10 | The Fluxer interface the engine uses: gateway events, commands, REST operations, permissions | 🔌 The shape of Fluxer, so nobody else has to know Fluxer. |
+| `pb-fluxer-fake` | L5 | 1,270 | 1 | A fake Fluxer (discovery, REST, gateway with resume and voice joins, OAuth2) for tests | 🍒 One file. Pretends to be an entire chat platform. A one-man theatre. |
+| `pb-i18n` | L0 | 739 | 3 | Fluent bundles (de, en) for bot text and the web UI (pure) | 🧱 Two languages (de, en). 1,670 lines of Fluent. Both are correct. |
+| `pb-import` | L2 | 1,511 | 6 | One-time import of the Python bot's data directory | ⚙️ Eats the old Python bot's data. Silently. With respect for the dead. |
+| `pb-infer` | L2 | 1,264 | 6 | Model threads, priority job queues and the inference handle | ⚙️ Model threads and priority job queues. Sentences queue up like at a bakery. |
+| `pb-live` | L3 | 955 | 5 | The live-update hub: topic cells, consistent snapshots, deltas, per-connection sessions | 🧠 The live-update hub. Basically the gossip department. |
+| `pb-live-proto` | L0 | 1,876 | 8 | Live update wire protocol, client reducer, conveyor stage function (pure, wasm-safe) | 🧱 The grammar of the gossip. Compiles to wasm so the browser can gossip too. |
+| `pb-models-api` | L1 | 304 | 6 | Interfaces for the VAD, classifier and text-to-speech models, with contract tests | 🔌 Interfaces for VAD, classifier and TTS, with contract tests. A prenuptial agreement for models. |
+| `pb-policy` | L0 | 1,695 | 7 | Decider (strikes, escalation), FollowMachine (voice join/leave), channel policy (pure) | 🧱 Strikes, escalation, follow machine. Judge Dredd, but with a config file. |
+| `pb-segment` | L0 | 912 | 9 | Audio framing, PCM ring, hysteresis sentence segmenter, echo guard, windowing (pure) | 🧱 Cuts speech into sentences. A very small butcher with a hysteresis. |
+| `pb-settings` | L0 | 2,997 | 7 | Typed settings schema, layered resolution with sources, TOML editing (pure) | 🧱 A typed schema with layered resolution. A lot of code to say 'it depends'. |
+| `pb-store` | L2 | 2,864 | 16 | Hash-chained event log, Turso index, blob store, TOML settings, sessions | ⚙️ The hash-chained diary. Trusts nobody, including itself. |
+| `pb-store-api` | L1 | 1,815 | 9 | Interfaces for the event log, query index, blobs, settings and sessions, with contract tests | 🔌 The interface to the diary. A diary needs a front cover. |
+| `pb-testkit` | L5 | 1,116 | 6 | Test helpers: local LiveKit server, tokens, participants, an in-process voice transport, stand-in models, golden data | 🍒 Fake participants, local LiveKit, golden data. The cast of the test suite. |
+| `pb-tls` | L2 | 218 | 2 | The bot's TLS client setup: graviola crypto (pure Rust), the system's trusted roots plus Mozilla's, a CPU check | ⚙️ Pure-Rust TLS setup. Also checks if your CPU is fancy enough. |
+| `pb-tts-piper` | L2 | 836 | 6 | Piper text-to-speech on rten with espeak-ng phonemes | ⚙️ Makes the bot talk. Piper voices on rten with espeak-ng phonemes. The bot did not ask for a voice. |
+| `pb-vad-silero` | L2 | 790 | 2 | Silero VAD v6.2, a hand-written forward pass | ⚙️ Voice activity detection with a hand-written forward pass. Answers 'human or fridge?' ten times faster than it used to. |
+| `pb-voice-api` | L1 | 161 | 2 | Interface to the voice transport (rooms, tracks, audio in/out), with contract tests | 🔌 The smallest crate. Proud of it. Interface to the voice transport. |
+| `pb-voice-livekit` | L2 | 765 | 3 | Voice transport on the official LiveKit Rust SDK | ⚙️ Voice transport on the official LiveKit Rust SDK. Where audio enters and leaves. |
+| `pb-voicelines` | L0 | 1,090 | 8 | Voice lines: slots, resolution, templates, utterance plans, prediction (pure) | 🧱 Slots, templates, utterance plans. The bot's script writers. |
+| `pb-web` | L4 | 4,163 | 24 | Leptos web app: pages (server-rendered) and islands (live parts, editors) | 🎨 Leptos web app. Rust in the browser, on purpose. |
+| `pb-web-server` | L4 | 4,124 | 17 | axum server: host allowlist, sessions and login, setup, forms, uploads, media, the live socket | 🎨 axum. Host allowlist, sessions, login, uploads. The front door and the bouncer. |
+| `pb-weights` | L2 | 385 | 2 | Pinned model and voice downloads with sha256 verification | ⚙️ Downloads about 1.7 GB, verifies the SHA-256 like a customs officer, and resumes if interrupted. |
 
 **Crate size ranking, in words:**
 
@@ -926,28 +950,28 @@ The `pb` binary has a few subcommands. A short summary of each, with feelings:
 
 | Subcommand | What it does | Mood |
 | ---------- | ------------ | ---- |
-| `pb run` | Runs the bot. The default (`CMD ["run"]`). | Ready. |
-| `pb doctor` | Checks the installation. | Concerned, but professional. |
-| `pb health` | Health check, used by the container's health check. | Alive. |
-| `pb setup-code` | Prints the first-start setup code. | Secretive. |
-| `pb reset-setup` | Redo the setup. Token, secret, settings and data stay. | Fresh start. |
-| `pb fetch-weights` | Downloads the models and voices (about 1.7 GB), resumable. | Patient. |
-| `pb import` | Imports the old Python bot's data. | Respectful. |
-| `pb store` | Verifies the event log and rebuilds the search index. | Suspicious. |
-| `pb settings` | Prints all settings docs. | Chatty. |
+| `pb run` | Runs the bot. The default (`CMD ["run"]`). | 💪 Ready. |
+| `pb doctor` | Checks the installation. | 🧐 Concerned, but professional. |
+| `pb health` | Health check, used by the container's health check. | 💚 Alive. |
+| `pb setup-code` | Prints the first-start setup code. | 🤫 Secretive. |
+| `pb reset-setup` | Redo the setup. Token, secret, settings and data stay. | 🌱 Fresh start. |
+| `pb fetch-weights` | Downloads the models and voices (about 1.7 GB), resumable. | 🧘 Patient. |
+| `pb import` | Imports the old Python bot's data. | 🕯️ Respectful. |
+| `pb store` | Verifies the event log and rebuilds the search index. | 🕵️ Suspicious. |
+| `pb settings` | Prints all settings docs. | 🗣️ Chatty. |
 
 ## Exit Codes
 
 | Code | Meaning | Mood |
 | ---: | ------- | ---- |
-| 0 | Clean exit | Relieved |
-| 1 | A generic failure | Sad |
-| 2 | Bad command line usage | Annoyed |
-| **3** | **Another bot is using the same data directory** | Territorial |
-| **78** | **A permanent problem: configuration, missing model files, a CPU without the needed instructions** | Tired but wise |
-| 137 | Killed, probably for using too much memory | Grim |
-| 139 | Segmentation fault. In Rust. That would be rare. | Shocked |
-| 143 | Stopped with SIGTERM by Podman. Polite. | Dignified |
+| 0 | Clean exit | 😌 Relieved |
+| 1 | A generic failure | 😢 Sad |
+| 2 | Bad command line usage | 😒 Annoyed |
+| **3** | **Another bot is using the same data directory** | 🐺 Territorial |
+| **78** | **A permanent problem: configuration, missing model files, a CPU without the needed instructions** | 🧙 Tired but wise |
+| 137 | Killed, probably for using too much memory | 💀 Grim |
+| 139 | Segmentation fault. In Rust. That would be rare. | 😱 Shocked |
+| 143 | Stopped with SIGTERM by Podman. Polite. | 🎩 Dignified |
 
 Fun trivia: the number 78 is the conventional "configuration error" exit code from the old BSD `sysexits.h` (`EX_CONFIG`). Back in the day someone sat down and picked 78. It is the repo's favourite number.
 
@@ -1111,91 +1135,91 @@ A: It is not. There are many `Sunday`s left.
 
 ## Haikus About The Repository
 
-**Haiku #1**
+**Haiku #1** 🌸
 
 > A word is spoken  
 > The classifier scores it  
 > A clip says: please no
 
-**Haiku #2**
+**Haiku #2** 🦀
 
 > Thirty-two crates deep  
 > The borrow checker is pleased  
 > The build is not done
 
-**Haiku #3**
+**Haiku #3** 🍵
 
 > Port eight-seven-nine-oh  
 > The web page is listening  
 > Come in, have some tea
 
-**Haiku #4**
+**Haiku #4** ⛓️
 
 > Hash chain, hash chain, link  
 > Each event remembers one  
 > Nobody cheats here
 
-**Haiku #5**
+**Haiku #5** 📢
 
 > Keep it clean, he said  
 > The voice is five seconds long  
 > He swears even more
 
-**Haiku #6**
+**Haiku #6** 🐳
 
 > Podman starts the bot  
 > Rootless and read-only now  
 > No drama today
 
-**Haiku #7**
+**Haiku #7** 🪜
 
 > Strikes accumulate  
 > A mute, a kick, a timeout  
 > Peace in the channel
 
-**Haiku #8**
+**Haiku #8** 🇩🇪
 
 > Piper speaks in German  
 > The words are polite and clear  
 > The tone is not so
 
-**Haiku #9**
+**Haiku #9** ☢️
 
 > Unsafe stays in one place  
 > The crate that talks to C  
 > The rest is pure Rust
 
-**Haiku #10**
+**Haiku #10** 🧊
 
 > Silero hears breath  
 > Is that a human or fridge  
 > The fridge is quiet
 
-**Haiku #11**
+**Haiku #11** 🌧️
 
 > Sentences in queues  
 > The classifier hums softly  
 > Verdicts fall like rain
 
-**Haiku #12**
+**Haiku #12** 🙈
 
 > Observe only mode  
 > The bot judges silently  
 > A saint with a log
 
-**Haiku #13**
+**Haiku #13** 🏋️
 
 > Three gigabytes, yes  
 > The weights are heavy, my friend  
 > But the bot is light
 
-**Haiku #14**
+**Haiku #14** 🔢
 
 > Exit code seventy-eight  
 > Read the log, dear friend  
 > It tells you why
 
-**Haiku #15**
+**Haiku #15** 🌞
 
 > A Sunday commit  
 > The weekend has been spent well  
@@ -1396,6 +1420,274 @@ You are a person in a Fluxer voice channel. The bot is following you.
 - T minus -5 minutes: first tracked person joins voice
 - T minus -6 minutes: first warning clip
 - T minus -7 minutes: friends are angry
+
+## Rants, Hot Takes And Holy Wars
+
+🐧 *Every developer has strong opinions about tools. The author has them too, and also a keyboard. Everything below is about software, never about people. Mostly.*
+
+1. 🖕 **NVIDIA.** The optional GPU mode (`device = "gpu"`) goes through **Vulkan** (via wgpu), not CUDA. Fuck you, NVIDIA. 🎮 (A tip of the hat to the Finnish gentleman who said it first, on stage, in 2012.) `Cargo.lock` does contain `cudarc` and `burn-cuda`, as lockfile guests only. They are in the building, but nobody gave them a badge.
+2. 💩 **GNOME.** This project has no GTK dependency. The web UI is a web page, on purpose, so nothing here will ever hide your settings "for simplicity" and then call the missing option a design decision. GNOME is shit. 🦶 (Not a technical statement, just a vibe. KDE people may now cheer. Then argue about Wayland.)
+3. 🧵 **systemd.** `deploy/quadlet/` has three units, because even your containers now need an init system with opinions. systemd will eventually also read this README to you. And fix the typos. And restart itself.
+4. 🐳 **Docker vs Podman.** Podman is Docker without the root daemon-shaped hole in your security. Rootless, read-only, `--cap-drop=ALL`. The most boring container in the world, and boring is the best thing a container can be. 😴
+5. 🏔️ **Arch, btw.** The development section lists Arch, CachyOS and Manjaro first. Yes, on purpose. No, we are not sorry. By the way, we use Arch. 🧙
+6. 🪨 **Debian stable.** The Containerfile installs clang 21 from LLVM's own repo because bookworm ships clang 14. Debian stable: stable like a rock, and just as up to date. 🦕
+7. ⌨️ **Tabs vs spaces.** The Rust code has **0** tab characters. `rustfmt` ended that war, spaces won, and the tabs went home to write YAML. ☮️
+8. 📝 **Vim vs Emacs vs nano.** The settings are edited in the page *or* by hand in TOML (`toml_edit` even keeps your comments, which is more than your colleagues do). We do not care what you use. We silently judge it. 🤐
+9. 🐘 **Electron.** There is none. The web UI is Leptos compiled to WebAssembly: a small page, not a 400 MB Chrome in a trench coat. 🧥 Chromium is only invited for the browser tests, and it has to wear a name tag.
+10. 🧊 **libc++ and libwebrtc.** LiveKit's libwebrtc is built against Chromium's own C++ standard library, so we have to build with clang 21 too. Google compiled its own standard library into a video-call stack and now *you* wait 60 minutes for it. Thanks. Thanks a lot. 🙃
+11. 🏗️ **CMake.** Needed for espeak-ng. CMake is a build system the way a haunted house is a property investment. 👻
+12. 📦 **npm.** `node_modules` folders in this repo: **0**. The `cargo xtask ci` has a *shipped-JavaScript gate* so nobody can smuggle in a `left-pad` at night. 🚫
+13. 🐍 **Python.** The old bot was Python. `pip install --break-system-packages` are the three most honest words in Python packaging. 🪦 Indentation is syntax, and the interpreter has feelings about your spaces.
+14. 🦀 **"Rewrite it in Rust."** Yes, we actually did that. The meme is now a commit history. The crab won. Ferris sends regards. ❤️
+15. 🧅 **C.** The one `unsafe` crate (`pb-espeak`) talks to C. C: the language that gave us the whole of computing and the whole of CVE. ☢️ Locked in a crate. Not allowed out. We feed it through a slot in the door.
+16. 🔐 **Rootless containers.** Because `sudo make me a sandwich` should at least need an actual sandwich. 🥪
+17. 🍝 **Spaghetti.** There is none. There are 32 crates and a checker (`cargo xtask deps`) that yells if a lower layer so much as *looks* at a higher one. It is lasagne. The best kind of code. 🧀
+18. 🕳️ **"It works on my machine."** The Containerfile is the formal answer: we shipped your machine. 🤷
+19. 🤖 **AI.** Claude wrote a few commits in this repo and would like it noted that its code compiles on the first try. In Claude's imagination. 🧠💭
+20. 📉 **Premature optimisation.** The Silero VAD rewrite made it ten times faster (0.2 ms → 0.02 ms per step, according to `docs/dependencies.md`). Maybe not premature. Maybe just *rude* to the old implementation. 🏎️
+
+> 🧯 **The author's list of things that are *fine*:** Rust, Podman, `rustfmt`, the borrow checker, hash chains, Sunday commits, and anything that does not ask you to log in with a Google account to change a setting. 🤝
+
+## More Real Numbers
+
+📏 *We counted again. Every number below is real and was measured on the code in this branch (`crates/` and `xtask/`). We should seek help.*
+
+| Metric | Value | Comment |
+| ------ | ----: | ------- |
+| Lines of Rust (`crates/` + `xtask/`) | 50,572 | More than the README. For now. 📈 |
+| Blank lines | 3,603 (7.1%) | Breathing room. 🌬️ |
+| Comment-only lines | 3,028 (6.0%) | The author talks to themselves. 🗣️ |
+| Tab characters | **0** | `rustfmt` won the holy war. ☮️ |
+| Lines longer than 100 characters | 1,593 | `rustfmt.toml` says `max_width = 120`. We live at the edge. 🏔️ |
+| Lines longer than 120 characters | 159 | Long strings and macros that `rustfmt` refuses to wrap. Not a bug. A personality. 🎭 |
+| Longest line | 196 characters | `crates/pb/tests/browser.rs`. Browser tests: where lines go to be long. 🌐 |
+| `fn` definitions | 2,131 | One for every 24 lines. 🧮 |
+| Most common function name | `fmt` (59) | Everybody wants to be printed nicely. 💅 |
+| Runner-up names | `new` (44), `start` (27), `default` (27), `run` (24) | Constructors, defaults and hope. 🌱 |
+| Lines with `impl` | 519 | The crab implements things. 🦀 |
+| Lines with `match` | 595 | Enums are not left out after all. 🥳 |
+| Lines with `.await` | 1,402 | About 2.8% of the code is the bot waiting politely. ⏳ |
+| Lines with `Option<` | 623 | Optimism. 😊 |
+| Lines with `Result<` | 463 | Realism. 😐 |
+| `#[derive` lines | 466 | Why write code when the compiler writes it for you. 🪄 |
+| `#[test]` / `#[tokio::test]` | 153 / 85 | The test suite has more async than most people's lives. 🧪 |
+| `'static` | 90 lines | The lifetime of all lifetimes: forever. ♾️ |
+| `Box<dyn` | 28 lines | Dynamic dispatch, used sparingly, like salt and trust. 🧂 |
+| `panic!` / `unreachable!` | 50 / 22 | "This can never happen" is a lovely way to start a bug report. 💥 |
+| Lines containing `unsafe` | 7 | All in the smoking area. 🚬 |
+| `SAFETY` comments | 4 | Each one is a tiny apology letter to the compiler. ✉️ |
+| The word "please" in the Rust code | 6 | Polite. 🙏 |
+| The word "sorry" in the Rust code | 0 | Confident. 😎 |
+| Swear words in the repository (outside this README) | **0** | A profanity bot with a spotless mouth. We checked for `fuck`, `shit`, `damn`, `bitch`, `asshole` and `crap`. This README has ruined that. 😈 |
+| Most common word in the doc comments | `voice` (226) | Then `every` (154), `fluxer` (132), `community` (114), `settings` (105). A bot with a clear theme. 🎙️ |
+| Files tracked by git | 447 | Among them 235 Rust files in `crates/` and 5 `.wav` files that make up a very small choir. 🎼 |
+| Markdown files (without `third_party/`) | 9 | And this README is the loudest one. 📢 |
+| TOML files (without `third_party/`) | 42 | TOML: INI with a lawyer. 📋 |
+| `Cargo.lock` | 11,939 lines | Eleven thousand lines of other people's decisions. 🧾 |
+| `third_party/` | 2.0 MB | Four vendored crates, lovingly patched. 🩹 |
+| Ignored security advisories in `deny.toml` | 4 | Each with a written excuse and a way out. A polite shrug, in TOML. 🤷 |
+
+🏁 **The grand total of things in this table that anybody needed:** zero. **The grand total of things in this table that are true:** all of them.
+
+## Mailing List Mode
+
+📧 *A fictional code review, as if this repository were sent to a very grumpy kernel-style maintainer. The maintainer is invented. Any resemblance to a famous Finn who yells at graphics vendors is, of course, a coincidence. 🙄*
+
+```
+From: Grumpy Maintainer <grumpy@localhost>
+To: PaperTobi <you-know-who@example.invalid>
+Subject: Re: [PATCH v7 000/235] README: even more nonsense
+
+On Sunday, the author wrote:
+> This README is mostly filler.
+
+NAK. "Mostly" is doing way too much work in that sentence. 😤
+
+> 32 crates behind versioned (v1) interfaces.
+
+Why the hell are there 32 crates for a bot that tells people to stop
+swearing?! ... Oh. There is a layer checker. And it fails the build when
+somebody breaks the rules. Fine. I hate how much I like that. 🧀
+
+> `unwrap()` appears 467 times.
+
+Who the *hell* ... tests. They are tests. Clippy says tests may unwrap.
+A test fails by panicking. I have no argument. This is annoying. 😠
+
+> The `branches` crate had to be patched because nightly renamed an intrinsic.
+
+A vendored crate called `branches` in a git repo with branches. Whoever
+named this: you win today. Do not let it go to your head. 🌿
+
+> LiveKit's libwebrtc is built against Chromium's libc++, so we need clang 21.
+
+And the Debian image ships clang 14. Of course it does. Whoever decided
+that was "stable" should be forced to write code on it, for a week,
+without autocomplete. 🪨
+
+> The `unsafe` is confined to `pb-espeak`.
+
+Good. Keep that animal in its cage and do NOT feed it after midnight. ☢️
+
+> A hash-chained event log, for a bot that tells people off.
+
+This is the most overengineered thing I have read this week and I am
+slightly in awe. Applied. ⛓️
+
+> The VAD was kicked out of the Burn club; the hand-written loops are 10x faster.
+
+See? You can just *write the loop*. Not everything needs a framework with a
+logo. Plus one. 🔁
+
+> `updated readme`, `Revert "updated readme"`, `updated readme`, ...
+
+Commit messages like this are a cry for help. I also see "Revert". Twice.
+Make up your mind, for fuck's sake. 🫠
+
+> The README now contains swearing, aimed at software.
+
+My workstation is fine, thank you. The bot, however, is going to flag this
+whole mail. 🚨 ... Good. Serves it right.
+
+Overall: not a single sensible change, a hundred pointless ones, and I
+am applying it all. Just never send me a "v8". 🙏
+
+Signed-off-by: Grumpy Maintainer <grumpy@localhost>
+Reviewed-by: The Borrow Checker (after 14 attempts) 🦀
+Acked-by: Clippy 📎 (with 3 warnings, which it will mention)
+Nacked-by: The Wombat 🐨 (on principle)
+Tested-by: Nobody 🤷 (Sunday)
+```
+
+## Insider Gags Glossary
+
+🤓 *Jokes only developers get. If you do not get them, congratulations, you have a social life. 🌞*
+
+| Term | What it means here | The joke |
+| ---- | ------------------ | -------- |
+| **LGTM** 👍 | "Looks good to me" | Said by people who read the title, not the diff. |
+| **Bikeshedding** 🚲 | Arguing about trivial things | Entire teams will argue about the colour of the settings page. Nobody reads the escalation ladder. |
+| **Yak shaving** 🐃 | A chain of tasks nobody asked for | To tell a teenager off for swearing, we first had to learn what Chromium's libc++ is. |
+| **Heisenbug** 🫥 | A bug that vanishes when observed | `Observe only (silent)` mode, but for bugs. |
+| **PEBKAC** 🧑‍💻 | The problem is between keyboard and chair | See the Troubleshooting table. Exit code 78 is often this. |
+| **RTFM** 📖 | Read the manual | See: *read the log*. The log is the manual now. |
+| **Bus factor** 🚌 | How many people can get hit by a bus before the project dies | Between 1 and 1.5. The 0.5 is an AI. |
+| **Tech debt** 💸 | Shortcuts you pay for later | `deny.toml` lists four of them, with receipts. |
+| **Cargo cult** 🛐 | Copying rituals without understanding | 1,079 packages in `Cargo.lock`. We understand about 32. |
+| **Dogfooding** 🐶 | Using your own product | The README would fail its own model. We eat our own swearing. |
+| **XY problem** 🔀 | Asking for Y when you need X | "How do I make the bot swear?" You do not. See the FAQ. |
+| **Works on my machine** 💻 | The universal excuse | The Containerfile is what happens when the excuse wins. |
+| **Premature optimisation** 🐎 | Root of all evil (Knuth) | Silero is ten times faster now. Mature optimisation. Still rude to the old code. |
+| **Cargo.lock regret** 🔒 | A file you never read and always commit | 11,939 lines of other people's decisions. |
+| **Git blame** 🔦 | Find who wrote it | The answer is "Sunday". Every time. |
+| **Force push** 💣 | Rewriting shared history | The git log shows `Revert` commits instead. Like adults. Twice. |
+| **Friday deploy** 🔥 | A career-limiting move | The Wellness Checklist forbids it. Read it. |
+| **Nightly Rust** 🌙 | The unstable compiler | The code stays within stable Rust. Nightly is a lifestyle choice. |
+| **RIIR** 🦀 | "Rewrite it in Rust" | Done. It is in the git log. |
+| **I use Arch, btw** 🏔️ | Mandatory announcement | Listed first in the dev instructions. We are not sorry. |
+
+## Developer Bingo
+
+🎯 *Mark every square that applies to this repository. Five in a row means you have been in this industry too long.*
+
+| | | | | |
+|:--:|:--:|:--:|:--:|:--:|
+| 🦀 Rewritten in Rust | 🧵 Mentions systemd | 🏔️ "I use Arch btw" | 🐳 Container instead of fixing it | 🪦 Predecessor in a different language |
+| 🧪 Tests that unwrap | 🔥 Build takes 60 min | 🌙 Needs nightly "but doesn't really" | 🍝 "No spaghetti" (it is lasagne) | 📜 README longer than the manual |
+| 🧊 Vendored dependency with a patch | 🔒 Lockfile bigger than the code is tall | ⭐ FREE SPACE (the wombat) | 🌞 Everything committed on a weekend | 🕳️ Mentions libc++ in anger |
+| 🤖 An AI wrote a commit | 🚪 Special exit code with lore | 📉 "We optimised 10x" | ⛓️ Hash chain for no good reason | 😬 467 unwraps |
+| 🖕 Rants at a GPU vendor | 💩 Insults a desktop environment | 🪨 Debian stable joke | 🎙️ Swearing in a profanity bot | 🔁 Reverts its own "updated readme" |
+
+*A full house is called "the actual state of this repository". 🏠*
+
+## The Man Page
+
+📜 *In the long tradition of man pages nobody reads. `man pb` does not exist. This is its spirit.*
+
+```
+PB(1)                       Profanity Watch Manual                       PB(1)
+
+NAME
+       pb - listens to your friends so you do not have to 🎙️
+
+SYNOPSIS
+       pb [run | doctor | health | setup-code | reset-setup |
+           fetch-weights | import | store | settings]
+
+DESCRIPTION
+       pb follows chosen people into Fluxer voice calls, scores every
+       sentence with a model, and tells them off with a recorded voice when
+       they get creative. It runs on a CPU. It does not need a GPU. It does
+       not want a GPU. It especially does not want CUDA. 🖕
+
+OPTIONS
+       --help   Prints help, and a mild sense of failure.
+       --dest   Where the 1.7 GB of weights land. Patience required. ⏳
+
+EXIT STATUS
+       0    Clean exit. Suspicious.
+       3    Another bot already uses this data directory. 🐺
+       78   Read the log. It tells you why. (EX_CONFIG, BSD, 1980s.) 🧙
+       137  Killed. Probably memory. Probably you.
+
+ENVIRONMENT
+       PB_DATA                where everything lives
+       PB__SECTION__KEY       config, with deliberately double underscores
+       PB_BOT_TOKEN           the token. Do NOT paste it into a chat. 🥷
+
+FILES
+       $PB_DATA/config.toml   how the process runs
+       $PB_DATA/settings/     TOML, with your comments preserved. 💕
+       $PB_DATA/secrets.toml  mode 0600, as the gods intended.
+
+BUGS
+       Yes. 🐛
+
+AUTHORS
+       PaperTobi, Pacific6938, Claude. All on a Sunday.
+
+SEE ALSO
+       podman(1), systemd(1) (sigh), rustc(1), your therapist(7), sleep(1)
+
+Linux                              Sunday                               PB(1)
+```
+
+## Compiler Error Therapy
+
+🛋️ *The Rust compiler is the only code reviewer that is never wrong, never tired and never says "LGTM" without reading. Here is what its messages really mean.*
+
+| Error | What the compiler says | What the compiler means |
+| ----- | ---------------------- | ----------------------- |
+| `E0382` | "borrow of moved value" | You gave it away. You cannot also keep it. Life lesson. 💔 |
+| `E0499` | "cannot borrow as mutable more than once" | Two people cannot hold the same pen. Share, or go to jail. ✒️ |
+| `E0502` | "cannot borrow as mutable because it is also borrowed as immutable" | Someone is reading it. Stop editing it. 📖 |
+| `E0308` | "mismatched types" | You said number. You meant text. Both of us know it. 🔢➡️🔤 |
+| `E0277` | "the trait bound is not satisfied" | You need to prove you are who you say you are. 🪪 |
+| `E0425` | "cannot find value in this scope" | It exists. Just not here. Like your motivation on Mondays. 🫥 |
+| `E0599` | "no method named ... found" | You made that up. We both know. Like your estimate. 🤥 |
+| `lifetime may not live long enough` | (a long paragraph) | Ask your parents. 👪 |
+| `unused variable` | warning | You wrote it and never used it. Like the gym membership. 🏋️ |
+
+> 🧘 **Five stages of grief, Rust edition:** denial (`I'm sure it compiles`), anger (`E0382`), bargaining (`.clone()` everywhere), depression (`Arc<Mutex<Box<dyn Trait>>>`), acceptance (`unsafe`, then a long walk). 🚶
+
+## Commit Message Hall Of Fame
+
+🏆 *Real commit messages from the history of this repository. We did not invent these. We could not. 🙈*
+
+| Message | Why it is in the hall |
+| ------- | --------------------- |
+| `Initial commit` | The most honest commit. It makes no promises. 🤞 |
+| `updated readme` (four times) | The man did not trust the first one. 📜 |
+| `Revert "updated readme"` (twice) | And then he did not trust the revert. 🔄 |
+| `Update .gitignore and .containerignore: secrets, editor/OS files, sqlite and toolchain leftovers` | Prevention of future tears. 😭➡️🙂 |
+| `Finish replacing the real user ID in tests` | "Finish." Implies there was a *start*. 🕵️ |
+| `Engine: supervised actors with kept mailboxes, health in /healthz and on the System page` | When a commit message is longer than the average attention span. 🧠💨 |
+| `Silero VAD: hand-written forward pass instead of Burn` | "Instead of a framework, a for loop." The oldest trick in the book. 🔁 |
+| `Build with Rust nightly: toolchain file, patched branches for turso, image and README` | "Patched branches". In a repo with branches. 🌿 |
+| `README: lots of unnecessary information, a FAQ, a glossary and short historical footnotes (the instructions are unchanged)` | A hundred and twenty-two characters of honesty. 🫡 |
+| `README: remove the trivia, FAQ, glossary and footnotes` | And then, naturally... 😏 |
+| `updated readme` (this very change) | The tradition lives on. 🕯️ |
+
 
 ## Appendix A: Every Rust File In This Repository
 
@@ -2005,3 +2297,5 @@ GPL-3.0-or-later; LiveKit's libwebrtc: BSD-3-Clause.
 ---
 
 *This README is mostly filler. The filler is, at least, about this repository. The wombat has been dismissed.*
+
+🐧 *Linux, Rust, Podman and a very long README: the four pillars of this repository. The fifth pillar is the Sunday. The sixth is the wombat.* 🐨
