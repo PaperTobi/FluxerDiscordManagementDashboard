@@ -120,7 +120,17 @@ pub async fn run(core: Arc<Core>, mut spec: TrackSpec) {
                 for f in &frames {
                     ring.append(f);
                 }
-                let Ok(probs) = vad.step(floats.clone()).await else { break };
+                let probs = match vad.step(floats.clone()).await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        // The voice-detection thread is gone (the System page and /healthz show it): what was heard
+                        // so far is still scored, then this microphone stops.
+                        tracing::error!(guild = %g, user = %u, error = %e, "voice detection failed; this microphone stops");
+                        events.extend(seg.flush(i64::try_from(ring.end()).unwrap_or(i64::MAX), FlushReason::Stall));
+                        handle(&core, &spec, &jobs, &mut ring, &mut open, events, last_mono);
+                        break;
+                    }
+                };
                 let watched = core.live.watched(g, u);
                 for (i, p) in probs.iter().enumerate() {
                     events.extend(seg.push(k, f64::from(*p)));
