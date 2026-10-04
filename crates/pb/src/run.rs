@@ -100,9 +100,15 @@ async fn run(data: &Path, cfg: Config) -> Result<(), Fail> {
         LockError::Io(..) => Fail(Exit::Config, e.to_string()),
     })?;
     // The web UI's port, before anything starts (a busy port is a configuration problem with nothing to undo).
-    let listener = tokio::net::TcpListener::bind(cfg.web.bind)
-        .await
-        .map_err(|e| Fail(Exit::Config, format!("web UI address {}: {e}", cfg.web.bind)))?;
+    let listener = tokio::net::TcpListener::bind(cfg.web.bind).await.map_err(|e| {
+        let hint = if e.kind() == std::io::ErrorKind::AddrInUse {
+            " (another program uses this port, maybe another copy of the bot: stop it, or choose another address with \
+             PB__WEB__BIND=0.0.0.0:8791 or `bind` under [web] in config.toml)"
+        } else {
+            ""
+        };
+        Fail(Exit::Config, format!("web UI address {}: {e}{hint}", cfg.web.bind))
+    })?;
 
     // The store.
     let tmp = data.join("tmp");
