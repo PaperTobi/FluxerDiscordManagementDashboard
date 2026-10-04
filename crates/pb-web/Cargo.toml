@@ -1,0 +1,53 @@
+[package]
+name = "pb-web"
+description = "Leptos web app: pages (server-rendered) and islands (live parts, editors)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+leptos.workspace = true
+pb-domain.workspace = true
+pb-i18n.workspace = true
+pb-live-proto.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# server side
+leptos_router = { workspace = true, optional = true }
+leptos_axum = { workspace = true, optional = true }
+pb-engine = { workspace = true, optional = true }
+pb-live = { workspace = true, optional = true }
+pb-settings = { workspace = true, optional = true }
+pb-store-api = { workspace = true, optional = true }
+pb-voicelines = { workspace = true, optional = true }
+pb-fluxer-api = { workspace = true, optional = true }
+jiff = { workspace = true, optional = true }
+http = { version = "1", optional = true }
+url = { workspace = true, optional = true }
+# browser side
+js-sys = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true, features = [
+  "Window", "Document", "console", "Location", "WebSocket", "MessageEvent", "CloseEvent", "Event", "EventTarget",
+  "VisibilityState", "Element", "HtmlElement", "Navigator", "MediaDevices", "MediaStream", "MediaStreamConstraints",
+  "MediaRecorder", "BlobEvent", "Blob", "FormData", "Request", "RequestInit", "Response", "HtmlInputElement",
+  "HtmlFormElement", "MediaStreamTrack", "BlobPropertyBag",
+] }
+
+
+[features]
+hydrate = ["leptos/hydrate", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:web-sys"]
+ssr = [
+  "leptos/ssr", "dep:leptos_router", "leptos_router/ssr", "dep:leptos_axum", "dep:pb-engine", "dep:pb-live",
+  "dep:pb-settings", "dep:pb-store-api", "dep:pb-voicelines", "dep:pb-fluxer-api", "dep:jiff", "dep:http", "dep:url",
+]
+
+[lints]
+workspace = true

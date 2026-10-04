@@ -1,0 +1,62 @@
+# Profanity Watch, the voice moderation bot for Fluxer. The same three files (this one, profanity-watch.build,
+# profanity-watch-data.volume) work for rootless and rootful podman (>= 5.2).
+#
+#                 rootless (recommended)                          rootful
+#   units         ~/.config/containers/systemd/                   /etc/containers/systemd/
+#   options       a drop-in profanity-watch.container.d/options.conf next to this file, e.g.
+#                   [Container]
+#                   Environment=PB__LOGGING__LEVEL=debug
+#   web UI        http://<this machine's IP>:8790 (setup wizard: setup code, Fluxer address, bot token, client secret, owner login)
+#   control       systemctl --user start|stop|status profanity-watch / journalctl --user -u profanity-watch -f    (rootful: no --user)
+#
+# Rootless needs `loginctl enable-linger <user>` (start at boot without a login) and subordinate IDs in /etc/subuid and
+# /etc/subgid (the image runs as uid 10001 inside its user namespace).
+[Unit]
+Description=Profanity Watch (voice moderation bot for Fluxer)
+
+[Container]
+Image=profanity-watch.build
+ContainerName=profanity-watch
+# The bot token and client secret are entered in the web UI's setup and kept in the data volume. To manage them with
+# podman secrets instead, add a drop-in profanity-watch.container.d/secrets.conf with:
+#   [Container]
+#   Secret=profanity-watch-token,type=env,target=PB_BOT_TOKEN
+#   Secret=profanity-watch-client-secret,type=env,target=PB_CLIENT_SECRET
+# HTTPS for the web UI (needed for recording clips in the browser), from a certificate and key in podman secrets:
+#   Secret=profanity-watch-tls-cert,type=mount,target=/run/secrets/tls-cert,uid=10001
+#   Secret=profanity-watch-tls-key,type=mount,target=/run/secrets/tls-key,uid=10001,mode=0400
+#   Environment=PB__WEB__TLS__CERT=/run/secrets/tls-cert
+#   Environment=PB__WEB__TLS__KEY=/run/secrets/tls-key
+# :U hands the volume to the image's user (uid 10001 inside the container) on every start, rootless or not
+Volume=profanity-watch-data.volume:/data:U
+# the web UI on the LAN; the bot itself only makes outgoing connections (including UDP for voice)
+PublishPort=8790:8790
+
+ReadOnly=true
+ReadOnlyTmpfs=true
+NoNewPrivileges=true
+DropCapability=ALL
+
+HealthCmd=/opt/pb/bin/pb health
+HealthInterval=30s
+HealthTimeout=10s
+HealthStartPeriod=3m
+HealthRetries=4
+# an unhealthy container is killed; systemd's Restart= below then starts a fresh one
+HealthOnFailure=kill
+StopTimeout=20
+
+[Service]
+# the classifier and the voices need about 3 GB on CPU at peak
+MemoryMax=6G
+Restart=always
+RestartSec=10s
+RestartSteps=6
+RestartMaxDelaySec=10min
+# 78 = permanent problem (configuration, missing model files, a CPU without the instructions TLS needs): fix it first.
+# 3 = another bot process holds the data volume.
+RestartPreventExitStatus=78 3
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target

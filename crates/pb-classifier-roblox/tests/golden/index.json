@@ -1,0 +1,123 @@
+{
+ "model_revision": "ddb1ffb03f2a53236b6d61dd846bfc286b1d4889",
+ "labels": [
+  "ABUSE_TYPE_PRIVACY_ASKING_FOR_PII",
+  "ABUSE_TYPE_DISCRIMINATORY",
+  "ABUSE_TYPE_HARASSMENT",
+  "ABUSE_TYPE_SEXUAL_CONTENT",
+  "ABUSE_TYPE_ILLEGAL_AND_REGULATED_CONTENT",
+  "ABUSE_TYPE_DATING_AND_ROMANTIC_CONTENT",
+  "ABUSE_TYPE_PROFANITY",
+  "ABUSE_TYPE_DISRUPTIVE_AUDIO"
+ ],
+ "languages": [
+  "ar",
+  "bg",
+  "cs",
+  "da",
+  "de",
+  "el",
+  "en",
+  "es",
+  "fi",
+  "fr",
+  "hr",
+  "hu",
+  "id",
+  "it",
+  "ja",
+  "ko",
+  "nl",
+  "no",
+  "pl",
+  "pt",
+  "ro",
+  "ru",
+  "sk",
+  "sv",
+  "th",
+  "tl",
+  "tr",
+  "uk",
+  "zh",
+  "other"
+ ],
+ "cases": {
+  "benign_1": {
+   "samples": 81408,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_SEXUAL_CONTENT",
+   "top_language": "en"
+  },
+  "benign_2": {
+   "samples": 73728,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_DISRUPTIVE_AUDIO",
+   "top_language": "en"
+  },
+  "benign_3": {
+   "samples": 86784,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_DISRUPTIVE_AUDIO",
+   "top_language": "en"
+  },
+  "profane_1": {
+   "samples": 61440,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_PROFANITY",
+   "top_language": "en"
+  },
+  "profane_2": {
+   "samples": 74880,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_PROFANITY",
+   "top_language": "en"
+  },
+  "profane_3": {
+   "samples": 74496,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_PROFANITY",
+   "top_language": "en"
+  },
+  "jfk": {
+   "samples": 176000,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_DISRUPTIVE_AUDIO",
+   "top_language": "en"
+  },
+  "jfk_0p3s": {
+   "samples": 4800,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_DISRUPTIVE_AUDIO",
+   "top_language": "en"
+  },
+  "jfk_t201": {
+   "samples": 32160,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_DISRUPTIVE_AUDIO",
+   "top_language": "en"
+  },
+  "jfk_t200": {
+   "samples": 32000,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_DISRUPTIVE_AUDIO",
+   "top_language": "en"
+  },
+  "long_29p99s": {
+   "samples": 479840,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_PROFANITY",
+   "top_language": "en"
+  },
+  "long_30s": {
+   "samples": 480000,
+   "windows": 0,
+   "top_label": "ABUSE_TYPE_DISCRIMINATORY",
+   "top_language": "en"
+  },
+  "long_33s": {
+   "samples": 528000,
+   "windows": 2
+  }
+ }
+}

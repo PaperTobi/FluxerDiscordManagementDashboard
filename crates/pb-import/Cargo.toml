@@ -1,0 +1,30 @@
+[package]
+name = "pb-import"
+description = "One-time import of the Python bot's data directory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bytes.workspace = true
+jiff.workspace = true
+pb-audio.workspace = true
+pb-domain.workspace = true
+pb-settings.workspace = true
+pb-store-api.workspace = true
+pb-voicelines.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+turso.workspace = true
+
+[dev-dependencies]
+pb-store.workspace = true
+tempfile = "3"
+tokio = { workspace = true, features = ["fs", "rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

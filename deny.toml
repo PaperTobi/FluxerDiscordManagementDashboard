@@ -1,0 +1,50 @@
+# `cargo deny check` (part of `cargo xtask ci`): advisories (vulnerable, unmaintained or yanked crates), licences,
+# sources and duplicate versions across the whole dependency tree. docs/dependencies.md explains the choices.
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+yanked = "deny"
+# Unmaintained crates that only come in through maintained upstream projects. Each entry names the way out; the
+# freshness check (`cargo xtask freshness`) shows when that release exists.
+ignore = [
+  { id = "RUSTSEC-2025-0141", reason = "bincode 2.0.1 comes in through burn-core 0.21; burn 0.22 (now 0.22.0-pre.4) drops it: upgrade when 0.22 is released" },
+  { id = "RUSTSEC-2024-0436", reason = "paste 1.0.15 (finished and archived by its author) comes in through leptos 0.8 (also 0.9) and gemm/pulp/macerator under burn-flex; no release of those drops it yet" },
+  { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 comes in through rstml 0.12 under leptos_macro 0.8 (build time only); rstml 0.13 drops it and comes with leptos 0.9" },
+  { id = "RUSTSEC-2020-0163", reason = "term_size comes in through tokei 15.0.0 (2026-09, maintained), used only by xtask's language count; never shipped" },
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "0BSD",
+  "BSL-1.0",
+  "CC0-1.0",
+  "Unicode-3.0",
+  "MPL-2.0",
+  "CDLA-Permissive-2.0",
+]
+
+[licenses.private]
+ignore = true
+
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

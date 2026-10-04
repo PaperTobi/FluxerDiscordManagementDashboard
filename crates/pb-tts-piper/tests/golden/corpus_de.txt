@@ -1,0 +1,33 @@
+Hey {name}, achte auf deine Wortwahl!
+{name}, das ist schon das zweite Mal. Bitte reiß dich zusammen.
+{name}, letzte Warnung. Hör auf damit.
+Hallo {name}, ich höre zu.
+{name} wurde für {minutes} Minuten stummgeschaltet.
+{name} wurde aus dem Anruf entfernt.
+{name} hat eine Auszeit bis morgen.
+{name}, du bist wieder freigeschaltet.
+Verwarnung {count} von {strikes}, {name}.
+Bitte bleib freundlich, {name}.
+Das ist ein Sprachsynthesesystem.
+Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.
+Es ist 15:45 Uhr am 3. Oktober 2026.
+Dr. Müller sagte: „Mach das nicht!“
+Warte... was? Meinst du das ernst?
+Ich habe 2 Katzen, 3 Hunde und 1.250 Fische; das ist viel.
+Herr und Frau Schröder wohnen in der Hauptstraße 12a.
+Ist es 50 % günstiger oder 75 %?
+Besuche beispiel.de für mehr Infos.
+Das Treffen ist um 10:30 Uhr (nicht um 11).
+Fischers Fritz fischt frische Fische.
+Na, na, na: Wer ist denn da?
+Nein! Hör auf! Das reicht!
+Warum schreist du so?
+Ich kann dich nicht hören; bitte sprich lauter.
+Eins, zwei, drei, vier, fünf.
+Das Jahr 1999 ist lange her.
+Er hat 20,50 € für das Mittagessen bezahlt.
+Wir sind in 5 Minuten zurück.
+Beruhigt euch bitte alle.
+Straße, Grüße, Mädchen, Übung, ökonomisch.
+Die Würde des Menschen ist unantastbar.
+Schönes Wochenende und bis bald!

@@ -1,0 +1,23 @@
+[package]
+name = "pb-espeak"
+description = "espeak-ng (C library, pinned to Piper's commit) phonemization for Piper voices"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+links = "espeak-ng"
+build = "build.rs"
+
+[dependencies]
+thiserror.workspace = true
+
+[lints.rust]
+# Calling a C library needs unsafe; it is confined to src/ffi.rs.
+unsafe_code = "allow"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"

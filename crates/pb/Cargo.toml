@@ -1,0 +1,62 @@
+[package]
+name = "pb"
+description = "The pb binary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+clap.workspace = true
+config.workspace = true
+pb-audio.workspace = true
+pb-classifier-roblox.workspace = true
+pb-engine.workspace = true
+pb-i18n.workspace = true
+pb-fluxer.workspace = true
+pb-import.workspace = true
+pb-infer.workspace = true
+pb-live.workspace = true
+pb-models-api.workspace = true
+pb-domain.workspace = true
+pb-settings.workspace = true
+pb-store.workspace = true
+pb-store-api.workspace = true
+pb-tls.workspace = true
+rustls.workspace = true
+pb-tts-piper.workspace = true
+pb-vad-silero.workspace = true
+pb-voice-livekit.workspace = true
+pb-web-server.workspace = true
+pb-weights.workspace = true
+reqwest.workspace = true
+rustix.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "net", "time", "fs", "sync"] }
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+
+[features]
+default = ["gpu"]
+# The classifier on a GPU (wgpu: Vulkan on Linux), chosen with `[inference] device = "gpu"`.
+gpu = ["pb-classifier-roblox/gpu"]
+
+[dev-dependencies]
+chromiumoxide.workspace = true
+pb-devstack.workspace = true
+futures.workspace = true
+pb-espeak.workspace = true
+pb-fluxer-fake.workspace = true
+pb-testkit = { workspace = true, features = ["livekit", "memvoice"] }
+secrecy.workspace = true
+serde_json.workspace = true
+tempfile = "3"
+jiff.workspace = true
+
+[lints]
+workspace = true

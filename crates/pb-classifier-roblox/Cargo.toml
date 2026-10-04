@@ -1,0 +1,40 @@
+[package]
+name = "pb-classifier-roblox"
+description = "Roblox voice-safety-classifier v3 in Burn"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Run on a GPU through wgpu (Vulkan on Linux).
+gpu = ["burn/wgpu", "burn/vulkan"]
+
+[dependencies]
+# x86-v4: gemm adds AVX-512 kernels, chosen at run time by CPU detection (AVX2 otherwise).
+burn = { version = "0.21.0", default-features = false, features = ["std", "flex", "x86-v4"] }
+# Burn's CPU backend: multi-threaded (rayon) and vectorised (simd). Named here because burn's own default features are
+# off, and without these two the backend silently runs single-threaded and scalar.
+burn-flex = { version = "0.21.0", default-features = false, features = ["std", "rayon", "simd"] }
+burn-store = { version = "0.21.0", default-features = false, features = ["std", "safetensors", "memmap"] }
+pb-domain.workspace = true
+pb-models-api.workspace = true
+rayon = "1.12"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+pb-testkit.workspace = true
+pb-models-api = { workspace = true, features = ["contract-tests"] }
+safetensors = "0.8"
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
+# burn-flex is named only to turn on its features (see above); the code reaches it through `burn`.
+[package.metadata.cargo-shear]
+ignored = ["burn-flex"]

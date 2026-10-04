@@ -1,0 +1,4 @@
+# Everything the bot keeps: settings, secrets entered in the web UI, the event log, recordings and uploads. Survives
+# rebuilds and restarts; back it up with `podman volume export profanity-watch-data -o pb-data.tar`.
+[Volume]
+VolumeName=profanity-watch-data

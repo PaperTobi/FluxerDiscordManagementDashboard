@@ -1,0 +1,21 @@
+[package]
+name = "pb-segment"
+description = "Audio framing, PCM ring, hysteresis sentence segmenter, echo guard, windowing (pure)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pb-domain.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+pb-testkit.workspace = true
+proptest = "1.11"
+safetensors = "0.8"
+serde_json.workspace = true
+
+[lints]
+workspace = true

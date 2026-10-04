@@ -1,0 +1,18 @@
+[package]
+name = "pb-policy"
+description = "Decider (strikes, escalation), FollowMachine (voice join/leave), channel policy (pure)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pb-domain.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "pb-audio"
+description = "Audio decode, WAV, resampling, loudness, limiting, fades"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ebur128.workspace = true
+opus-decoder.workspace = true
+pb-domain.workspace = true
+rubato.workspace = true
+symphonia.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

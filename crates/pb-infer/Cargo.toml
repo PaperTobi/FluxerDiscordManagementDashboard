@@ -1,0 +1,29 @@
+[package]
+name = "pb-infer"
+description = "Model threads, priority job queues and the inference handle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pb-audio.workspace = true
+pb-models-api.workspace = true
+pb-segment.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+
+[dev-dependencies]
+pb-classifier-roblox.workspace = true
+pb-domain.workspace = true
+pb-espeak.workspace = true
+pb-testkit.workspace = true
+pb-tts-piper.workspace = true
+pb-vad-silero.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

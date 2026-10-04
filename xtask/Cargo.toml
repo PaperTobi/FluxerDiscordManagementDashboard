@@ -1,0 +1,24 @@
+[package]
+name = "xtask"
+description = "Project checks: architecture rules, zero-C gate, shipped JavaScript, language counts, CI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+cargo_metadata.workspace = true
+clap.workspace = true
+jiff.workspace = true
+pb-tls.workspace = true
+reqwest = { workspace = true, features = ["blocking", "json"] }
+serde.workspace = true
+tokei = "15.0.0"
+toml.workspace = true
+# Must be the same version as the wasm-bindgen the app links.
+wasm-bindgen-cli-support = "=0.2.129"
+
+[lints]
+workspace = true

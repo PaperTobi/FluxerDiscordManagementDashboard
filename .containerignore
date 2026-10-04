@@ -1,0 +1,7 @@
+# The build context: only the sources. Weights are fetched inside the build (pinned and verified), so local copies
+# are never sent along.
+target/
+data/
+*.log
+*.part
+*.onnx

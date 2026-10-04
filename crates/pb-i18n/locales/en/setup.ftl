@@ -1,0 +1,40 @@
+# Setup and login.
+
+setup-step-code = Setup code
+setup-step-instance = Fluxer instance
+setup-step-token = Bot token
+setup-step-secret = Client secret
+setup-step-owner = Owner login
+setup-continue = Continue
+setup-done = Setup is finished.
+setup-open = Open the bot
+setup-code-help = Enter the setup code. It is in the bot's log and in the file { $file } on the server.
+setup-code-label = Setup code
+setup-code-wait = Too many wrong codes. Try again in { $s } s.
+setup-code-wrong = That is not the setup code.
+setup-instance-help = The address of the Fluxer instance's API. Keep the default for fluxer.app.
+setup-instance-label = Instance address
+setup-instance-unreachable = The instance could not be reached: { $error }
+setup-token-help = In Fluxer, open User Settings → Applications, create an application for the bot and copy its Bot token.
+setup-token-label = Bot token
+setup-token-format = A bot token looks like 123456789012345678.xxxxxxxx (the application id, a dot, the secret).
+setup-token-rejected = Fluxer rejected this token. Copy it again (or reset it) and try once more.
+setup-token-unreachable = The token is saved, but Fluxer could not be reached: { $error }
+setup-token-timeout = The token is saved, but the bot has not connected yet. Continue when it shows as online.
+setup-secret-help = In the same application, add this address under Redirect URIs:
+setup-secret-address = People are sent back to this address after logging in with Fluxer. If the bot is opened by another address, change it later under System → Web UI address.
+setup-secret-label = Client secret
+setup-bot-ready = The bot is online as { $bot }.
+setup-owner-help = Log in with Fluxer. Whoever logs in now becomes the owner of the bot (with all rights in the web UI).
+setup-expired = The setup session ended. Enter the setup code again.
+
+login-not-ready = The bot is not set up for logins yet: { $reason }
+login-no-token = no bot token
+login-no-secret = no client secret
+login-unreachable = Fluxer could not be reached: { $error }
+login-failed = Fluxer did not log you in: { $error }
+login-stale = The login took too long or was started in another browser. Please try again.
+login-no-access = { $name } is not an admin of any community the bot is in.
+login-again = Please log in again to do this.
+form-expired = The page was out of date. Please try again.
+login-redirect-not-registered = Fluxer would not send you back here: add exactly { $want } under Redirect URIs of the bot's application (Fluxer: User Settings → Applications). Registered now: { $registered }

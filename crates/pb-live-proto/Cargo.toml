@@ -1,0 +1,19 @@
+[package]
+name = "pb-live-proto"
+description = "Live update wire protocol, client reducer, conveyor stage function (pure, wasm-safe)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pb-domain.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

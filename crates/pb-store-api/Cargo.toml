@@ -1,0 +1,32 @@
+[package]
+name = "pb-store-api"
+description = "Interfaces for the event log, query index, blobs, settings and sessions, with contract tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+contract-tests = ["tokio/rt", "tokio/macros", "tokio/time"]
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+futures.workspace = true
+jiff.workspace = true
+pb-domain.workspace = true
+pb-settings.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
+
+[lints]
+workspace = true

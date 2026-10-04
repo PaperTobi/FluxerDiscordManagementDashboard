@@ -1,0 +1,29 @@
+{
+  "clips": [
+    {
+      "file": "hey_watch_language.wav",
+      "text": "Hey! Watch your language.",
+      "weight": 1.0
+    },
+    {
+      "file": "language_cut_it_out.wav",
+      "text": "Language! Cut it out.",
+      "weight": 1.0
+    },
+    {
+      "file": "easy_on_swearing.wav",
+      "text": "Easy on the swearing, please.",
+      "weight": 1.0
+    },
+    {
+      "file": "watch_your_mouth.wav",
+      "text": "Watch your mouth, buddy.",
+      "weight": 1.0
+    },
+    {
+      "file": "keep_it_clean.wav",
+      "text": "Hey, keep it clean.",
+      "weight": 1.0
+    }
+  ]
+}

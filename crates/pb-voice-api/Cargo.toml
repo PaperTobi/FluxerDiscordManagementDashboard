@@ -1,0 +1,18 @@
+[package]
+name = "pb-voice-api"
+description = "Interface to the voice transport (rooms, tracks, audio in/out), with contract tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+pb-domain.workspace = true
+pb-fluxer-api.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+
+[lints]
+workspace = true

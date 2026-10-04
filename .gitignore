@@ -1,0 +1,14 @@
+# Rust build output (also the espeak-ng build, the browser bundle and downloaded weights)
+target/
+
+# runtime data and logs
+data/
+*.log
+
+# model weights and other large downloads
+*.safetensors
+*.onnx
+*.part
+
+# the Rust tests' golden data is small and part of the source
+!crates/*/tests/golden/*.safetensors

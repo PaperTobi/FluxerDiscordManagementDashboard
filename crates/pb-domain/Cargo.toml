@@ -1,0 +1,23 @@
+[package]
+name = "pb-domain"
+description = "Domain types: ids, labels, languages, scores, verdicts, decisions, scopes (pure, no I/O)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+uuid = { version = "1", features = ["v7", "serde"] }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+# In the browser (the web UI's islands) new ids take their randomness from the browser.
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+uuid = { version = "1", features = ["js"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,39 @@
+[package]
+name = "pb-engine"
+description = "The bot: Fluxer session lifecycle, voice following, listening, decisions, warnings, moderation, reports, chat commands"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bytes.workspace = true
+fastrand.workspace = true
+jiff.workspace = true
+pb-audio.workspace = true
+pb-commands.workspace = true
+pb-domain.workspace = true
+pb-fluxer-api.workspace = true
+pb-i18n.workspace = true
+pb-infer.workspace = true
+pb-live.workspace = true
+pb-live-proto.workspace = true
+pb-models-api.workspace = true
+pb-policy.workspace = true
+pb-segment.workspace = true
+pb-settings.workspace = true
+pb-store-api.workspace = true
+pb-voice-api.workspace = true
+pb-voicelines.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

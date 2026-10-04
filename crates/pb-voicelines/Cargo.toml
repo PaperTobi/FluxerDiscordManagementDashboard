@@ -1,0 +1,19 @@
+[package]
+name = "pb-voicelines"
+description = "Voice lines: slots, resolution, templates, utterance plans, prediction (pure)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pb-domain.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+toml.workspace = true
+
+[lints]
+workspace = true

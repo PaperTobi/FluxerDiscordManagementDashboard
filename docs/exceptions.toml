@@ -1,0 +1,103 @@
+# Exceptions register: every non-Rust piece (C, C++, assembly outside Rust files, prebuilt native libraries, non-Rust
+# tools) that the project uses. `cargo xtask zero-c` fails on any C in the shipped graph that is not listed here, and on
+# any entry whose review date has passed. Fields:
+#   crate   — the crate (or tool) that brings it in
+#   kind    — c | c++ | asm | prebuilt | tool
+#   scope   — shipped (in the program people run) | build (runs only while building it) | dev (developer machines and CI
+#             only)
+#   reason  — why no Rust option meets the need
+#   cost    — what staying pure would cost
+#   review  — date by which this entry must be looked at again (YYYY-MM-DD)
+
+[[exception]]
+crate = "webrtc-sys"
+kind = "prebuilt"
+scope = "shipped"
+reason = "The livekit crate (0.9.3) is the official LiveKit SDK and links Google's libwebrtc (C++, including BoringSSL), downloaded as a prebuilt static library (release webrtc-89d790b, linux-x64 zip 156 MB, 692 MB unpacked; LK_CUSTOM_WEBRTC builds offline from a local copy). It needs clang++ (Chromium's libc++ ABI) and glib headers at build time. Fluxer's voice runs on LiveKit; no Rust WebRTC stack implements LiveKit's protocol."
+cost = "A pure-Rust LiveKit client (webrtc-rs + livekit-protocol + our own signalling, jitter buffer, Opus) is several thousand lines, and Fluxer's roadmap (2026-09-28) replaces LiveKit with its own Rust voice system, which would make that work worthless. Confined to pb-voice-livekit behind VoiceTransport."
+review = "2027-04-01"
+
+[[exception]]
+crate = "cxx"
+kind = "c++"
+scope = "shipped"
+reason = "C++/Rust bridge used by webrtc-sys (part of the LiveKit SDK, see webrtc-sys)."
+cost = "Same as webrtc-sys."
+review = "2027-04-01"
+
+[[exception]]
+crate = "link-cplusplus"
+kind = "c++"
+scope = "shipped"
+reason = "Links the C++ standard library for webrtc-sys (part of the LiveKit SDK, see webrtc-sys)."
+cost = "Same as webrtc-sys."
+review = "2027-04-01"
+
+[[exception]]
+crate = "ring"
+kind = "c"
+scope = "build"
+reason = "Only while building: webrtc-sys's build script downloads the prebuilt libwebrtc with reqwest, whose rustls uses `ring`. The program itself has no `ring`: LiveKit's signalling runs on our own transport over pb-tls (graviola), see crates/pb-voice-livekit/src/net.rs."
+cost = "Removing it needs webrtc-sys-build to let the builder choose the download's TLS provider (an upstream change worth proposing), or an offline libwebrtc (LK_CUSTOM_WEBRTC)."
+review = "2027-04-01"
+
+[[verified_pure]]
+crate = "prettyplease"
+version = "0.2.37"
+note = "build.rs only prints rustc-check-cfg lines and its version; the `links` key only enforces a single copy of the crate (checked 2026-10-03, 0.2.37)."
+
+[[verified_pure]]
+crate = "aegis"
+version = "0.9.20"
+note = "With the `pure-rust` feature (turned on through turso's `pure-rust-crypto`) build.rs returns before touching `cc`; the bundled libaegis C sources are not compiled (checked 2026-10-04, 0.9.20)."
+
+[[verified_pure]]
+crate = "rayon-core"
+version = "1.13.0"
+note = "build.rs only prints a rerun line; `links = \"rayon-core\"` only enforces a single copy of the crate (checked 2026-10-04)."
+
+[[verified_pure]]
+crate = "wasm-bindgen-shared"
+version = "0.2.129"
+note = "build.rs only sets version environment variables (from git and a schema hash); `links = \"wasm_bindgen\"` only enforces a single version (checked 2026-10-04)."
+
+[[verified_pure]]
+crate = "wayland-sys"
+version = "0.31.11"
+note = "wgpu-hal turns on `dlopen`: build.rs returns before any pkg-config probe and nothing is linked; libwayland would be opened at run time, which a headless server never does (checked 2026-10-04)."
+
+# --- patched dependencies (pure Rust, vendored with local changes; remove when upstream has them) -------------------
+
+[[patched]]
+crate = "burn-flex"
+version = "0.21.0"
+path = "third_party/burn-flex"
+reason = "Burn's CPU backend ran element-wise maths single-threaded and the attention heads one after another; the voice-safety classifier was 1.66x slower than PyTorch. The patch parallelises both without changing any result (golden tests unchanged); with it the classifier matches or beats PyTorch+MKL on the same CPU."
+upstream = "to be proposed to tracel-ai/burn (burn-flex)"
+review = "2027-01-01"
+
+[[patched]]
+crate = "turso"
+version = "0.8.1"
+path = "third_party/turso"
+reason = "Manifest only: turso_core without its `simd` default (the simsimd C library, used only by vector SQL functions; the pure-Rust fallback is used instead) and the sync SDK optional. See third_party/turso/PATCHES.md."
+upstream = "to be proposed to tursodatabase/turso"
+review = "2027-01-01"
+
+[[patched]]
+crate = "turso_sdk_kit"
+version = "0.8.1"
+path = "third_party/turso_sdk_kit"
+reason = "Manifest only: turso_core without `simd` (see turso) and without the unused `bindgen` build-dependency. See third_party/turso_sdk_kit/PATCHES.md."
+upstream = "to be proposed to tursodatabase/turso"
+review = "2027-01-01"
+
+# --- text-to-speech phonemes (pb-espeak) ----------------------------------------------------------------------------
+
+[[exception]]
+crate = "pb-espeak"
+kind = "c"
+scope = "shipped"
+reason = "Piper voices are trained on the phonemes of espeak-ng (C). piper-tts 1.8.0 (the old bot's TTS) builds espeak-ng at commit 724808c; pb-espeak links that exact commit (built by `cargo xtask espeak-ng`, static, no audio output) and reproduces Piper's phonemes and ids for 686/686 test sentences in German and English. GPL-3.0-or-later, as the Python bot's piper-tts already was."
+cost = "The pure-Rust port (espeak-ng 0.2.0) matches only 50 % (German) and 64 % (English) of those sentences: it skips multi-word dictionary entries and differs in r-allophones, compound stress, ë, ordinals and URLs, so voices would mispronounce what they were trained to say. `cargo run -p pb-tts-piper --example port_parity` measures it; switch when it reaches 100 %."
+review = "2027-04-01"

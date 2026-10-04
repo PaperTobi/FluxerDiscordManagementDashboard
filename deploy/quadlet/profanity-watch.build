@@ -1,0 +1,15 @@
+# Builds localhost/profanity-watch:latest from the source checkout (default ~/profanity-watch; a drop-in
+# profanity-watch.build.d/10-source.conf can point elsewhere). The first build downloads the Rust toolchain image, the
+# crates, LiveKit's libwebrtc and about 1.7 GB of pinned model weights and voices; later builds reuse the caches.
+# After a source update: systemctl [--user] restart profanity-watch-build profanity-watch
+[Unit]
+Description=Build the Profanity Watch image
+
+[Build]
+ImageTag=localhost/profanity-watch:latest
+SetWorkingDirectory=%h/profanity-watch
+File=%h/profanity-watch/Containerfile
+Pull=missing
+
+[Service]
+TimeoutStartSec=7200

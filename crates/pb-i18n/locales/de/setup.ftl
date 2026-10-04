@@ -1,0 +1,40 @@
+# Einrichtung und Anmeldung.
+
+setup-step-code = Einrichtungscode
+setup-step-instance = Fluxer-Instanz
+setup-step-token = Bot-Token
+setup-step-secret = Client-Secret
+setup-step-owner = Anmeldung als Besitzer
+setup-continue = Weiter
+setup-done = Die Einrichtung ist abgeschlossen.
+setup-open = Bot öffnen
+setup-code-help = Gib den Einrichtungscode ein. Er steht im Log des Bots und in der Datei { $file } auf dem Server.
+setup-code-label = Einrichtungscode
+setup-code-wait = Zu viele falsche Codes. Versuche es in { $s } s erneut.
+setup-code-wrong = Das ist nicht der Einrichtungscode.
+setup-instance-help = Die Adresse der API der Fluxer-Instanz. Für fluxer.app bleibt die Vorgabe.
+setup-instance-label = Adresse der Instanz
+setup-instance-unreachable = Die Instanz ist nicht erreichbar: { $error }
+setup-token-help = Öffne in Fluxer Benutzereinstellungen → Anwendungen, lege eine Anwendung für den Bot an und kopiere ihren Bot-Token.
+setup-token-label = Bot-Token
+setup-token-format = Ein Bot-Token sieht so aus: 123456789012345678.xxxxxxxx (die Anwendungs-ID, ein Punkt, das Geheimnis).
+setup-token-rejected = Fluxer hat diesen Token abgelehnt. Kopiere ihn erneut (oder setze ihn zurück) und versuche es noch einmal.
+setup-token-unreachable = Der Token ist gespeichert, aber Fluxer ist nicht erreichbar: { $error }
+setup-token-timeout = Der Token ist gespeichert, aber der Bot ist noch nicht verbunden. Mach weiter, sobald er online ist.
+setup-secret-help = Trage in derselben Anwendung diese Adresse unter Redirect-URIs ein:
+setup-secret-address = Nach der Anmeldung mit Fluxer kommt man zu dieser Adresse zurück. Wird der Bot unter einer anderen Adresse geöffnet, ändere sie später unter System → Adresse der Weboberfläche.
+setup-secret-label = Client-Secret
+setup-bot-ready = Der Bot ist online als { $bot }.
+setup-owner-help = Melde dich mit Fluxer an. Wer sich jetzt anmeldet, wird Besitzer des Bots (mit allen Rechten in der Weboberfläche).
+setup-expired = Die Einrichtungssitzung ist abgelaufen. Gib den Einrichtungscode erneut ein.
+
+login-not-ready = Der Bot ist noch nicht für Anmeldungen eingerichtet: { $reason }
+login-no-token = kein Bot-Token
+login-no-secret = kein Client-Secret
+login-unreachable = Fluxer ist nicht erreichbar: { $error }
+login-failed = Fluxer hat dich nicht angemeldet: { $error }
+login-stale = Die Anmeldung hat zu lange gedauert oder wurde in einem anderen Browser begonnen. Bitte versuche es erneut.
+login-no-access = { $name } ist in keiner Community des Bots Admin.
+login-again = Bitte melde dich dafür erneut an.
+form-expired = Die Seite war veraltet. Bitte versuche es erneut.
+login-redirect-not-registered = Fluxer würde dich nicht hierher zurückschicken: Trage genau { $want } unter den Redirect-URIs der Anwendung des Bots ein (Fluxer: Benutzereinstellungen → Anwendungen). Eingetragen sind: { $registered }

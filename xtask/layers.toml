@@ -1,0 +1,45 @@
+# Architecture rules checked by `cargo xtask deps` (see docs/design.md §1).
+
+[layers]
+L0 = ["pb-domain", "pb-settings", "pb-segment", "pb-policy", "pb-voicelines", "pb-commands", "pb-i18n", "pb-live-proto"]
+L1 = ["pb-models-api", "pb-fluxer-api", "pb-voice-api", "pb-store-api"]
+L2 = ["pb-tls", "pb-audio", "pb-espeak", "pb-vad-silero", "pb-classifier-roblox", "pb-tts-piper", "pb-infer", "pb-fluxer", "pb-voice-livekit",
+      "pb-store", "pb-import", "pb-weights"]
+L3 = ["pb-live", "pb-engine"]
+L4 = ["pb-web", "pb-web-server"]
+L5 = ["pb", "pb-testkit", "pb-fluxer-fake", "pb-devstack", "xtask"]
+
+# Which workspace crates a crate in each layer may depend on (normal and build dependencies). Entries are layer names
+# or crate names. Dev-dependencies may additionally use the L5 test crates.
+[allow]
+L0 = ["L0"]
+L1 = ["L0", "L1"]
+L2 = ["L0", "L1", "L2"]
+L3 = ["L0", "L1", "L3", "pb-infer", "pb-audio"]
+L4 = ["L0", "L1", "L3", "L4"]
+L5 = ["L0", "L1", "L2", "L3", "L4", "L5"]
+
+[dev_allow]
+any = ["pb-testkit", "pb-fluxer-fake"]
+# The web server's end-to-end tests run it on the real store, inference and Fluxer client.
+L4 = ["L2"]
+
+# Third-party crates that may only appear as direct dependencies of the listed workspace crates.
+[confine]
+livekit = ["pb-voice-livekit", "pb-testkit"]
+livekit-net = ["pb-voice-livekit"]
+livekit-api = ["pb-voice-livekit", "pb-testkit"]
+livekit-protocol = ["pb-voice-livekit", "pb-testkit"]
+burn = ["pb-vad-silero", "pb-classifier-roblox"]
+burn-store = ["pb-vad-silero", "pb-classifier-roblox"]
+rten = ["pb-tts-piper"]
+espeak-ng = ["pb-tts-piper"]  # dev-only parity tracking
+pb-espeak = ["pb-tts-piper", "pb-devstack"]  # the dev stack only reads where the build put espeak-ng's data
+turso = ["pb-store", "pb-import"]
+leptos = ["pb-web", "pb-web-server"]
+axum = ["pb-web", "pb-web-server", "pb-fluxer-fake", "pb-testkit"]
+
+# Crates that L0 (pure, synchronous, wasm-safe) must never use directly.
+[l0_forbidden]
+crates = ["tokio", "futures", "async-trait", "axum", "hyper", "reqwest", "tokio-tungstenite", "burn", "livekit", "rten", "turso",
+          "rayon", "std-fs"]

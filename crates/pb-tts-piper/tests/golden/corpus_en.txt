@@ -1,0 +1,30 @@
+Hey {name}, watch your language!
+{name}, that's twice now. Keep it clean.
+{name}, last warning. Cut it out.
+Hi {name}, I'm listening.
+{name} has been muted for {minutes} minutes.
+{name} was disconnected from the call.
+{name} is in timeout until tomorrow.
+{name}, you're unmuted again.
+Strike {count} of {strikes}, {name}.
+Please keep it friendly, {name}.
+This is a text to speech system.
+The quick brown fox jumps over the lazy dog.
+It's 3:45 p.m. on October 3rd, 2026.
+Dr. Smith said: "Don't do that!"
+Wait... what? Are you serious?
+I have 2 cats, 3 dogs and 1,250 fish; that's a lot.
+Mr. and Mrs. O'Brien live at 221B Baker Street.
+Is it 50% off, or 75%?
+Visit example.com for more info.
+The meeting is at 10:30 (not 11).
+She sells sea-shells by the sea-shore.
+Well, well, well: look who's here.
+No! Stop it! That's enough!
+Why are you shouting?
+I can't hear you; please speak up.
+One, two, three, four, five.
+The year 1999 was a long time ago.
+He paid $20.50 for lunch.
+We'll be back in 5 minutes.
+Calm down, everyone.

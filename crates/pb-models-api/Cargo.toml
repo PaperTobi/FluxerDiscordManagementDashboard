@@ -1,0 +1,19 @@
+[package]
+name = "pb-models-api"
+description = "Interfaces for the VAD, classifier and text-to-speech models, with contract tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Generic test suites every implementation must pass (used from the implementations' tests).
+contract-tests = []
+
+[dependencies]
+pb-domain.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

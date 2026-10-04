@@ -1,0 +1,23 @@
+[package]
+name = "pb-vad-silero"
+description = "Silero VAD v6.2 in Burn"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+burn = { version = "0.21.0", default-features = false, features = ["std", "flex", "x86-v4"] }
+burn-flex = { version = "0.21.0", default-features = false, features = ["std", "rayon", "simd"] }
+onnx-ir = "0.21.0"
+protobuf = "3.7.2"
+pb-models-api.workspace = true
+
+[dev-dependencies]
+pb-testkit.workspace = true
+pb-models-api = { workspace = true, features = ["contract-tests"] }
+safetensors = "0.8"
+
+[lints]
+workspace = true

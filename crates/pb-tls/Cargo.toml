@@ -1,0 +1,18 @@
+[package]
+name = "pb-tls"
+description = "The bot's TLS client setup: graviola crypto (pure Rust), the system's trusted roots plus Mozilla's, a CPU check"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+rustls.workspace = true
+rustls-graviola.workspace = true
+rustls-platform-verifier.workspace = true
+thiserror.workspace = true
+webpki-root-certs.workspace = true
+
+[lints]
+workspace = true

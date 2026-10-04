@@ -1,0 +1,21 @@
+[package]
+name = "pb-fluxer-api"
+description = "The Fluxer interface the engine uses: gateway events, commands, REST operations, permissions"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+jiff.workspace = true
+pb-domain.workspace = true
+secrecy.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+url.workspace = true
+
+[lints]
+workspace = true

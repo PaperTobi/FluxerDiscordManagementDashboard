@@ -1,0 +1,62 @@
+[package]
+name = "pb-web-server"
+description = "axum server: host allowlist, sessions and login, setup, forms, uploads, media, the live socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum.workspace = true
+base64.workspace = true
+futures.workspace = true
+getrandom.workspace = true
+hmac.workspace = true
+http = "1"
+jiff.workspace = true
+leptos = { workspace = true, features = ["ssr"] }
+leptos_axum.workspace = true
+pb-domain.workspace = true
+pb-engine.workspace = true
+pb-fluxer-api.workspace = true
+pb-i18n.workspace = true
+pb-live.workspace = true
+pb-live-proto.workspace = true
+pb-settings.workspace = true
+pb-store-api.workspace = true
+pb-voicelines.workspace = true
+pb-web = { workspace = true, features = ["ssr"] }
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "net", "fs"] }
+tokio-rustls.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+futures.workspace = true
+pb-fluxer.workspace = true
+pb-fluxer-fake.workspace = true
+pb-infer.workspace = true
+pb-models-api.workspace = true
+pb-store.workspace = true
+pb-testkit.workspace = true
+pb-tls.workspace = true
+pb-vad-silero.workspace = true
+pb-voice-api.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+tempfile = "3"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net"] }
+tokio-tungstenite.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

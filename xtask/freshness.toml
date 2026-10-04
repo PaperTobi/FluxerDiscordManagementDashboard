@@ -1,0 +1,9 @@
+# Dependencies `cargo xtask freshness` would flag, with the reason they stay as they are.
+
+[[allow]]
+crate = "wasm-bindgen-cli-support"
+reason = "pinned to the exact wasm-bindgen version the app links (the two must match)"
+
+[[allow]]
+crate = "wasm-bindgen"
+reason = "pinned exactly so the browser bundle's loader and module match; bump both together"

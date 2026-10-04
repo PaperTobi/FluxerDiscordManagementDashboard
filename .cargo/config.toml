@@ -1,0 +1,6 @@
+[alias]
+xtask = "run --quiet --package xtask --"
+
+[env]
+# libwebrtc (inside the livekit crate) is built against Chromium's libc++; GCC silently breaks its calling convention.
+CXX = { value = "clang++", force = false }

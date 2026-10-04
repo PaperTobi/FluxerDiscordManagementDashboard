@@ -1,0 +1,141 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+exclude = ["third_party"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/PaperTobi/FluxerDiscordManagementDashboard"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"
+
+[workspace.dependencies]
+# workspace crates
+pb-domain = { path = "crates/pb-domain" }
+pb-espeak = { path = "crates/pb-espeak" }
+pb-settings = { path = "crates/pb-settings" }
+pb-segment = { path = "crates/pb-segment" }
+pb-policy = { path = "crates/pb-policy" }
+pb-voicelines = { path = "crates/pb-voicelines" }
+pb-commands = { path = "crates/pb-commands" }
+pb-i18n = { path = "crates/pb-i18n" }
+pb-live-proto = { path = "crates/pb-live-proto" }
+pb-models-api = { path = "crates/pb-models-api" }
+pb-fluxer-api = { path = "crates/pb-fluxer-api" }
+pb-voice-api = { path = "crates/pb-voice-api" }
+pb-store-api = { path = "crates/pb-store-api" }
+pb-audio = { path = "crates/pb-audio" }
+pb-vad-silero = { path = "crates/pb-vad-silero" }
+pb-classifier-roblox = { path = "crates/pb-classifier-roblox" }
+pb-tts-piper = { path = "crates/pb-tts-piper" }
+pb-infer = { path = "crates/pb-infer" }
+pb-fluxer = { path = "crates/pb-fluxer" }
+pb-voice-livekit = { path = "crates/pb-voice-livekit" }
+pb-store = { path = "crates/pb-store" }
+pb-import = { path = "crates/pb-import" }
+pb-weights = { path = "crates/pb-weights" }
+pb-live = { path = "crates/pb-live" }
+pb-engine = { path = "crates/pb-engine" }
+pb-web = { path = "crates/pb-web" }
+pb-web-server = { path = "crates/pb-web-server" }
+pb-tls = { path = "crates/pb-tls" }
+pb-testkit = { path = "crates/pb-testkit" }
+pb-fluxer-fake = { path = "crates/pb-fluxer-fake" }
+pb-devstack = { path = "crates/pb-devstack" }
+
+# third party (pinned minor versions; exact versions in Cargo.lock)
+anyhow = "1.0.104"
+async-trait = "0.1.92"
+axum = { version = "0.8.9", features = ["ws", "multipart"] }
+base64 = "0.23.1"
+fluent-bundle = "0.16.0"
+fluent-syntax = "0.12.0"
+bytes = "1.12.1"
+futures = "0.3.34"
+ebur128 = "0.1.10"
+getrandom = "0.4.3"
+hmac = "0.13.0"
+jiff = { version = "0.2.37", features = ["serde"] }
+leptos = { version = "0.8.21", features = ["islands"] }
+leptos_axum = "0.8.10"
+leptos_router = "0.8.16"
+wasm-bindgen = "=0.2.129"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3.106"
+web-sys = "0.3.106"
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.7.1", features = ["fs", "set-header"] }
+rubato = "5.0.1"
+# TLS through pb-tls (graviola crypto): reqwest brings no crypto provider of its own.
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "multipart", "form"] }
+rustls = { version = "0.23.45", default-features = false, features = ["std", "tls12"] }
+rustls-graviola = "0.4.0"
+rustls-platform-verifier = "0.7.1"
+# The web UI over HTTPS (rustls only; the provider comes from pb-tls).
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["tls12"] }
+webpki-root-certs = "1.0.9"
+secrecy = { version = "0.10.3", features = ["serde"] }
+sha2 = "0.11.0"
+tokio = { version = "1.53.2", default-features = false }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+url = { version = "2.5.8", features = ["serde"] }
+cargo_metadata = "0.23"
+chromiumoxide = { version = "0.9.1", default-features = false }
+clap = { version = "4.6.7", features = ["derive", "env"] }
+config = { version = "0.15.27", default-features = false, features = ["toml"] }
+rustix = { version = "1.1.5", features = ["fs"] }
+tracing-appender = "0.2.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2.0.21"
+symphonia = { version = "0.6.1", default-features = false, features = ["all-codecs", "all-formats", "opt-simd"] }
+opus-decoder = "0.1.1"
+tokio-stream = { version = "0.1.17", features = ["sync"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
+toml = "1.1"
+fastrand = "2"
+toml_edit = { version = "0.25.15", features = ["serde"] }
+turso = { version = "0.8.1", default-features = false, features = ["pure-rust-crypto"] }
+unic-langid = "0.9.6"
+
+# Patched dependencies (each folder has a PATCHES.md saying what changed and why; see docs/exceptions.toml).
+[patch.crates-io]
+burn-flex = { path = "third_party/burn-flex" }
+turso = { path = "third_party/turso" }
+turso_sdk_kit = { path = "third_party/turso_sdk_kit" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+# Panics and logs name functions; file and line tables (Rust's and libwebrtc's) would quadruple the binary.
+debug = false
+strip = "debuginfo"
+
+# The browser bundle: small.
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+debug = false
+
+# Line numbers in backtraces are enough: full debug info grew target/ to about 100 GB.
+[profile.dev]
+debug = "line-tables-only"
+
+# Model maths must not be painfully slow in debug test runs; dependencies need no debug info.
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
