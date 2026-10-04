@@ -200,28 +200,35 @@ fn voices_json(f: &Fields) -> Value {
     )
 }
 
-/// `POST /settings`: sets or clears one setting at one scope.
+/// Going back to the inherited value of the System section (the instance, the web UI's address) or of a whole list is
+/// asked first: one click could cut the bot off or empty the list.
+fn weighty(key: SettingKey) -> bool {
+    (pb_web::pages::settings::kept_by_reset(key) && key != SettingKey::Paused)
+        || matches!(key.meta().kind, FieldKind::Ids { .. })
+}
+
+/// `POST /settings`: a section's form (`keys`: its settings; what changed in it is saved), or one setting (`key`,
+/// `action` = `set` or `clear`; the page heads' switches).
 pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
     let s = match st.sender(&headers, &f) {
         Ok(s) => s,
         Err(r) => return *r,
     };
     let loc = s.locale;
-    let (Some(scope), Some(key)) = (
-        field(&f, "scope").and_then(parse_scope),
-        field(&f, "key").and_then(|k| k.parse::<SettingKey>().ok()),
-    ) else {
+    let Some(scope) = field(&f, "scope").and_then(parse_scope) else {
         return st.done(&s, &f, false, text(loc, "form-expired", &[]));
     };
     if !s.may_change(scope) {
         return st.done(&s, &f, false, text(loc, "ui-not-allowed", &[]));
     }
+    if let Some(keys) = field(&f, "keys") {
+        return st.save_section(&s, &f, scope, keys).await;
+    }
+    let Some(key) = field(&f, "key").and_then(|k| k.parse::<SettingKey>().ok()) else {
+        return st.done(&s, &f, false, text(loc, "form-expired", &[]));
+    };
     let clear = field(&f, "action") == Some("clear");
-    // Going back to the inherited value of the System section (the instance, the web UI's address) or of a whole list
-    // is asked first: one click could cut the bot off or empty the list.
-    let weighty = (pb_web::pages::settings::kept_by_reset(key) && key != SettingKey::Paused)
-        || matches!(key.meta().kind, FieldKind::Ids { .. });
-    if clear && weighty && !confirmed(&f) {
+    if clear && weighty(key) && !confirmed(&f) {
         return ask_first("setting-clear", &f, &["scope", "key"]);
     }
     let value = match key.meta().kind {
@@ -276,7 +283,148 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
     }
 }
 
+/// A setting's value as a section's form sends it (and what was typed, to show again when it is refused).
+fn form_value(f: &Fields, key: SettingKey) -> (Value, Option<String>) {
+    match key.meta().kind {
+        FieldKind::Escalation => (escalation_json(f), None),
+        FieldKind::Voices => (voices_json(f), None),
+        _ => {
+            let raw = field(f, &pb_web::pages::settings::input_name(key)).unwrap_or_default();
+            (pb_settings::text_value(key, raw), Some(raw.to_owned()))
+        }
+    }
+}
+
 impl WebState {
+    /// A section's form: every setting whose value it changed is saved in one settings change. "Changed" means the
+    /// value in effect at the scope would be different: what the form shows unchanged (an inherited value too) is
+    /// never stored, so it keeps following the scope above. A refused value is said next to its setting (and shown
+    /// again as typed); the others are saved. `clear=<key>` also takes that one back to its inherited value.
+    async fn save_section(&self, s: &Sender, f: &Fields, scope: Scope, keys: &str) -> Response {
+        use pb_web::app::FieldNote;
+        use pb_web::pages::settings::{advanced, effective_value};
+        let loc = s.locale;
+        let by_owner = s.access.owner;
+        let keys: Vec<SettingKey> = keys
+            .split(',')
+            .filter_map(|k| k.parse::<SettingKey>().ok())
+            .filter(|k| {
+                k.scopes().contains(&scope.kind())
+                    && (by_owner || k.who() != pb_settings::Who::Owner)
+                    && !matches!(k.meta().kind, FieldKind::Ids { .. })
+            })
+            .collect();
+        let clear = field(f, "clear")
+            .and_then(|k| k.parse::<SettingKey>().ok())
+            .filter(|k| keys.contains(k));
+        if let Some(k) = clear
+            && weighty(k)
+            && !confirmed(f)
+        {
+            let mut q = url::form_urlencoded::Serializer::new(String::new());
+            q.append_pair("what", "setting-clear")
+                .append_pair("scope", &pb_web::pages::settings::scope_param(scope))
+                .append_pair("key", &k.name())
+                .append_pair("back", &safe_next(field(f, "back")));
+            return redirect_with(&format!("/confirm?{}", q.finish()), vec![]);
+        }
+        // What the form changed: each value checked on its own against the settings as they are.
+        let now = self.engine.settings().current().tree().clone();
+        let mut wanted: Vec<(SettingKey, Value)> = Vec::new();
+        let mut notes: Vec<FieldNote> = Vec::new();
+        let mut refused: Vec<SettingKey> = Vec::new();
+        for key in keys.iter().copied().filter(|k| Some(*k) != clear) {
+            let (value, typed) = form_value(f, key);
+            let mut probe = now.clone();
+            match probe.set(scope, key, value.clone(), by_owner) {
+                Err(e) => {
+                    notes.push(FieldNote {
+                        key: key.name(),
+                        ok: false,
+                        text: pb_i18n::setting_error(loc, &e),
+                        typed,
+                    });
+                    refused.push(key);
+                }
+                Ok(_) if effective_value(&probe, scope, key).0 != effective_value(&now, scope, key).0 => {
+                    wanted.push((key, value));
+                }
+                Ok(_) => {}
+            }
+        }
+        let changed: Vec<SettingKey> = wanted.iter().map(|(k, _)| *k).chain(clear).collect();
+        let result = if changed.is_empty() {
+            Ok(Vec::new())
+        } else {
+            self.engine
+                .settings()
+                .change(s.actor(), move |t| {
+                    let mut out = Vec::new();
+                    for (key, value) in wanted {
+                        out.extend(t.set(scope, key, value, by_owner)?);
+                    }
+                    if let Some(k) = clear {
+                        out.extend(t.clear(scope, k, by_owner)?);
+                    }
+                    Ok(out)
+                })
+                .await
+        };
+        if let Err(e) = result {
+            return self.done(s, f, false, change_error(loc, &e));
+        }
+        let names = |keys: &[SettingKey]| {
+            keys.iter()
+                .map(|k| pb_i18n::setting_name(loc, *k))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        for k in &changed {
+            let said = if Some(*k) == clear {
+                "ui-back-to-inherited"
+            } else {
+                "ui-saved"
+            };
+            notes.push(FieldNote {
+                key: k.name(),
+                ok: true,
+                text: text(loc, said, &[]),
+                typed: None,
+            });
+        }
+        let mut said = Vec::new();
+        if !changed.is_empty() {
+            said.push(text(loc, "ui-saved-what", &[("what", names(&changed).into())]));
+        }
+        if !refused.is_empty() {
+            said.push(text(loc, "ui-section-refused", &[("what", names(&refused).into())]));
+        }
+        if said.is_empty() {
+            said.push(text(loc, "ui-unchanged", &[]));
+        }
+        // Back to the section, with its "Advanced" part open when a setting in there was saved or refused, and at the
+        // first refused setting.
+        let mut back = safe_next(field(f, "back"));
+        if let Some(section) = changed
+            .iter()
+            .chain(&refused)
+            .find(|k| advanced(**k))
+            .map(|k| k.meta().section)
+        {
+            back = format!("{back}?advanced={}", section.key());
+        }
+        if let Some(k) = refused.first() {
+            back = format!("{back}#set-{}", k.name());
+        }
+        redirect_with(
+            &back,
+            vec![
+                self.notices
+                    .put_fields(refused.is_empty(), said.join(" "), notes, s.secure),
+            ],
+        )
+    }
+
     /// Where a scope is, in words: "in every community", "in Alpha", "for Max in Alpha".
     pub(crate) fn scope_words(&self, loc: Locale, scope: Scope) -> String {
         let gs = self.engine.guilds();

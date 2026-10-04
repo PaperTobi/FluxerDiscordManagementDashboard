@@ -517,3 +517,8 @@ ui-settings-set-here = { $count ->
        *[other] { $count } hier geändert
     }
 ui-settings-moved = Die Einstellungen für jede Community haben eigene Seiten:
+
+## Das Formular eines Abschnitts
+ui-save-changes = Änderungen speichern
+ui-section-refused = Nicht gespeichert: { $what } (siehe unten).
+ui-back-to-inherited = Wieder der übernommene Wert.

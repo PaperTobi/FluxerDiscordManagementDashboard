@@ -147,15 +147,21 @@ pub(crate) fn input_id(key: SettingKey) -> String {
     format!("in-{}", key.name())
 }
 
+/// The name of a setting's input in a section's form (`value.<key>`).
+pub fn input_name(key: SettingKey) -> String {
+    format!("value.{}", key.name())
+}
+
 /// The input for one setting.
 fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled: bool) -> AnyView {
     let id = input_id(key);
+    let name = input_name(key);
     let s = shown(value);
     match key.meta().kind {
         FieldKind::Bool => {
             let on = value.as_bool().unwrap_or(false);
             view! {
-                <select id=id name="value" disabled=disabled>
+                <select id=id name=name.clone() disabled=disabled>
                     <option value="on" selected=on>{text(locale, "ui-on", &[])}</option>
                     <option value="off" selected=!on>{text(locale, "ui-off", &[])}</option>
                 </select>
@@ -163,19 +169,19 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
             .into_any()
         }
         FieldKind::Probability => view! {
-            <input id=id name="value" type="number" min="0" max="1" step="0.01" value=s disabled=disabled/>
+            <input id=id name=name.clone() type="number" min="0" max="1" step="0.01" value=s disabled=disabled/>
         }
         .into_any(),
         FieldKind::Count => view! {
-            <input id=id name="value" type="number" min="1" step="1" value=s disabled=disabled/>
+            <input id=id name=name.clone() type="number" min="1" step="1" value=s disabled=disabled/>
         }
         .into_any(),
         FieldKind::Rate => view! {
-            <input id=id name="value" type="number" min="0.1" step="0.05" value=s disabled=disabled/>
+            <input id=id name=name.clone() type="number" min="0.1" step="0.05" value=s disabled=disabled/>
         }
         .into_any(),
         FieldKind::Number { unit } => view! {
-            <input id=id name="value" type="number" step="any" value=s disabled=disabled/>
+            <input id=id name=name.clone() type="number" step="any" value=s disabled=disabled/>
             <span class="unit">{unit}</span>
         }
         .into_any(),
@@ -185,12 +191,12 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
             } else {
                 text(locale, "ui-duration", &[])
             };
-            view! { <input id=id name="value" type="text" value=s placeholder=hint.clone() title=hint disabled=disabled/> }
+            view! { <input id=id name=name.clone() type="text" value=s placeholder=hint.clone() title=hint disabled=disabled/> }
                 .into_any()
         }
         FieldKind::Choice { choices } => {
             view! {
-                <select id=id name="value" disabled=disabled>
+                <select id=id name=name.clone() disabled=disabled>
                     {choices
                         .into_iter()
                         .map(|c| {
@@ -218,7 +224,7 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
                 })
                 .unwrap_or_default();
             view! {
-                <select id=id name="value" disabled=disabled>
+                <select id=id name=name.clone() disabled=disabled>
                     <option value="" selected=s.is_empty()>{text(locale, "ui-none", &[])}</option>
                     {channels
                         .into_iter()
@@ -231,17 +237,17 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
             }
             .into_any()
         }
-        FieldKind::TimeOfDay => view! { <input id=id name="value" type="time" value=s disabled=disabled/> }.into_any(),
+        FieldKind::TimeOfDay => view! { <input id=id name=name.clone() type="time" value=s disabled=disabled/> }.into_any(),
         FieldKind::Origin => view! {
-            <input id=id name="value" type="url" value=s placeholder="https://bot.example.org" disabled=disabled/>
+            <input id=id name=name.clone() type="url" value=s placeholder="https://bot.example.org" disabled=disabled/>
         }
         .into_any(),
         FieldKind::Lang => view! {
-            <select id=id name="value" disabled=disabled><LangOptions selected=s locale/></select>
+            <select id=id name=name.clone() disabled=disabled><LangOptions selected=s locale/></select>
         }
         .into_any(),
         FieldKind::VoiceLang => view! {
-            <select id=id name="value" disabled=disabled><LangOptions selected=s auto=true locale/></select>
+            <select id=id name=name.clone() disabled=disabled><LangOptions selected=s auto=true locale/></select>
         }
         .into_any(),
         FieldKind::Voices => {
@@ -326,7 +332,7 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
         FieldKind::Tz => {
             let zones: Vec<String> = jiff::tz::db().available().map(|n| n.as_str().to_owned()).collect();
             view! {
-                <input id=id name="value" type="text" value=s list="time-zones" autocomplete="off" disabled=disabled/>
+                <input id=id name=name.clone() type="text" value=s list="time-zones" autocomplete="off" disabled=disabled/>
                 <datalist id="time-zones">
                     {zones.into_iter().map(|z| view! { <option value=z></option> }).collect_view()}
                 </datalist>
@@ -334,7 +340,7 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
             .into_any()
         }
         FieldKind::Ids { .. } | FieldKind::Hosts | FieldKind::Langs | FieldKind::Prefix => view! {
-            <input id=id name="value" type="text" value=s disabled=disabled/>
+            <input id=id name=name.clone() type="text" value=s disabled=disabled/>
         }
         .into_any(),
     }
@@ -421,7 +427,7 @@ pub fn resettable(scope: Scope, owner: bool) -> Vec<SettingKey> {
 
 /// Settings most people never change: folded away under "Advanced" (timing of the speech cutter, voices and rates,
 /// the bot's own plumbing).
-fn advanced(key: SettingKey) -> bool {
+pub fn advanced(key: SettingKey) -> bool {
     use SettingKey as K;
     matches!(
         key,
@@ -570,12 +576,6 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
         .filter(|other| !other.scopes().contains(&scope.kind()))
         .map(|other| works_with(other, scope, &viewer));
     let anchor = format!("set-{}", key.name());
-    // Saving comes back to this setting (with "Advanced" open when it is in there).
-    let back = if advanced(key) {
-        format!("{back}?advanced={}#{anchor}", meta.section.key())
-    } else {
-        format!("{back}#{anchor}")
-    };
     let head = view! {
         <div class="setting-head">
             <label for=input_id(key)>{setting_name(loc, key)}</label>
@@ -592,33 +592,27 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
         return view! {
             <div class="setting list-setting" id=anchor.clone() class:here=is_here>
                 {head}
-                <super::lists::ListBody key scope value viewer back disabled is_here/>
+                <super::lists::ListBody key scope value viewer back=format!("{back}#{anchor}") disabled is_here/>
                 {partner}
             </div>
         }
         .into_any();
     }
     view! {
-        <form method="post" action="/settings" class="setting" id=anchor.clone() class:here=is_here>
-            <input type="hidden" name="csrf" value=viewer.csrf.clone()/>
-            <input type="hidden" name="scope" value=scope_param(scope)/>
-            <input type="hidden" name="key" value=key.name()/>
-            <input type="hidden" name="back" value=back/>
+        <div class="setting" id=anchor.clone() class:here=is_here>
             {head}
             <div class="row">
                 {input(key, scope, &value, loc, disabled)}
-                {(!disabled).then(|| view! {
-                    <button class="button" name="action" value="set">{text(loc, "ui-save", &[])}</button>
-                })}
+                // Back to the inherited value: submits the section's form (its other changes are saved too).
                 {(is_here && !disabled).then(|| view! {
-                    <button class="link" name="action" value="clear">{text(loc, "ui-use-inherited", &[])}</button>
+                    <button class="link" name="clear" value=key.name()>{text(loc, "ui-use-inherited", &[])}</button>
                 })}
             </div>
             {note.map(|n| view! {
                 <p class=if n.ok { "field-note ok" } else { "field-note error" } role=if n.ok { "status" } else { "alert" }>{n.text}</p>
             })}
             {partner}
-        </form>
+        </div>
     }
     .into_any()
 }
@@ -680,8 +674,18 @@ pub fn SectionCard(scope: Scope, section: Section, back: String) -> impl IntoVie
         return ().into_any();
     };
     let loc = v.locale;
-    let (more, basic): (Vec<SettingKey>, Vec<SettingKey>) =
-        section_keys(scope, section).into_iter().partition(|k| advanced(*k));
+    // Lists change one entry at a time with forms of their own: they come after the section's form, never folded.
+    let (lists, keys): (Vec<SettingKey>, Vec<SettingKey>) = section_keys(scope, section)
+        .into_iter()
+        .partition(|k| matches!(k.meta().kind, FieldKind::Ids { .. }));
+    let (more, basic): (Vec<SettingKey>, Vec<SettingKey>) = keys.into_iter().partition(|k| advanced(*k));
+    // What the form saves: what this login may change (an admin sees the owner's settings, not their inputs).
+    let saved: Vec<String> = basic
+        .iter()
+        .chain(&more)
+        .filter(|k| v.owner || k.who() != Who::Owner)
+        .map(|k| k.name())
+        .collect();
     let open = use_query_map().with_untracked(|q| q.get("advanced").as_deref() == Some(section.key()));
     let row = |key: SettingKey| view! { <SettingRow key scope viewer=v.clone() back=back.clone()/> };
     // The chat commands' reference beside their settings (globally).
@@ -696,11 +700,27 @@ pub fn SectionCard(scope: Scope, section: Section, back: String) -> impl IntoVie
             </details>
         }
     });
+    let save = (!saved.is_empty()).then(|| {
+        view! {
+            <div class="row section-save">
+                <button class="button primary" name="action" value="save">{text(loc, "ui-save-changes", &[])}</button>
+            </div>
+        }
+    });
     view! {
         <section class="card settings-section" id=format!("section-{}", section.key())>
             <h2>{section_name(loc, section)}</h2>
-            {basic.into_iter().map(row).collect_view()}
-            {folded}
+            // One form, one "Save changes": only what was changed in it is stored.
+            <form method="post" action="/settings" class="section-form">
+                <input type="hidden" name="csrf" value=v.csrf.clone()/>
+                <input type="hidden" name="scope" value=scope_param(scope)/>
+                <input type="hidden" name="back" value=back.clone()/>
+                <input type="hidden" name="keys" value=saved.join(",")/>
+                {basic.into_iter().map(row).collect_view()}
+                {folded}
+                {save}
+            </form>
+            {lists.into_iter().map(row).collect_view()}
             {commands}
         </section>
     }

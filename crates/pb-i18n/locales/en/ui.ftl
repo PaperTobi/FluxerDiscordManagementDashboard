@@ -517,3 +517,8 @@ ui-settings-set-here = { $count ->
        *[other] { $count } changed here
     }
 ui-settings-moved = The settings for every community have their own pages:
+
+## A section's form
+ui-save-changes = Save changes
+ui-section-refused = Not saved: { $what } (see below).
+ui-back-to-inherited = Back to the inherited value.

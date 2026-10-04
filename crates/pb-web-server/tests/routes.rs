@@ -1289,7 +1289,6 @@ async fn settings_forms_fold_the_rare_ones() {
     assert!(page.contains("<details class=\"help\">"), "help texts folded");
     assert!(page.contains("<label for=\"in-threshold\">") && page.contains("id=\"in-threshold\""));
     // Saving an advanced setting comes back with it open.
-    assert!(page.contains("value=\"/settings/detection?advanced=detection#set-end_silence\""));
     let open = w.get("/settings/detection?advanced=detection", Some(&owner)).await.body;
     assert!(folder(&open).1.contains(" open"), "opened after saving one");
     assert_eq!(w.get("/settings/nothing", Some(&owner)).await.status, 404);
@@ -2085,5 +2084,103 @@ async fn resetting_a_line_the_connection_or_logging_out_everywhere_asks_first() 
         !w.get("/", Some(&owner)).await.body.contains("class=\"sidebar\""),
         "logged out"
     );
+    w.stop().await;
+}
+
+/// The value a page's input for `key` shows (`value.<key>`).
+fn shown_value(page: &str, key: &str) -> String {
+    let at = page.find(&format!("name=\"value.{key}\"")).expect("the input");
+    let tag = page[at..].split('>').next().unwrap();
+    tag.split("value=\"")
+        .nth(1)
+        .map(|v| v.split('"').next().unwrap().to_owned())
+        .unwrap_or_default()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_section_form_saves_what_was_changed_and_only_that() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let path = format!("/c/{G}/settings/detection");
+    let scope = format!("server:{G}");
+    let server = pb_domain::Scope::Server { guild: GuildId(G) };
+    let page = w.get(&path, Some(&owner)).await.body;
+    // One form for the section and one "Save changes"; inputs are named after their setting.
+    assert_eq!(page.matches("class=\"section-form\"").count(), 1, "{page}");
+    assert!(page.contains("name=\"value.strikes\"") && page.contains("Save changes"));
+    let (threshold, end_silence) = (shown_value(&page, "threshold"), shown_value(&page, "end_silence"));
+    let save = async |cookie: &str, token: &str, values: &[(&str, &str)], extra: &[(&str, &str)]| {
+        let keys: Vec<&str> = values.iter().map(|(k, _)| *k).collect();
+        let keys = keys.join(",");
+        let mut form: Vec<(String, String)> = vec![
+            ("csrf".into(), token.into()),
+            ("scope".into(), scope.clone()),
+            ("back".into(), path.clone()),
+            ("keys".into(), keys),
+            ("action".into(), "save".into()),
+        ];
+        form.extend(values.iter().map(|(k, v)| (format!("value.{k}"), (*v).to_owned())));
+        form.extend(extra.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())));
+        let f: Vec<(&str, &str)> = form.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        w.post("/settings", Some(cookie), &f).await
+    };
+    // Two fields changed in one save: both are kept; the fields shown as they were are not stored (they keep
+    // following the settings for every community).
+    let r = save(
+        &owner,
+        &csrf,
+        &[
+            ("strikes", "3"),
+            ("strike_window", "30s"),
+            ("threshold", &threshold),
+            ("end_silence", &end_silence),
+        ],
+        &[],
+    )
+    .await;
+    assert!(
+        notice(&w, &owner, &r)
+            .await
+            .contains("Saved: Strikes before a warning, Strike window."),
+        "{r:?}"
+    );
+    assert_eq!(setting(&w, server, "strikes"), Some(serde_json::json!(3)));
+    assert!(setting(&w, server, "strike_window").is_some());
+    assert_eq!(setting(&w, server, "threshold"), None, "not pinned");
+    assert_eq!(setting(&w, server, "end_silence"), None, "not pinned");
+    // One refused, one saved: the refused one is said next to it (as typed); the page comes back there, with the
+    // section's Advanced part (the strike window is in it) open.
+    let r = save(&owner, &csrf, &[("strikes", "lots"), ("strike_window", "45s")], &[]).await;
+    assert_eq!(
+        r.location.as_deref(),
+        Some(format!("{path}?advanced=detection#set-strikes").as_str())
+    );
+    let text = notice(&w, &owner, &r).await;
+    assert!(
+        text.contains("Saved: Strike window.") && text.contains("Not saved: Strikes before a warning (see below)."),
+        "{text}"
+    );
+    assert_eq!(setting(&w, server, "strikes"), Some(serde_json::json!(3)));
+    // "Use inherited" on one setting saves the rest of the form too.
+    save(
+        &owner,
+        &csrf,
+        &[("strikes", "3"), ("threshold", "0.8")],
+        &[("clear", "strikes")],
+    )
+    .await;
+    assert_eq!(setting(&w, server, "strikes"), None);
+    assert_eq!(setting(&w, server, "threshold"), Some(serde_json::json!(0.8)));
+    // An admin's form never changes what only the owner may change, even when sent.
+    let ada = w.login(ADA).await.unwrap();
+    let ca = w.page_csrf(&ada).await;
+    let reporting = format!("/c/{G}/settings/reporting");
+    let page = w.get(&reporting, Some(&ada)).await.body;
+    let keys_at = page.find("name=\"keys\" value=\"").unwrap() + 19;
+    let keys = page[keys_at..].split('"').next().unwrap();
+    assert!(!keys.split(',').any(|k| k == "modlog_audio"), "{keys}");
+    save(&ada, &ca, &[("modlog_audio", "on")], &[]).await;
+    assert_eq!(setting(&w, server, "modlog_audio"), None);
     w.stop().await;
 }
