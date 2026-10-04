@@ -1,0 +1,10 @@
+# The workspace's settings (clippy reads only the nearest clippy.toml).
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+
+# Every task of the engine runs under its supervisor (crates/pb-engine/src/v1/supervise.rs): tracked for the stop,
+# panics logged; long-lived ones restarted.
+disallowed-methods = [
+    { path = "tokio::spawn", reason = "use Supervisor::spawn / spawn_task (tracked, panics logged)" },
+    { path = "tokio::task::spawn", reason = "use Supervisor::spawn / spawn_task (tracked, panics logged)" },
+]

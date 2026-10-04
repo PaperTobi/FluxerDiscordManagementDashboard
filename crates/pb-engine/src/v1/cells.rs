@@ -283,7 +283,8 @@ impl CellSource for Cells {
                         TopicState::Person(Box::new(person_state(core, *guild, *user))),
                     );
                     let (core2, g, u) = (core.clone(), *guild, *user);
-                    tokio::spawn(async move { fill_person(&core2, g, u).await });
+                    core.sup
+                        .spawn_task("person view", async move { fill_person(&core2, g, u).await });
                 }
                 true
             }

@@ -276,7 +276,8 @@ impl Session {
             GatewayEvent::Message(m) if core.running() => {
                 let core2 = core.clone();
                 let m = m.clone();
-                tokio::spawn(async move { super::commands::on_message(&core2, &m).await });
+                core.sup
+                    .spawn_task("command", async move { super::commands::on_message(&core2, &m).await });
             }
             _ => {}
         }
@@ -387,7 +388,7 @@ impl Session {
                     // A leave is retried while the gateway reconnects (it would be lost); joins and confirmations
                     // are covered by the follow machine's timeouts.
                     let attempts = if matches!(op, VoiceStateOp::Leave { .. }) { 6 } else { 1 };
-                    tokio::spawn(async move {
+                    self.core.sup.spawn_task("voice state", async move {
                         for i in 0..attempts {
                             match ctl.voice_state(op.clone()).await {
                                 Ok(()) => return,

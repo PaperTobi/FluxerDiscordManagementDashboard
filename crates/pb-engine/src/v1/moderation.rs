@@ -182,7 +182,8 @@ impl Moderation {
             heard: self.heard.get(&(guild, user)).copied(),
         };
         if self.prerendered.insert((guild, user), next) != Some(next) {
-            tokio::spawn(super::speak::prerender(core.clone(), next));
+            core.sup
+                .spawn_task("prerender", super::speak::prerender(core.clone(), next));
         }
     }
 }

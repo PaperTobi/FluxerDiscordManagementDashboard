@@ -3,7 +3,7 @@
 //! (docs/proposals/0004-engine-actors.md); the scenarios with real models and LiveKit are in `crates/pb/tests`.
 //!
 //! A test that describes behaviour the engine does not have yet is ignored with the migration step that brings it.
-
+#![allow(clippy::disallowed_methods)] // the tests drive the engine from outside (its own tasks are supervised)
 #![allow(clippy::unwrap_used, clippy::expect_used)] // a panic is how a test fails
 
 mod common;

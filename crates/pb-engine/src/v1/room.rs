@@ -35,7 +35,7 @@ struct TrackRun {
     user: UserId,
     stop: watch::Sender<Option<FlushReason>>,
     muted: watch::Sender<bool>,
-    task: tokio::task::JoinHandle<()>,
+    task: tokio::task::JoinHandle<Option<()>>,
 }
 
 /// What the playback task gets.
@@ -82,7 +82,9 @@ pub fn spawn(
     let (tx, rx) = mpsc::unbounded_channel();
     let handle = RoomHandle { chan, tx };
     let h2 = handle.clone();
-    tokio::spawn(async move { run(core, h2, grant, rx, control, timeout).await });
+    let c2 = core.clone();
+    core.sup
+        .spawn_task("room", async move { run(c2, h2, grant, rx, control, timeout).await });
     handle
 }
 
@@ -134,15 +136,18 @@ async fn run(
             .collect::<BTreeMap<_, _>>(),
     );
     let (play_tx, play_rx) = mpsc::unbounded_channel::<PlaybackMsg>();
-    let playback = tokio::spawn(playback(
-        core.clone(),
-        chan,
-        room.clone(),
-        out,
-        echo,
-        participants.subscribe(),
-        play_rx,
-    ));
+    let playback = core.sup.spawn_task(
+        "playback",
+        playback(
+            core.clone(),
+            chan,
+            room.clone(),
+            out,
+            echo,
+            participants.subscribe(),
+            play_rx,
+        ),
+    );
     let (subscribed_tx, mut subscribed) = mpsc::unbounded_channel::<Subscribed>();
     let mut r = Room {
         core: core.clone(),
@@ -228,7 +233,7 @@ async fn run(
                         core.set_listening(chan.guild, t.user, false);
                     }
                     // Awaited beside the loop (the room keeps playing meanwhile).
-                    tokio::spawn(async move {
+                    core.sup.spawn_task("flush", async move {
                         for t in tracks {
                             let _ = t.task.await;
                         }
@@ -296,7 +301,7 @@ impl Room {
                 let _ = t.stop.send(Some(FlushReason::Close));
                 self.core.set_listening(chan.guild, t.user, false);
                 let room = self.room.clone();
-                tokio::spawn(async move {
+                self.core.sup.spawn_task("unsubscribe", async move {
                     let _ = room.unsubscribe(&k).await;
                 });
                 tracing::info!(?chan, user = %t.user, "no longer listening");
@@ -307,7 +312,7 @@ impl Room {
                 continue;
             }
             let (room, done) = (self.room.clone(), self.subscribed.clone());
-            tokio::spawn(async move {
+            self.core.sup.spawn_task("subscribe", async move {
                 let result = room.subscribe(&key).await;
                 let _ = done.send(Subscribed { key, user, result });
             });
@@ -334,7 +339,7 @@ impl Room {
         let Some(muted) = muted.filter(|_| !self.stopping && !self.tracks.contains_key(&s.key)) else {
             // No longer wanted while subscribing.
             let room = self.room.clone();
-            tokio::spawn(async move {
+            core.sup.spawn_task("unsubscribe", async move {
                 let _ = room.unsubscribe(&s.key).await;
             });
             return;
@@ -351,7 +356,7 @@ impl Room {
             muted: muted_rx,
             stop: stop_rx,
         };
-        let task = tokio::spawn(track::run(core.clone(), spec));
+        let task = core.sup.spawn_task("microphone", track::run(core.clone(), spec));
         core.set_listening(chan.guild, user, true);
         tracing::info!(?chan, %user, "listening");
         let eff = core.settings.current().effective(Some(chan.guild), Some(user));

@@ -149,7 +149,27 @@ impl Supervisor {
         lock(&self.slots).push(slot.clone());
         let cancel = self.cancel.child_token();
         let fatal = self.fatal.clone();
+        #[allow(clippy::disallowed_methods)] // the one place that spawns
         self.tracker.spawn(keep_running::<A>(ctx, mb, slot, cancel, fatal));
+    }
+
+    /// Starts a short or subordinate task (a chat command, a subscription, a room, a microphone): tracked, so the stop
+    /// waits for it, and a panic in it is logged with its name instead of vanishing.
+    #[allow(clippy::disallowed_methods)] // the one place that spawns
+    pub fn spawn_task<F>(&self, name: &'static str, fut: F) -> tokio::task::JoinHandle<Option<F::Output>>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        self.tracker.spawn(async move {
+            match AssertUnwindSafe(fut).catch_unwind().await {
+                Ok(v) => Some(v),
+                Err(panic) => {
+                    tracing::error!(task = name, error = %panic_message(panic.as_ref()), "a task of the engine failed");
+                    None
+                }
+            }
+        })
     }
 
     /// Starts an actor nobody sends messages to.

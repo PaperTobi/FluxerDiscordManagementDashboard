@@ -100,7 +100,7 @@ pub async fn run(core: Arc<Core>, mut spec: TrackSpec) {
     let mut tick = tokio::time::interval(Duration::from_millis(250));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let (jobs, queued) = mpsc::unbounded_channel();
-    let scorer = tokio::spawn(score(core.clone(), g, u, queued));
+    let scorer = core.sup.spawn_task("scorer", score(core.clone(), g, u, queued));
     loop {
         let mut events: Vec<SegEvent> = Vec::new();
         tokio::select! {
