@@ -94,6 +94,25 @@ pub fn SetupPage() -> impl IntoView {
             {s.bot.clone().map(|b| view! { <p>{text(loc, "setup-bot-ready", &[("bot", b.into())])}</p> })}
             <p>{tt("setup-owner-help")}</p>
             <a class="button primary" href="/login">{tt("ui-log-in")}</a>
+            // A login that fails at Fluxer comes back here: the address and the secret can be corrected.
+            <details>
+                <summary>{tt("setup-owner-trouble")}</summary>
+                <p>{tt("setup-secret-help")}</p>
+                <p class="copy"><code>{s.redirect_uri.clone()}</code></p>
+                {if s.secret_from_env {
+                    view! { <p class="muted">{tt("ui-secret-from-env")}</p> }.into_any()
+                } else {
+                    view! {
+                        <StepForm step="secret" csrf=s.csrf.clone()>
+                            <label>
+                                {tt("setup-secret-again")}
+                                <input name="value" type="password" autocomplete="off" required/>
+                            </label>
+                        </StepForm>
+                    }
+                    .into_any()
+                }}
+            </details>
         }
         .into_any(),
     };

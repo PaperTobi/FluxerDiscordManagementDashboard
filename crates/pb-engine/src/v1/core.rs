@@ -11,6 +11,7 @@ use pb_store_api::{Actor, ClipRecord, Event, NewEvent, PlayRecord};
 use pb_voicelines::{Fields, Line};
 use tokio::sync::{mpsc, oneshot, watch};
 
+use super::audio_cache::AudioCache;
 use super::deps::Deps;
 use super::guilds::Guilds;
 use super::live::Live;
@@ -83,6 +84,9 @@ pub struct Login {
     pub state: Connection,
 }
 
+/// A person's names as recorded: user name, display name, nickname, avatar.
+pub(super) type Names = (String, Option<String>, Option<String>, Option<String>);
+
 /// The engine-wide state.
 pub struct Core {
     pub deps: Deps,
@@ -97,9 +101,9 @@ pub struct Core {
     /// Running number of each person's sentences (for the conveyor).
     pub sentence_no: Mutex<HashMap<(GuildId, UserId), u32>>,
     /// Rendered speech: (voice, rate in thousandths, text) → 48 kHz samples.
-    pub speech: Mutex<HashMap<SpeechKey, Arc<[i16]>>>,
+    pub speech: Mutex<AudioCache<SpeechKey>>,
     /// Decoded clip renders.
-    pub clip_pcm: Mutex<HashMap<BlobHash, Arc<[i16]>>>,
+    pub clip_pcm: Mutex<AudioCache<BlobHash>>,
     pub moderation: mpsc::UnboundedSender<super::moderation::ModMsg>,
     /// Who is in which voice channel (kept by the control actor).
     pub(super) voice: Snapshot<pb_policy::VoiceWorld>,
@@ -111,6 +115,8 @@ pub struct Core {
     pub no_repeat: Mutex<pb_voicelines::NoRepeat>,
     /// People whose microphone the bot listens to now.
     pub listening: Mutex<std::collections::BTreeSet<(GuildId, UserId)>>,
+    /// The names last recorded per person (and community): only changes are recorded again.
+    pub(super) names_recorded: Mutex<BTreeMap<(UserId, Option<GuildId>), Names>>,
     /// Rooms where the bot may speak.
     pub speaking: Mutex<std::collections::BTreeSet<Chan>>,
     /// The follow machine's connections and their states (for the community page).
@@ -150,6 +156,10 @@ fn read<T>(l: &RwLock<T>) -> std::sync::RwLockReadGuard<'_, T> {
 
 fn write<T>(l: &RwLock<T>) -> std::sync::RwLockWriteGuard<'_, T> {
     l.write().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+pub(super) fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Core {
@@ -265,6 +275,7 @@ impl Core {
 
     pub fn remove_clip(&self, h: &BlobHash) {
         write(&self.clips).remove(h);
+        lock(&self.clip_pcm).remove(h);
     }
 
     pub fn next_sentence_no(&self, guild: GuildId, user: UserId) -> u32 {

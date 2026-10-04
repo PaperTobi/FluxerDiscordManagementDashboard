@@ -26,6 +26,8 @@ setup-secret-address = Nach der Anmeldung mit Fluxer kommt man zu dieser Adresse
 setup-secret-label = Client-Secret
 setup-bot-ready = Der Bot ist online als { $bot }.
 setup-owner-help = Melde dich mit Fluxer an. Wer sich jetzt anmeldet, wird Besitzer des Bots (mit allen Rechten in der Weboberfläche).
+setup-owner-trouble = Die Anmeldung scheitert bei Fluxer? Prüfe die Redirect-Adresse und das Client-Secret.
+setup-secret-again = Client-Secret erneut eingeben
 setup-expired = Die Einrichtungssitzung ist abgelaufen. Gib den Einrichtungscode erneut ein.
 
 login-not-ready = Der Bot ist noch nicht für Anmeldungen eingerichtet: { $reason }

@@ -125,6 +125,7 @@ impl WebState {
             redirect_uri: redirect_uri(self, headers),
             wait_secs: wait.as_secs() + u64::from(wait.subsec_nanos() > 0),
             code_file: self.cfg.setup_code_file.clone(),
+            secret_from_env: self.cfg.client_secret_from_env,
         }
     }
 }
@@ -250,6 +251,9 @@ pub async fn submit(
         "secret" => {
             if value.is_empty() {
                 return back(None, None);
+            }
+            if st.cfg.client_secret_from_env {
+                return back(Some((false, text(loc, "ui-secret-from-env", &[]))), None);
             }
             if let Err(e) = st
                 .secrets

@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
-use pb_domain::{ChannelId, ConnectionId, GuildId, UserId};
+use pb_domain::{ChannelId, ConnectionId, GuildId};
 use pb_fluxer_api::{Fatal, FluxerCtl, GatewayEvent, VoiceGrant, VoiceStateOp};
 use pb_live_proto::Dot;
 use pb_policy::{Action, Burst, Chan, FollowCfg, FollowMachine, GrantInfo, desired_channels, stale_own_states};
@@ -36,9 +36,6 @@ pub enum SessionEnd {
     Closed,
 }
 
-/// User name, display name, nickname, avatar.
-type Names = (String, Option<String>, Option<String>, Option<String>);
-
 struct Session {
     core: Arc<Core>,
     ctl: Arc<dyn FluxerCtl>,
@@ -51,9 +48,6 @@ struct Session {
     unstable_until: f64,
     gateway_ok: bool,
     presence: Option<String>,
-    /// Names last recorded per person and community (only changes are recorded).
-    seen: BTreeMap<(UserId, Option<GuildId>), Names>,
-    communities: BTreeMap<GuildId, (String, Option<String>)>,
     blocked: BTreeSet<Chan>,
 }
 
@@ -85,9 +79,6 @@ pub async fn run(
         unstable_until: 0.0,
         gateway_ok: false,
         presence: None,
-        seen: BTreeMap::new(),
-        // What the log already has is not recorded again.
-        communities: core.guilds().known_communities.clone(),
         blocked: BTreeSet::new(),
     };
     let mut settings = core.settings.watch();
@@ -180,15 +171,15 @@ impl Session {
             GatewayEvent::GuildAvailable(g) => {
                 core.update_voice(|v| v.guild_available(g.id, g.voice_states.iter().cloned()));
                 self.burst.resolve(g.id);
-                self.remember_community(g.id, &g.name, g.icon.clone()).await;
-                let people: Vec<_> = g
-                    .members
-                    .iter()
-                    .filter_map(|m| m.user.clone().map(|u| (u, m.nick.clone())))
+                let mut names: Vec<Event> = remember_community(&core, g.id, &g.name, g.icon.clone())
+                    .into_iter()
                     .collect();
-                for (u, nick) in people {
-                    self.remember_person(Some(g.id), &u, nick).await;
-                }
+                names.extend(g.members.iter().filter_map(|m| {
+                    m.user
+                        .as_ref()
+                        .and_then(|u| remember_person(&core, Some(g.id), u, m.nick.clone()))
+                }));
+                record_names(&core, names);
             }
             GatewayEvent::GuildUnavailable(g) => {
                 core.update_voice(|v| v.guild_gone(*g, true));
@@ -199,17 +190,30 @@ impl Session {
                 self.burst.resolve(*g);
             }
             GatewayEvent::GuildUpdated { guild, name, icon, .. } => {
-                self.remember_community(*guild, name, icon.clone()).await
+                record_names(
+                    &core,
+                    remember_community(&core, *guild, name, icon.clone())
+                        .into_iter()
+                        .collect(),
+                );
             }
             GatewayEvent::MemberUpdated { guild, member } => {
-                if let Some(u) = member.user.clone() {
-                    self.remember_person(Some(*guild), &u, member.nick.clone()).await;
+                if let Some(u) = &member.user {
+                    record_names(
+                        &core,
+                        remember_person(&core, Some(*guild), u, member.nick.clone())
+                            .into_iter()
+                            .collect(),
+                    );
                 }
             }
             GatewayEvent::VoiceState { state, member } => {
-                if let Some(u) = member.as_ref().and_then(|m| m.user.clone()) {
-                    self.remember_person(Some(state.guild), &u, member.as_ref().and_then(|m| m.nick.clone()))
-                        .await;
+                if let Some(u) = member.as_ref().and_then(|m| m.user.as_ref()) {
+                    let nick = member.as_ref().and_then(|m| m.nick.clone());
+                    record_names(
+                        &core,
+                        remember_person(&core, Some(state.guild), u, nick).into_iter().collect(),
+                    );
                 }
                 let (g, u) = (state.guild, state.user);
                 core.update_voice(|v| v.update((**state).clone()));
@@ -255,45 +259,6 @@ impl Session {
                 tokio::spawn(async move { super::commands::on_message(&core2, &m).await });
             }
             _ => {}
-        }
-    }
-
-    async fn remember_community(&mut self, guild: GuildId, name: &str, icon: Option<String>) {
-        let v = (name.to_owned(), icon.clone());
-        if self.communities.get(&guild) != Some(&v) {
-            self.communities.insert(guild, v.clone());
-            self.core.update_guilds(|gs| {
-                gs.known_communities.insert(guild, v);
-            });
-            self.core
-                .record(vec![Event::CommunitySeen(CommunitySeen {
-                    guild,
-                    name: name.to_owned(),
-                    icon,
-                })])
-                .await;
-        }
-    }
-
-    async fn remember_person(&mut self, guild: Option<GuildId>, u: &pb_fluxer_api::User, nick: Option<String>) {
-        let v = (
-            u.username.clone(),
-            u.global_name.clone(),
-            nick.clone(),
-            u.avatar.clone(),
-        );
-        let key = (u.id, guild);
-        if self.seen.get(&key) != Some(&v) {
-            self.seen.insert(key, v);
-            let ev = PersonSeen {
-                user: u.id,
-                guild,
-                username: u.username.clone(),
-                display_name: u.global_name.clone(),
-                nick,
-                avatar: u.avatar.clone(),
-            };
-            self.core.record(vec![Event::PersonSeen(ev)]).await;
         }
     }
 
@@ -431,4 +396,62 @@ fn bot_join(s: pb_policy::ConnState) -> pb_live_proto::BotJoin {
         ConnState::Leaving => BotJoin::Leaving,
         ConnState::Backoff => BotJoin::Retrying,
     }
+}
+
+/// A community's name and icon, when they changed since last recorded (the directory keeps them across reconnects).
+fn remember_community(core: &Core, guild: GuildId, name: &str, icon: Option<String>) -> Option<Event> {
+    let v = (name.to_owned(), icon.clone());
+    if core.guilds().known_communities.get(&guild) == Some(&v) {
+        return None;
+    }
+    core.update_guilds(|gs| {
+        gs.known_communities.insert(guild, v);
+    });
+    Some(Event::CommunitySeen(CommunitySeen {
+        guild,
+        name: name.to_owned(),
+        icon,
+    }))
+}
+
+/// A person's names, when they changed since last recorded (kept across reconnects).
+fn remember_person(
+    core: &Core,
+    guild: Option<GuildId>,
+    u: &pb_fluxer_api::User,
+    nick: Option<String>,
+) -> Option<Event> {
+    let v = (
+        u.username.clone(),
+        u.global_name.clone(),
+        nick.clone(),
+        u.avatar.clone(),
+    );
+    let mut recorded = core
+        .names_recorded
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if recorded.get(&(u.id, guild)) == Some(&v) {
+        return None;
+    }
+    recorded.insert((u.id, guild), v);
+    Some(Event::PersonSeen(PersonSeen {
+        user: u.id,
+        guild,
+        username: u.username.clone(),
+        display_name: u.global_name.clone(),
+        nick,
+        avatar: u.avatar.clone(),
+    }))
+}
+
+/// Records names in one append, without holding up the gateway's events (their order does not matter).
+fn record_names(core: &Arc<Core>, events: Vec<Event>) {
+    if events.is_empty() {
+        return;
+    }
+    let core = core.clone();
+    tokio::spawn(async move {
+        core.record(events).await;
+    });
 }

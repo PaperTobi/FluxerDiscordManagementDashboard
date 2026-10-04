@@ -26,6 +26,8 @@ setup-secret-address = People are sent back to this address after logging in wit
 setup-secret-label = Client secret
 setup-bot-ready = The bot is online as { $bot }.
 setup-owner-help = Log in with Fluxer. Whoever logs in now becomes the owner of the bot (with all rights in the web UI).
+setup-owner-trouble = Login fails at Fluxer? Check the redirect address and the client secret.
+setup-secret-again = Enter the client secret again
 setup-expired = The setup session ended. Enter the setup code again.
 
 login-not-ready = The bot is not set up for logins yet: { $reason }

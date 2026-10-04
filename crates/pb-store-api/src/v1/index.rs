@@ -172,6 +172,9 @@ pub trait Index: Send + Sync + 'static {
     /// The last event applied (0 = none).
     fn applied(&self) -> u64;
 
+    /// Waits until every event up to `seq` is in the index.
+    async fn caught_up(&self, seq: u64);
+
     /// What keeps the index from applying events right now (it keeps trying), if anything.
     fn problem(&self) -> Option<String>;
 

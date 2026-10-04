@@ -54,14 +54,15 @@ impl Engine {
             clips: RwLock::new(Default::default()),
             rooms: RwLock::new(Default::default()),
             sentence_no: Mutex::new(HashMap::new()),
-            speech: Mutex::new(HashMap::new()),
-            clip_pcm: Mutex::new(HashMap::new()),
+            speech: Mutex::default(),
+            clip_pcm: Mutex::default(),
             moderation: mod_tx,
             voice: Snapshot::default(),
             jar: Mutex::new(HashMap::new()),
             undo: undo_tx,
             no_repeat: Mutex::new(Default::default()),
             listening: Mutex::new(Default::default()),
+            names_recorded: Mutex::new(Default::default()),
             speaking: Mutex::new(Default::default()),
             conns: RwLock::new(Default::default()),
             dirty: Mutex::new(Default::default()),
@@ -74,7 +75,18 @@ impl Engine {
             deps,
         });
         // What the log already knows: the clip library, swear jars, violations for the escalation counts, mutes to lift.
+        // Read once the index holds every event (after an import or an index rebuild it is still catching up).
         let index = core.deps.index.clone();
+        if let Some(head) = core.deps.log.head() {
+            if index.applied() < head.seq {
+                tracing::info!(
+                    head = head.seq,
+                    applied = index.applied(),
+                    "waiting for the search index to catch up"
+                );
+            }
+            index.caught_up(head.seq).await;
+        }
         for c in index.clips().await? {
             core.put_clip(c.record);
         }
@@ -90,6 +102,19 @@ impl Engine {
                 continue;
             }
             for p in index.people(&users, Some(g)).await? {
+                // Already recorded: not recorded again unless they change.
+                core.names_recorded
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .insert(
+                        (p.user, Some(g)),
+                        (
+                            p.username.clone(),
+                            p.display_name.clone(),
+                            p.nick.clone(),
+                            p.avatar.clone(),
+                        ),
+                    );
                 core.update_guilds(|gs| {
                     gs.remember(
                         g,
@@ -160,7 +185,11 @@ impl Engine {
             .value
             .get() as usize;
         match self.core.deps.inference.reload_tts(threads).await {
-            Ok(voices) => tracing::info!(voices = voices.len(), "voices read again"),
+            Ok(voices) => {
+                // A voice file may have changed under the same name.
+                super::core::lock(&self.core.speech).clear();
+                tracing::info!(voices = voices.len(), "voices read again");
+            }
             Err(e) => tracing::warn!(error = %e, "the voices could not be read again"),
         }
         Ok(problems)

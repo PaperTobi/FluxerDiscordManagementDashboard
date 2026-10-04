@@ -37,6 +37,28 @@ struct TrackRun {
     muted: watch::Sender<bool>,
 }
 
+/// A microphone subscription that finished (subscribing waits for the server and runs beside the room's loop).
+struct Subscribed {
+    key: TrackKey,
+    user: UserId,
+    result: Result<pb_voice_api::AudioIn, TransportError>,
+}
+
+/// What a room's loop keeps.
+struct Room {
+    core: Arc<Core>,
+    handle: RoomHandle,
+    room: Arc<dyn VoiceRoom>,
+    participants: Arc<Mutex<BTreeMap<Identity, Participant>>>,
+    tracks: HashMap<TrackKey, TrackRun>,
+    /// Subscriptions asked for and not finished yet.
+    subscribing: BTreeSet<TrackKey>,
+    subscribed: mpsc::UnboundedSender<Subscribed>,
+    echo: Arc<Mutex<EchoGuard>>,
+    greeted: BTreeSet<UserId>,
+    play: mpsc::UnboundedSender<PlayItem>,
+}
+
 /// Starts a room task.
 pub fn spawn(
     core: Arc<Core>,
@@ -111,20 +133,21 @@ async fn run(
         participants.clone(),
         play_rx,
     ));
-    let mut tracks: HashMap<TrackKey, TrackRun> = HashMap::new();
-    let mut greeted: BTreeSet<UserId> = BTreeSet::new();
+    let (subscribed_tx, mut subscribed) = mpsc::unbounded_channel::<Subscribed>();
+    let mut r = Room {
+        core: core.clone(),
+        handle: handle.clone(),
+        room: room.clone(),
+        participants: participants.clone(),
+        tracks: HashMap::new(),
+        subscribing: BTreeSet::new(),
+        subscribed: subscribed_tx,
+        echo: echo.clone(),
+        greeted: BTreeSet::new(),
+        play: play_tx.clone(),
+    };
     let mut settings = core.settings.watch();
-    reconcile(
-        &core,
-        &handle,
-        &room,
-        &participants,
-        &mut tracks,
-        &echo,
-        &mut greeted,
-        &play_tx,
-    )
-    .await;
+    r.reconcile().await;
     let reason = loop {
         tokio::select! {
             ev = events.recv() => {
@@ -139,29 +162,26 @@ async fn run(
                         if let Ok(mut ps) = participants.lock() {
                             ps.remove(&id);
                         }
-                        if let Some(u) = person_of(&id) {
-                            greeted.remove(&u);
-                        }
                     }
                     RoomEvent::TrackPublished(t) => {
-                        if let Ok(mut ps) = participants.lock() {
-                            let p = ps.entry(t.key.participant.clone()).or_insert_with(|| Participant { identity: t.key.participant.clone(), audio: Vec::new() });
-                            p.audio.retain(|a| a.key != t.key);
-                            p.audio.push(t);
-                        }
+                        if let Ok(mut ps) = participants.lock()
+                            && let Some(p) = ps.get_mut(&t.key.participant) {
+                                p.audio.retain(|a| a.key != t.key);
+                                p.audio.push(t);
+                            }
                     }
                     RoomEvent::TrackUnpublished(key) => {
                         if let Ok(mut ps) = participants.lock()
                             && let Some(p) = ps.get_mut(&key.participant) {
                                 p.audio.retain(|a| a.key != key);
                             }
-                        if let Some(t) = tracks.remove(&key) {
+                        if let Some(t) = r.tracks.remove(&key) {
                             let _ = t.stop.send(true);
                             core.set_listening(chan.guild, t.user, false);
                         }
                     }
                     RoomEvent::TrackMuted { key, muted } => {
-                        if let Some(t) = tracks.get(&key) {
+                        if let Some(t) = r.tracks.get(&key) {
                             let _ = t.muted.send(muted);
                         }
                         if let Ok(mut ps) = participants.lock()
@@ -177,18 +197,19 @@ async fn run(
                     RoomEvent::Reconnected => continue,
                     RoomEvent::Disconnected { reason } => break reason,
                 }
-                reconcile(&core, &handle, &room, &participants, &mut tracks, &echo, &mut greeted, &play_tx).await;
+                r.reconcile().await;
             }
+            Some(s) = subscribed.recv() => r.on_subscribed(s),
             cmd = rx.recv() => match cmd {
                 None | Some(RoomCmd::Close) => break String::new(),
                 Some(RoomCmd::Play(item)) => {
                     let _ = play_tx.send(*item);
                 }
             },
-            _ = settings.changed() => reconcile(&core, &handle, &room, &participants, &mut tracks, &echo, &mut greeted, &play_tx).await,
+            _ = settings.changed() => r.reconcile().await,
         }
     };
-    for (_, t) in tracks.drain() {
+    for (_, t) in r.tracks.drain() {
         let _ = t.stop.send(true);
         core.set_listening(chan.guild, t.user, false);
     }
@@ -196,6 +217,7 @@ async fn run(
         sp.remove(&chan);
     }
     core.mark_guild(chan.guild);
+    drop(r);
     drop(play_tx);
     playback.abort();
     room.close().await;
@@ -205,115 +227,139 @@ async fn run(
     }
 }
 
-/// Listens to exactly the tracked people's microphones and lets exactly the right people hear the bot.
-#[allow(clippy::too_many_arguments)]
-async fn reconcile(
-    core: &Arc<Core>,
-    handle: &RoomHandle,
-    room: &Arc<dyn VoiceRoom>,
-    participants: &Arc<Mutex<BTreeMap<Identity, Participant>>>,
-    tracks: &mut HashMap<TrackKey, TrackRun>,
-    echo: &Arc<Mutex<EchoGuard>>,
-    greeted: &mut BTreeSet<UserId>,
-    play: &mpsc::UnboundedSender<PlayItem>,
-) {
-    let chan = handle.chan;
-    let tree = core.settings.current();
-    let tracked = tree.tracked_for(chan.guild);
-    let bot = core.bot();
-    let snapshot: Vec<Participant> = participants
-        .lock()
-        .map(|p| p.values().cloned().collect())
-        .unwrap_or_default();
-    let mut want: BTreeMap<TrackKey, (UserId, bool)> = BTreeMap::new();
-    let mut tracked_ids: Vec<Identity> = Vec::new();
-    for p in &snapshot {
-        let Some(u) = person_of(&p.identity) else { continue };
-        if Some(u) == bot || !tracked.contains(&u) {
-            continue;
-        }
-        tracked_ids.push(p.identity.clone());
-        for a in &p.audio {
-            if a.source == TrackSource::Microphone {
-                want.insert(a.key.clone(), (u, a.muted));
+impl Room {
+    /// The tracked people's microphones in the room: (track, person, muted), and the tracked people there.
+    fn wanted(&self) -> (BTreeMap<TrackKey, (UserId, bool)>, Vec<Identity>) {
+        let tracked = self.core.settings.current().tracked_for(self.handle.chan.guild);
+        let bot = self.core.bot();
+        let snapshot: Vec<Participant> = self
+            .participants
+            .lock()
+            .map(|p| p.values().cloned().collect())
+            .unwrap_or_default();
+        let mut want = BTreeMap::new();
+        let mut tracked_ids = Vec::new();
+        for p in &snapshot {
+            let Some(u) = person_of(&p.identity) else { continue };
+            if Some(u) == bot || !tracked.contains(&u) {
+                continue;
             }
-        }
-    }
-    // Stop listening to people no longer tracked.
-    let gone: Vec<TrackKey> = tracks.keys().filter(|k| !want.contains_key(*k)).cloned().collect();
-    for k in gone {
-        if let Some(t) = tracks.remove(&k) {
-            let _ = t.stop.send(true);
-            core.set_listening(chan.guild, t.user, false);
-            let _ = room.unsubscribe(&k).await;
-            tracing::info!(?chan, user = %t.user, "no longer listening");
-        }
-    }
-    for (key, (user, muted)) in want {
-        if tracks.contains_key(&key) {
-            continue;
-        }
-        match room.subscribe(&key).await {
-            Ok(audio) => {
-                let (stop_tx, stop_rx) = watch::channel(false);
-                let (muted_tx, muted_rx) = watch::channel(muted);
-                let spec = TrackSpec {
-                    chan,
-                    user,
-                    room: handle.clone(),
-                    audio,
-                    echo: echo.clone(),
-                    muted: muted_rx,
-                    stop: stop_rx,
-                };
-                tokio::spawn(track::run(core.clone(), spec));
-                core.set_listening(chan.guild, user, true);
-                tracing::info!(?chan, %user, "listening");
-                let eff = tree.effective(Some(chan.guild), Some(user));
-                let who = pb_live_proto::Who {
-                    user,
-                    name: core.guilds().name(chan.guild, user),
-                    avatar: core.avatar_url(
-                        user,
-                        core.guilds()
-                            .person(chan.guild, user)
-                            .and_then(|p| p.avatar.clone())
-                            .as_deref(),
-                    ),
-                };
-                core.live.ensure_person(chan.guild, who, super::live::summary(&eff));
-                tokio::spawn(super::speak::prerender(core.clone(), chan.guild, user));
-                if greeted.insert(user) && eff.greet_enabled.value {
-                    let _ = play.send(PlayItem {
-                        line: Line::Greeting,
-                        person: Some(user),
-                        audience: Audience::Offender,
-                        fields: Fields::new(),
-                        purpose: PlayPurpose::Greeting,
-                        sentence: None,
-                        deadline: None,
-                        by: None,
-                        text: None,
-                        heard: None,
-                        label: None,
-                        done: None,
-                    });
+            tracked_ids.push(p.identity.clone());
+            for a in &p.audio {
+                if a.source == TrackSource::Microphone {
+                    want.insert(a.key.clone(), (u, a.muted));
                 }
-                tracks.insert(
-                    key,
-                    TrackRun {
-                        user,
-                        stop: stop_tx,
-                        muted: muted_tx,
-                    },
-                );
             }
-            Err(e) => tracing::warn!(?chan, %user, error = %e, "could not subscribe to a microphone"),
+        }
+        (want, tracked_ids)
+    }
+
+    /// Listens to exactly the tracked people's microphones and lets exactly the right people hear the bot. New
+    /// subscriptions run in their own tasks: the room keeps playing meanwhile.
+    async fn reconcile(&mut self) {
+        let chan = self.handle.chan;
+        let (want, tracked_ids) = self.wanted();
+        // Stop listening to people no longer tracked.
+        let gone: Vec<TrackKey> = self.tracks.keys().filter(|k| !want.contains_key(*k)).cloned().collect();
+        for k in gone {
+            if let Some(t) = self.tracks.remove(&k) {
+                let _ = t.stop.send(true);
+                self.core.set_listening(chan.guild, t.user, false);
+                let room = self.room.clone();
+                tokio::spawn(async move {
+                    let _ = room.unsubscribe(&k).await;
+                });
+                tracing::info!(?chan, user = %t.user, "no longer listening");
+            }
+        }
+        for (key, (user, _)) in want {
+            if self.tracks.contains_key(&key) || !self.subscribing.insert(key.clone()) {
+                continue;
+            }
+            let (room, done) = (self.room.clone(), self.subscribed.clone());
+            tokio::spawn(async move {
+                let result = room.subscribe(&key).await;
+                let _ = done.send(Subscribed { key, user, result });
+            });
+        }
+        let audience = default_audience(&self.core, chan, &tracked_ids);
+        if let Err(e) = self.room.set_audience(&audience).await {
+            tracing::warn!(?chan, error = %e, "could not set who hears the bot");
         }
     }
-    let audience = default_audience(core, chan, &tracked_ids);
-    if let Err(e) = room.set_audience(&audience).await {
-        tracing::warn!(?chan, error = %e, "could not set who hears the bot");
+
+    /// A subscription finished: listen (when the person is still wanted), show them, greet them.
+    fn on_subscribed(&mut self, s: Subscribed) {
+        let (core, chan) = (self.core.clone(), self.handle.chan);
+        self.subscribing.remove(&s.key);
+        let audio = match s.result {
+            Ok(audio) => audio,
+            Err(e) => {
+                tracing::warn!(?chan, user = %s.user, error = %e, "could not subscribe to a microphone");
+                return;
+            }
+        };
+        let (want, _) = self.wanted();
+        let muted = want.get(&s.key).map(|(_, m)| *m);
+        let Some(muted) = muted.filter(|_| !self.tracks.contains_key(&s.key)) else {
+            // No longer wanted while subscribing.
+            let room = self.room.clone();
+            tokio::spawn(async move {
+                let _ = room.unsubscribe(&s.key).await;
+            });
+            return;
+        };
+        let user = s.user;
+        let (stop_tx, stop_rx) = watch::channel(false);
+        let (muted_tx, muted_rx) = watch::channel(muted);
+        let spec = TrackSpec {
+            chan,
+            user,
+            room: self.handle.clone(),
+            audio,
+            echo: self.echo.clone(),
+            muted: muted_rx,
+            stop: stop_rx,
+        };
+        tokio::spawn(track::run(core.clone(), spec));
+        core.set_listening(chan.guild, user, true);
+        tracing::info!(?chan, %user, "listening");
+        let eff = core.settings.current().effective(Some(chan.guild), Some(user));
+        let gs = core.guilds();
+        let who = pb_live_proto::Who {
+            user,
+            name: gs.name(chan.guild, user),
+            avatar: core.avatar_url(
+                user,
+                gs.person(chan.guild, user).and_then(|p| p.avatar.clone()).as_deref(),
+            ),
+        };
+        core.live.ensure_person(chan.guild, who, super::live::summary(&eff));
+        tokio::spawn(super::speak::prerender(core.clone(), chan.guild, user));
+        if self.greeted.insert(user) && eff.greet_enabled.value {
+            let _ = self.play.send(PlayItem {
+                line: Line::Greeting,
+                person: Some(user),
+                audience: Audience::Offender,
+                fields: Fields::new(),
+                purpose: PlayPurpose::Greeting,
+                sentence: None,
+                deadline: None,
+                by: None,
+                text: None,
+                heard: None,
+                label: None,
+                done: None,
+            });
+        }
+        self.tracks.insert(
+            s.key,
+            TrackRun {
+                user,
+                stop: stop_tx,
+                muted: muted_tx,
+            },
+        );
     }
 }
 

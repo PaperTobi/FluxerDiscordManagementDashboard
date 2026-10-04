@@ -88,6 +88,8 @@ pub struct SetupView {
     pub wait_secs: u64,
     /// Where the operator finds the setup code.
     pub code_file: String,
+    /// The client secret comes from the environment (it cannot be changed here).
+    pub secret_from_env: bool,
 }
 
 /// The person looking at the page.

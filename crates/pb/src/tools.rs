@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use pb_store::{DataLock, FsBlobStore, FsSecretsFile, FsSettingsFiles, JsonlLog, LockError, TursoIndex};
-use pb_store_api::{EventLog, SettingsFiles};
+use pb_store_api::{EventLog, Index, SettingsFiles};
 
 use super::Exit;
 use super::config::{self, Config};

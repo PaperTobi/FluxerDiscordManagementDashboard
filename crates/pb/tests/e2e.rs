@@ -12,7 +12,7 @@ use common::*;
 use pb_domain::PlayPurpose;
 use pb_domain::{ActionOutcome, GuildId, Scope};
 use pb_settings::SettingKey;
-use pb_store_api::{DecisionRecord, Event, PlayOutcome};
+use pb_store_api::{DecisionRecord, Event, Index, PlayOutcome};
 
 fn is_warned(e: &Event) -> bool {
     matches!(e, Event::Sentence(s) if matches!(s.decision, DecisionRecord::Warn { .. }))

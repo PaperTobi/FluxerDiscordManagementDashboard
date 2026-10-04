@@ -1,6 +1,7 @@
 //! Version 1.
 
 mod actions;
+mod audio_cache;
 mod cells;
 mod commands;
 mod control;

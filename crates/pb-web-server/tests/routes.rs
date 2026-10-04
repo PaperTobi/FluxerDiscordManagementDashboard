@@ -698,6 +698,20 @@ async fn the_setup_wizard_from_code_to_owner() {
         "{}",
         page.body
     );
+    let r = w
+        .post(
+            "/setup",
+            Some(&setup),
+            &[("step", "secret"), ("csrf", &csrf), ("value", "a-mistyped-secret")],
+        )
+        .await;
+    assert!(r.cookie("pb_notice").is_none(), "{r:?}");
+    // The owner logs in; with a mistyped secret Fluxer refuses, and the secret can be entered again.
+    let page = w.get("/setup", Some(&setup)).await;
+    assert!(page.body.contains("The bot is online as watchbot"), "{}", page.body);
+    assert!(w.login_with(OWNER, Some(&setup)).await.is_err());
+    let page = w.get("/setup", Some(&setup)).await;
+    assert!(page.body.contains("Enter the client secret again"), "{}", page.body);
     let secret = w.fake.config().client_secret.clone();
     let r = w
         .post(
@@ -707,9 +721,7 @@ async fn the_setup_wizard_from_code_to_owner() {
         )
         .await;
     assert!(r.cookie("pb_notice").is_none(), "{r:?}");
-    // The owner logs in; setup is finished and the code is gone.
-    let page = w.get("/setup", Some(&setup)).await;
-    assert!(page.body.contains("The bot is online as watchbot"), "{}", page.body);
+    // Setup is finished and the code is gone.
     let owner = w.login_with(OWNER, Some(&setup)).await.unwrap();
     assert!(w.get("/", Some(&owner)).await.body.contains("class=\"sidebar\""));
     assert!(!w.dir.path().join("setup-code").exists());

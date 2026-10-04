@@ -96,12 +96,6 @@ impl TursoIndex {
             error,
         })
     }
-
-    /// Waits until every event up to `seq` is in the index.
-    pub async fn caught_up(&self, seq: u64) {
-        let mut rx = self.applied.clone();
-        let _ = rx.wait_for(|a| *a >= seq).await;
-    }
 }
 
 /// Catches up with the log, then applies what it commits; a lag or an error means catching up again.
@@ -177,6 +171,11 @@ async fn follow(
 
 #[async_trait]
 impl Index for TursoIndex {
+    async fn caught_up(&self, seq: u64) {
+        let mut rx = self.applied.clone();
+        let _ = rx.wait_for(|a| *a >= seq).await;
+    }
+
     fn problem(&self) -> Option<String> {
         self.error.lock().ok().and_then(|e| e.clone())
     }

@@ -11,7 +11,7 @@ use pb_models_api::{SpeakOpts, VoiceInfo};
 use pb_settings::{SettingsTree, VoiceLang};
 use pb_voicelines::{ClipInfo, ClipLang, Field, Fields, Line, Part, Resolution, ResolveCtx, plan, resolve};
 
-use super::core::Core;
+use super::core::{Core, lock};
 
 /// Audio ready to play, and what it says.
 #[derive(Debug, Clone, Default)]
@@ -122,7 +122,7 @@ pub fn resolve_line(core: &Core, guild: GuildId, person: Option<UserId>, line: &
 
 async fn speech(core: &Core, voice: &str, text: &str, rate: f64, prio: SpeakPriority) -> Result<Arc<[i16]>, String> {
     let key = (voice.to_owned(), (rate * 1000.0).round() as u32, text.to_owned());
-    if let Some(p) = core.speech.lock().ok().and_then(|m| m.get(&key).cloned()) {
+    if let Some(p) = lock(&core.speech).get(&key) {
         return Ok(p);
     }
     let opts = SpeakOpts {
@@ -136,15 +136,13 @@ async fn speech(core: &Core, voice: &str, text: &str, rate: f64, prio: SpeakPrio
         .await
         .map_err(|e| e.to_string())?;
     let pcm: Arc<[i16]> = s.samples.into();
-    if let Ok(mut m) = core.speech.lock() {
-        m.insert(key, pcm.clone());
-    }
+    lock(&core.speech).insert(key, pcm.clone());
     Ok(pcm)
 }
 
 /// A clip's prepared 48 kHz audio.
 pub async fn clip_pcm(core: &Core, h: &BlobHash) -> Result<Arc<[i16]>, String> {
-    if let Some(p) = core.clip_pcm.lock().ok().and_then(|m| m.get(h).cloned()) {
+    if let Some(p) = lock(&core.clip_pcm).get(h) {
         return Ok(p);
     }
     let bytes = core
@@ -157,9 +155,7 @@ pub async fn clip_pcm(core: &Core, h: &BlobHash) -> Result<Arc<[i16]>, String> {
     let pcm = pb_audio::decode(&bytes, Some("wav")).map_err(|e| e.to_string())?;
     let at48 = pb_audio::resample(&pcm.samples, pcm.rate, pb_audio::PLAY_RATE).map_err(|e| e.to_string())?;
     let p: Arc<[i16]> = pb_audio::to_i16(&at48).into();
-    if let Ok(mut m) = core.clip_pcm.lock() {
-        m.insert(*h, p.clone());
-    }
+    lock(&core.clip_pcm).insert(*h, p.clone());
     Ok(p)
 }
 
