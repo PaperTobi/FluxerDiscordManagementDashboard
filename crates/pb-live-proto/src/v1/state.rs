@@ -777,6 +777,37 @@ pub struct SystemState {
     pub storage: StorageStatus,
     pub rooms: u32,
     pub streams: u32,
+    /// The bot's long-lived parts (each restarted on its own after a crash).
+    #[serde(default)]
+    pub parts: Vec<PartStatus>,
+}
+
+/// One of the bot's long-lived parts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PartStatus {
+    /// Its name in the program (`moderation`, `gateway` …).
+    pub name: String,
+    pub state: PartState,
+    /// Times it was started again after a crash.
+    pub restarts: u32,
+    /// Messages waiting for it.
+    pub waiting: u64,
+    /// Why it last crashed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PartState {
+    Running,
+    /// Crashed; starts again after a pause.
+    Restarting,
+    /// Work waits and it has not taken any for a minute.
+    NotAnswering,
+    Stopped,
+    /// Crashed for good: the bot restarts.
+    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

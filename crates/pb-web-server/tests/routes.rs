@@ -29,6 +29,10 @@ async fn anonymous_visitors_get_the_login_page() {
     let h = w.get("/healthz", None).await;
     assert_eq!(h.status, 200);
     assert!(h.body.contains("\"fluxer\":\"Ready\""), "{}", h.body);
+    assert!(h.body.contains("\"status\":\"ok\""), "{}", h.body);
+    for part in ["moderation", "undo", "digest", "gateway", "views"] {
+        assert!(h.body.contains(&format!("\"name\":\"{part}\"")), "{part}: {}", h.body);
+    }
     w.stop().await;
 }
 

@@ -12,9 +12,10 @@ use pb_live_proto::{Activity, PersonDelta};
 use pb_settings::EscalationStep;
 use pb_store_api::{ActionRecord, Event, SentenceRecord};
 use pb_voicelines::{Field, Fields, Line, Sel};
-use tokio::sync::mpsc;
 
 use super::core::{Core, PlayItem, RoomHandle};
+use super::mailbox::Mailbox;
+use super::supervise::{ActorError, Life, Policy, Supervised};
 
 /// Waits before trying a failed undo again (the last repeats).
 const UNDO_RETRY_S: &[u64] = &[60, 300, 900, 3600];
@@ -163,43 +164,65 @@ fn announce(core: &Core, room: &RoomHandle, record: &ActionRecord, heard: Option
     });
 }
 
-/// Lifts timed mutes when they are due: the pending ones from the index, then each new one (from `rx`). A failed
-/// lift is tried again later, for as long as it takes (a mute must not stay because Fluxer was down).
-pub async fn undo_scheduler(
-    core: Arc<Core>,
-    pending: Vec<ActionRecord>,
-    mut rx: mpsc::UnboundedReceiver<ActionRecord>,
-) {
-    let mut due: Vec<(Timestamp, ActionRecord, usize)> = pending
-        .into_iter()
-        .filter_map(|a| a.undo_at.map(|t| (t, a, 0)))
-        .collect();
-    loop {
-        let next = due.iter().map(|(t, _, _)| *t).min();
-        let wait = next.map_or(Duration::from_secs(3600), |t| {
-            let d = t.duration_since(core.deps.clock.now());
-            Duration::try_from(d).unwrap_or(Duration::ZERO)
-        });
-        tokio::select! {
-            r = rx.recv() => match r {
-                Some(a) => {
-                    if let Some(t) = a.undo_at {
-                        due.push((t, a, 0));
+/// Lifts timed mutes when they are due: the pending ones from the index, then each new one (from its mailbox). A
+/// failed lift is tried again later, for as long as it takes (a mute must not stay because Fluxer was down).
+pub(crate) struct Undo {
+    /// When, what, and how many tries failed.
+    due: Vec<(Timestamp, ActionRecord, usize)>,
+}
+
+impl Supervised for Undo {
+    type Ctx = Arc<Core>;
+    type Msg = ActionRecord;
+    const NAME: &'static str = "undo";
+    const POLICY: Policy = Policy::Restart;
+
+    async fn start(core: &Arc<Core>) -> Result<Self, ActorError> {
+        core.index_caught_up().await;
+        let due = core
+            .deps
+            .index
+            .pending_undos()
+            .await?
+            .into_iter()
+            .filter_map(|a| a.undo_at.map(|t| (t, a, 0)))
+            .collect();
+        Ok(Undo { due })
+    }
+
+    async fn run(mut self, core: Arc<Core>, mb: &mut Mailbox<ActionRecord>, life: Life) -> Result<(), ActorError> {
+        loop {
+            let next = self.due.iter().map(|(t, _, _)| *t).min();
+            let wait = next.map_or(Duration::from_secs(3600), |t| {
+                let d = t.duration_since(core.deps.clock.now());
+                Duration::try_from(d).unwrap_or(Duration::ZERO)
+            });
+            tokio::select! {
+                r = mb.recv() => match r {
+                    // After a restart the index already lists what was still in the mailbox.
+                    Some(a) => {
+                        if let Some(t) = a.undo_at
+                            && !self.due.iter().any(|(_, d, _)| d.id == a.id)
+                        {
+                            self.due.push((t, a, 0));
+                        }
+                    }
+                    None => return Ok(()),
+                },
+                () = tokio::time::sleep(wait) => {
+                    life.beat();
+                    let now = core.deps.clock.now();
+                    let (ready, rest): (Vec<_>, Vec<_>) = self.due.drain(..).partition(|(t, _, _)| *t <= now);
+                    self.due = rest;
+                    for (_, a, tries) in ready {
+                        let wait = UNDO_RETRY_S[tries.min(UNDO_RETRY_S.len() - 1)];
+                        let retry_at = now.checked_add(SignedDuration::from_secs(i64::try_from(wait).unwrap_or(3600))).unwrap_or(now);
+                        if !undo(&core, &a, retry_at).await {
+                            self.due.push((retry_at, a, tries + 1));
+                        }
                     }
                 }
-                None => return,
-            },
-            () = tokio::time::sleep(wait) => {
-                let now = core.deps.clock.now();
-                let (ready, rest): (Vec<_>, Vec<_>) = due.drain(..).partition(|(t, _, _)| *t <= now);
-                due = rest;
-                for (_, a, tries) in ready {
-                    let wait = UNDO_RETRY_S[tries.min(UNDO_RETRY_S.len() - 1)];
-                    let retry_at = now.checked_add(SignedDuration::from_secs(i64::try_from(wait).unwrap_or(3600))).unwrap_or(now);
-                    if !undo(&core, &a, retry_at).await {
-                        due.push((retry_at, a, tries + 1));
-                    }
-                }
+                () = life.cancel.cancelled() => return Ok(()),
             }
         }
     }

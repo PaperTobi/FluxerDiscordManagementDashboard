@@ -6664,6 +6664,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "fastrand",
+ "futures",
  "jiff",
  "pb-audio",
  "pb-commands",
@@ -6683,6 +6684,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-util",
  "tracing",
  "url",
 ]
@@ -9943,6 +9945,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "libc",
  "pin-project-lite",
  "tokio",

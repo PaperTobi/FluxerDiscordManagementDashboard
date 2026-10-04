@@ -2,6 +2,7 @@
 //! the API the web UI and the binary use.
 
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
@@ -13,22 +14,26 @@ use pb_policy::{Chan, VoiceWorld};
 use pb_settings::SettingsTree;
 use pb_store_api::{Actor, Event, PlayRecord, Started, Stopped, StoreError};
 use pb_voicelines::{Fields, Line};
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{oneshot, watch};
 
+use super::actions::Undo;
+use super::cells::Views;
 use super::control::{self, SessionEnd};
 use super::core::{Connection, Core, Login, PlayItem, Snapshot};
 use super::deps::Deps;
 use super::error::EngineError;
 use super::guilds::Guilds;
+use super::health::{ActorHealth, ActorState, EngineHealth, FatalError};
 use super::live::Live;
+use super::mailbox::{Mailbox, mailbox};
+use super::moderation::Moderation;
+use super::reports::DigestTimer;
 use super::settings::SettingsService;
+use super::supervise::{ActorError, Life, Policy, Supervised, Supervisor};
 
 /// The running bot.
 pub struct Engine {
     pub(super) core: Arc<Core>,
-    restart: watch::Sender<u64>,
-    stop: watch::Sender<bool>,
-    supervisor: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl std::fmt::Debug for Engine {
@@ -43,8 +48,8 @@ impl Engine {
     /// Starts everything with the settings `tree` (already loaded from the files).
     pub async fn start(deps: Deps, tree: SettingsTree) -> Result<Engine, StoreError> {
         let settings = SettingsService::new(tree, deps.settings_files.clone(), deps.log.clone());
-        let (mod_tx, mod_rx) = mpsc::unbounded_channel();
-        let (undo_tx, undo_rx) = mpsc::unbounded_channel();
+        let (mod_tx, mod_mb) = mailbox();
+        let (undo_tx, undo_mb) = mailbox();
         let live = Live::new(deps.hub.clone());
         let core = Arc::new(Core {
             settings,
@@ -72,21 +77,26 @@ impl Engine {
                 state: Connection::NoToken,
             })
             .0,
+            sup: Supervisor::default(),
+            restart: watch::Sender::new(0),
+            stop: watch::Sender::new(false),
+            started: deps.clock.now(),
             deps,
         });
-        // What the log already knows: the clip library, swear jars, violations for the escalation counts, mutes to lift.
-        // Read once the index holds every event (after an import or an index rebuild it is still catching up).
+        // What the log already knows: the clip library, swear jars, names (the actors read violations and mutes to lift
+        // themselves). Read once the index holds every event (after an import or an index rebuild it is still catching
+        // up).
         let index = core.deps.index.clone();
-        if let Some(head) = core.deps.log.head() {
-            if index.applied() < head.seq {
-                tracing::info!(
-                    head = head.seq,
-                    applied = index.applied(),
-                    "waiting for the search index to catch up"
-                );
-            }
-            index.caught_up(head.seq).await;
+        if let Some(head) = core.deps.log.head()
+            && index.applied() < head.seq
+        {
+            tracing::info!(
+                head = head.seq,
+                applied = index.applied(),
+                "waiting for the search index to catch up"
+            );
         }
+        core.index_caught_up().await;
         for c in index.clips().await? {
             core.put_clip(c.record);
         }
@@ -138,32 +148,29 @@ impl Engine {
                 j.insert((r.guild, r.user), r.count);
             }
         }
-        // Every violation so far: any community or person may count over any window, and windows can be lengthened
-        // later (one number per violation).
-        let times = index.violation_times().await?;
-        let _ = core.moderation.send(super::moderation::ModMsg::Seed(times));
-        let pending = index.pending_undos().await?;
-        tokio::spawn(super::moderation::run(core.clone(), mod_rx));
-        tokio::spawn(super::actions::undo_scheduler(core.clone(), pending, undo_rx));
-        tokio::spawn(super::reports::digest_scheduler(core.clone()));
-        tokio::spawn(follow_threads(core.clone()));
-        core.mark_all();
-        tokio::spawn(super::cells::refresh(core.clone()));
-        let started = core.deps.clock.now();
+        let sup = &core.sup;
+        sup.spawn::<Moderation>(core.clone(), mod_mb);
+        sup.spawn::<Undo>(core.clone(), undo_mb);
+        sup.spawn_alone::<DigestTimer>(core.clone());
+        sup.spawn_alone::<Threads>(core.clone());
+        sup.spawn_alone::<Views>(core.clone());
         core.record(vec![Event::Started(Started {
             version: core.deps.version.clone(),
         })])
         .await;
-        let (restart, restart_rx) = watch::channel(0);
-        let (stop, stop_rx) = watch::channel(false);
-        let sup = tokio::spawn(supervise(core.clone(), restart_rx, stop_rx));
-        tokio::spawn(system_status(core.clone(), started));
-        Ok(Engine {
-            core,
-            restart,
-            stop,
-            supervisor: Mutex::new(Some(sup)),
-        })
+        sup.spawn_alone::<Gateway>(core.clone());
+        sup.spawn_alone::<SystemStatus>(core.clone());
+        Ok(Engine { core })
+    }
+
+    /// How the engine's long-lived parts are doing.
+    pub fn health(&self) -> EngineHealth {
+        self.core.sup.health()
+    }
+
+    /// Waits until a part of the engine failed for good (the process should then stop, so it is started again).
+    pub async fn fatal(&self) -> FatalError {
+        self.core.sup.fatal().await
     }
 
     /// After the event log stopped writing (a full disk …): tries writing again (the System page).
@@ -285,7 +292,7 @@ impl Engine {
     /// [`Engine::login_outcome`].
     pub fn reconnect(&self) -> u64 {
         let mut attempt = 0;
-        self.restart.send_modify(|n| {
+        self.core.restart.send_modify(|n| {
             *n += 1;
             attempt = *n;
         });
@@ -504,22 +511,92 @@ impl Engine {
         self.core.record(events).await
     }
 
-    /// Stops: leaves voice, closes the gateway, records the stop.
+    /// Stops: leaves voice, closes the gateway, records the stop, ends the actors.
     pub async fn shutdown(&self) {
-        self.stop.send_replace(true);
-        let sup = self.supervisor.lock().ok().and_then(|mut s| s.take());
-        if let Some(s) = sup {
-            let _ = tokio::time::timeout(Duration::from_secs(10), s).await;
-        }
-        self.core.record(vec![Event::Stopped(Stopped { clean: true })]).await;
+        self.core.stop.send_replace(true);
+        let clean = tokio::time::timeout(Duration::from_secs(10), self.core.sup.ended(Gateway::NAME))
+            .await
+            .is_ok();
+        self.core.record(vec![Event::Stopped(Stopped { clean })]).await;
+        self.core.sup.stop(Duration::from_secs(5)).await;
+    }
+}
+
+/// Keeps one Fluxer session running (see [`keep_session`]).
+struct Gateway {
+    restart: watch::Receiver<u64>,
+    stop: watch::Receiver<bool>,
+}
+
+impl Supervised for Gateway {
+    type Ctx = Arc<Core>;
+    type Msg = Infallible;
+    const NAME: &'static str = "gateway";
+    const POLICY: Policy = Policy::Restart;
+
+    async fn start(core: &Arc<Core>) -> Result<Self, ActorError> {
+        // A crashed session's handle is of no use any more.
+        core.set_ctl(None);
+        Ok(Gateway {
+            restart: core.restart.subscribe(),
+            stop: core.stop.subscribe(),
+        })
+    }
+
+    async fn run(self, core: Arc<Core>, _: &mut Mailbox<Infallible>, _: Life) -> Result<(), ActorError> {
+        keep_session(core, self.restart, self.stop).await;
+        Ok(())
+    }
+}
+
+/// The System page's state, every two seconds.
+struct SystemStatus;
+
+impl Supervised for SystemStatus {
+    type Ctx = Arc<Core>;
+    type Msg = Infallible;
+    const NAME: &'static str = "system";
+    const POLICY: Policy = Policy::Restart;
+
+    async fn start(_: &Arc<Core>) -> Result<Self, ActorError> {
+        Ok(SystemStatus)
+    }
+
+    async fn run(self, core: Arc<Core>, _: &mut Mailbox<Infallible>, life: Life) -> Result<(), ActorError> {
+        system_status(core, life).await;
+        Ok(())
+    }
+}
+
+/// The models' thread counts follow the settings (they were set when the models loaded).
+struct Threads;
+
+impl Supervised for Threads {
+    type Ctx = Arc<Core>;
+    type Msg = Infallible;
+    const NAME: &'static str = "threads";
+    const POLICY: Policy = Policy::Restart;
+
+    async fn start(_: &Arc<Core>) -> Result<Self, ActorError> {
+        Ok(Threads)
+    }
+
+    async fn run(self, core: Arc<Core>, _: &mut Mailbox<Infallible>, life: Life) -> Result<(), ActorError> {
+        follow_threads(core, life).await;
+        Ok(())
     }
 }
 
 /// The System page: models, queues, storage, connection (only computed while someone watches it).
-async fn system_status(core: Arc<Core>, started: jiff::Timestamp) {
+async fn system_status(core: Arc<Core>, life: Life) {
     let topic = pb_live_proto::Topic::System;
+    let started = core.started;
     loop {
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        tokio::select! {
+            () = tokio::time::sleep(Duration::from_secs(2)) => {}
+            () = life.cancel.cancelled() => return,
+        }
+        life.beat();
         if core.deps.hub.has(&topic) && !core.deps.hub.watched(&topic) {
             continue;
         }
@@ -604,8 +681,26 @@ async fn system_status(core: Arc<Core>, started: jiff::Timestamp) {
             },
             rooms: u32::try_from(core.rooms().len()).unwrap_or(u32::MAX),
             streams: u32::try_from(inf.vad_streams).unwrap_or(u32::MAX),
+            parts: core.sup.health().actors.into_iter().map(part_status).collect(),
         };
         core.live.system(state);
+    }
+}
+
+fn part_status(a: ActorHealth) -> pb_live_proto::PartStatus {
+    use pb_live_proto::PartState;
+    pb_live_proto::PartStatus {
+        name: a.name.to_owned(),
+        state: match a.state {
+            ActorState::Running => PartState::Running,
+            ActorState::Restarting { .. } => PartState::Restarting,
+            ActorState::NotAnswering => PartState::NotAnswering,
+            ActorState::Stopped => PartState::Stopped,
+            ActorState::Failed => PartState::Failed,
+        },
+        restarts: a.restarts,
+        waiting: a.queued,
+        error: a.last_error,
     }
 }
 
@@ -614,7 +709,7 @@ fn set(core: &Core, c: Connection) {
 }
 
 /// Keeps one Fluxer session running: no token → wait; bad token → wait for a new one; unreachable → try again.
-async fn supervise(core: Arc<Core>, mut restart: watch::Receiver<u64>, mut stop: watch::Receiver<bool>) {
+async fn keep_session(core: Arc<Core>, mut restart: watch::Receiver<u64>, mut stop: watch::Receiver<bool>) {
     let mut failures = 0u32;
     loop {
         if *stop.borrow() {
@@ -767,15 +862,19 @@ async fn supervise(core: Arc<Core>, mut restart: watch::Receiver<u64>, mut stop:
     }
 }
 
-/// The models' thread counts follow the settings (they were set when the models loaded).
-async fn follow_threads(core: Arc<Core>) {
+async fn follow_threads(core: Arc<Core>, life: Life) {
     let threads = |core: &Core| {
         let eff = core.settings.current().effective(None, None);
         (eff.cpu_threads.value.get(), eff.tts_threads.value.get())
     };
     let mut applied = threads(&core);
     let mut changed = core.settings.watch();
-    while changed.changed().await.is_ok() {
+    loop {
+        tokio::select! {
+            r = changed.changed() => if r.is_err() { return },
+            () = life.cancel.cancelled() => return,
+        }
+        life.beat();
         let (cpu, tts) = threads(&core);
         if cpu != applied.0
             && let Some(n) = std::num::NonZeroUsize::new(cpu as usize)

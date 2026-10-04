@@ -2,6 +2,7 @@
 //! message when an escalation step says so, and the daily or weekly summary. All text in the community's (or the owner's) chat language. Nothing
 //! is held back or capped; Fluxer's rate limits are waited out by the client.
 
+use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,6 +16,8 @@ use pb_settings::{Digest, EscalationStep};
 use pb_store_api::{ActionRecord, DecisionRecord, Event, MessagePurpose, MessageSent, SentenceRecord};
 
 use super::core::Core;
+use super::mailbox::Mailbox;
+use super::supervise::{ActorError, Life, Policy, Supervised};
 
 /// The chat language of a community (or the global one).
 pub fn locale(core: &Core, guild: Option<GuildId>) -> Locale {
@@ -265,11 +268,28 @@ fn weekday(w: pb_settings::Weekday) -> Weekday {
 }
 
 /// Sends the summary when one is due; checks every minute.
-pub async fn digest_scheduler(core: Arc<Core>) {
-    loop {
-        tokio::time::sleep(Duration::from_secs(60)).await;
-        if let Err(e) = digest_once(&core, false).await {
-            tracing::warn!(error = %e, "the summary report failed");
+pub(crate) struct DigestTimer;
+
+impl Supervised for DigestTimer {
+    type Ctx = Arc<Core>;
+    type Msg = Infallible;
+    const NAME: &'static str = "digest";
+    const POLICY: Policy = Policy::Restart;
+
+    async fn start(_: &Arc<Core>) -> Result<Self, ActorError> {
+        Ok(DigestTimer)
+    }
+
+    async fn run(self, core: Arc<Core>, _: &mut Mailbox<Infallible>, life: Life) -> Result<(), ActorError> {
+        loop {
+            tokio::select! {
+                () = tokio::time::sleep(Duration::from_secs(60)) => {}
+                () = life.cancel.cancelled() => return Ok(()),
+            }
+            life.beat();
+            if let Err(e) = digest_once(&core, false).await {
+                tracing::warn!(error = %e, "the summary report failed");
+            }
         }
     }
 }

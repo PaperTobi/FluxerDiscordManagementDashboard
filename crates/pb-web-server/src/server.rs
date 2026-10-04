@@ -213,20 +213,41 @@ fn render(st: &WebState) -> impl Fn(Request<Body>) -> std::pin::Pin<Box<dyn Futu
 /// For container health checks: the process serves and no model thread hangs (503 then: a restart helps). The Fluxer
 /// connection is reported but does not make it unhealthy (a missing or rejected token is fixed in the web UI, not by a
 /// restart).
+/// `GET /healthz`: 503 when a model thread hangs or a part of the engine failed or stopped answering (the service
+/// manager restarts the bot); "degraded" while a crashed part is being started again.
 async fn healthz(axum::extract::State(st): axum::extract::State<WebState>) -> Response {
     let fluxer = format!("{:?}", st.engine.connection());
-    match st.engine.stuck_model() {
-        None => {
-            axum::Json(serde_json::json!({"status": "ok", "version": st.version, "fluxer": fluxer})).into_response()
-        }
-        Some(model) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            axum::Json(
-                serde_json::json!({"status": "stuck", "model": model.name(), "version": st.version, "fluxer": fluxer}),
-            ),
-        )
-            .into_response(),
-    }
+    let health = st.engine.health();
+    let stuck = st.engine.stuck_model();
+    let parts: Vec<_> = health
+        .actors
+        .iter()
+        .map(|a| {
+            serde_json::json!({
+                "name": a.name,
+                "state": format!("{:?}", a.state),
+                "restarts": a.restarts,
+                "waiting": a.queued,
+                "error": a.last_error,
+            })
+        })
+        .collect();
+    let (code, status) = if stuck.is_some() || health.failing() {
+        (StatusCode::SERVICE_UNAVAILABLE, "failing")
+    } else if health.degraded() {
+        (StatusCode::OK, "degraded")
+    } else {
+        (StatusCode::OK, "ok")
+    };
+    let body = serde_json::json!({
+        "status": status,
+        "version": st.version,
+        "fluxer": fluxer,
+        "stuck_model": stuck.map(|m| m.name()),
+        "fatal": health.fatal.map(|f| f.to_string()),
+        "parts": parts,
+    });
+    (code, axum::Json(body)).into_response()
 }
 
 async fn not_found(axum::extract::State(st): axum::extract::State<WebState>, req: Request<Body>) -> Response {

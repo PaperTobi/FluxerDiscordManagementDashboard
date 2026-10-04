@@ -2,7 +2,7 @@
 
 use leptos::prelude::*;
 use pb_i18n::{Locale, text};
-use pb_live_proto::{FluxerState, Model, ModelProblem, Queue, SystemState, Topic, TopicState};
+use pb_live_proto::{FluxerState, Model, ModelProblem, PartState, Queue, SystemState, Topic, TopicState};
 
 use crate::fmt;
 
@@ -83,6 +83,39 @@ pub fn SystemLive(initial: SystemState, locale: Locale, csrf: String) -> impl In
                             <td class="num">{q.done}</td>
                             <td class="num">{fmt::ms(locale, q.oldest_ms)}</td>
                         </tr>
+                    }).collect_view()}
+                </tbody>
+            </table>
+            <h3>{t("ui-parts")}</h3>
+            <table class="rows">
+                <thead><tr><th></th><th></th><th class="num">{t("ui-restarts")}</th><th class="num">{t("ui-waiting")}</th></tr></thead>
+                <tbody>
+                    {move || state.with(|s| s.parts.clone()).into_iter().map(|p| {
+                        let name = match p.name.as_str() {
+                            "moderation" => t("ui-part-moderation"),
+                            "undo" => t("ui-part-undo"),
+                            "digest" => t("ui-part-digest"),
+                            "threads" => t("ui-part-threads"),
+                            "views" => t("ui-part-views"),
+                            "gateway" => t("ui-part-gateway"),
+                            "system" => t("ui-part-system"),
+                            other => other.to_owned(),
+                        };
+                        let (label, class) = match p.state {
+                            PartState::Running => (t("ui-part-running"), "ok"),
+                            PartState::Restarting => (t("ui-part-restarting"), "warn"),
+                            PartState::NotAnswering => (t("ui-part-not-answering"), "bad"),
+                            PartState::Stopped => (t("ui-part-stopped"), "muted"),
+                            PartState::Failed => (t("ui-part-failed"), "bad"),
+                        };
+                        view! {
+                            <tr title=p.error.unwrap_or_default()>
+                                <td>{name}</td>
+                                <td><span class=format!("chip {class}")>{label}</span></td>
+                                <td class="num">{p.restarts}</td>
+                                <td class="num">{p.waiting}</td>
+                            </tr>
+                        }
                     }).collect_view()}
                 </tbody>
             </table>

@@ -15,7 +15,9 @@ use super::audio_cache::AudioCache;
 use super::deps::Deps;
 use super::guilds::Guilds;
 use super::live::Live;
+use super::mailbox::Addr;
 use super::settings::SettingsService;
+use super::supervise::Supervisor;
 
 /// Something to say in a call.
 #[derive(Debug)]
@@ -104,13 +106,13 @@ pub struct Core {
     pub speech: Mutex<AudioCache<SpeechKey>>,
     /// Decoded clip renders.
     pub clip_pcm: Mutex<AudioCache<BlobHash>>,
-    pub moderation: mpsc::UnboundedSender<super::moderation::ModMsg>,
+    pub moderation: Addr<super::moderation::ModMsg>,
     /// Who is in which voice channel (kept by the control actor).
     pub(super) voice: Snapshot<pb_policy::VoiceWorld>,
     /// Swear-jar counts (seeded from the index, kept current by the moderation actor).
     pub jar: Mutex<HashMap<(GuildId, UserId), u64>>,
     /// Timed mutes to lift (to the undo scheduler).
-    pub undo: mpsc::UnboundedSender<pb_store_api::ActionRecord>,
+    pub undo: Addr<pb_store_api::ActionRecord>,
     /// The clip played last per person and line (not repeated next time).
     pub no_repeat: Mutex<pb_voicelines::NoRepeat>,
     /// People whose microphone the bot listens to now.
@@ -127,6 +129,13 @@ pub struct Core {
     pub connection: watch::Sender<Login>,
     /// The application's registered OAuth2 redirect addresses, and when Fluxer was last asked.
     pub redirects: Mutex<(Option<tokio::time::Instant>, Vec<String>)>,
+    /// Runs the long-lived actors.
+    pub(super) sup: Supervisor,
+    /// Asks the gateway actor to log in again (the attempt number).
+    pub(super) restart: watch::Sender<u64>,
+    /// Tells the gateway actor to stop.
+    pub(super) stop: watch::Sender<bool>,
+    pub(super) started: jiff::Timestamp,
 }
 
 impl std::fmt::Debug for Core {
@@ -163,6 +172,13 @@ pub(super) fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl Core {
+    /// Waits until the index holds every event logged so far (it applies them in the background).
+    pub async fn index_caught_up(&self) {
+        if let Some(head) = self.deps.log.head() {
+            self.deps.index.caught_up(head.seq).await;
+        }
+    }
+
     /// The communities as last seen (a snapshot).
     pub fn guilds(&self) -> Arc<Guilds> {
         self.guilds.get()

@@ -13,9 +13,10 @@ use pb_policy::{Chan, ClearReason, DecideInput, Decider, Decision, Violations};
 use pb_settings::Recordings;
 use pb_store_api::{BlobAdded, BlobRole, CutCause, DecisionRecord, Event, SentenceRecord, SentenceSource};
 use pb_voicelines::{Field, Fields, Line, Sel};
-use tokio::sync::mpsc;
 
 use super::core::{Core, PlayItem, RoomHandle};
+use super::mailbox::Mailbox;
+use super::supervise::{ActorError, Life, Policy, Supervised};
 
 /// A sentence after the classifier.
 #[derive(Debug)]
@@ -40,8 +41,6 @@ pub struct Heard {
 #[derive(Debug)]
 pub enum ModMsg {
     Heard(Box<Heard>),
-    /// Violations from before this start (for the escalation counts): when they happened.
-    Seed(Vec<(GuildId, UserId, Timestamp)>),
     /// The swear jar was emptied.
     JarReset(GuildId, UserId),
     /// A person's counts now (for their page).
@@ -93,26 +92,53 @@ fn model_name(core: &Core) -> String {
     core.deps.inference.classifier_info().model.clone()
 }
 
-pub async fn run(core: Arc<Core>, mut rx: mpsc::UnboundedReceiver<ModMsg>) {
-    let mut decider = Decider::default();
-    let mut violations = Violations::default();
-    while let Some(msg) = rx.recv().await {
-        match msg {
-            ModMsg::Seed(list) => {
-                let (mono, now) = (core.deps.clock.mono(), core.deps.clock.now());
-                for (g, u, t) in list {
-                    let ago = now.duration_since(t).as_secs_f64().max(0.0);
-                    violations.seed(g, u, mono - ago);
+/// Decides every scored sentence, in order.
+pub(crate) struct Moderation {
+    decider: Decider,
+    violations: Violations,
+}
+
+impl Supervised for Moderation {
+    type Ctx = Arc<Core>;
+    type Msg = ModMsg;
+    const NAME: &'static str = "moderation";
+    const POLICY: Policy = Policy::Restart;
+
+    /// Every violation so far, for the escalation counts: any community or person may count over any window, and
+    /// windows can be lengthened later (one number per violation). Strikes start over, as after a restart of the bot.
+    async fn start(core: &Arc<Core>) -> Result<Self, ActorError> {
+        core.index_caught_up().await;
+        let mut violations = Violations::default();
+        let (mono, now) = (core.deps.clock.mono(), core.deps.clock.now());
+        for (g, u, t) in core.deps.index.violation_times().await? {
+            let ago = now.duration_since(t).as_secs_f64().max(0.0);
+            violations.seed(g, u, mono - ago);
+        }
+        Ok(Moderation {
+            decider: Decider::default(),
+            violations,
+        })
+    }
+
+    async fn run(mut self, core: Arc<Core>, mb: &mut Mailbox<ModMsg>, life: Life) -> Result<(), ActorError> {
+        loop {
+            let msg = tokio::select! {
+                m = mb.recv() => match m {
+                    Some(m) => m,
+                    None => return Ok(()),
+                },
+                () = life.cancel.cancelled() => return Ok(()),
+            };
+            match msg {
+                ModMsg::JarReset(g, u) => {
+                    if let Ok(mut j) = core.jar.lock() {
+                        j.insert((g, u), 0);
+                    }
                 }
-            }
-            ModMsg::JarReset(g, u) => {
-                if let Ok(mut j) = core.jar.lock() {
-                    j.insert((g, u), 0);
+                ModMsg::Heard(h) => decide(&core, &mut self.decider, &mut self.violations, *h).await,
+                ModMsg::Counts(g, u, reply) => {
+                    let _ = reply.send(counts(&core, &self.violations, g, u));
                 }
-            }
-            ModMsg::Heard(h) => decide(&core, &mut decider, &mut violations, *h).await,
-            ModMsg::Counts(g, u, reply) => {
-                let _ = reply.send(counts(&core, &violations, g, u));
             }
         }
     }

@@ -222,8 +222,14 @@ async fn run(data: &Path, cfg: Config) -> Result<(), Fail> {
     tracing::info!(addr = %cfg.web.bind, https = cfg.web.tls.is_some(), "web UI listening");
     let web = tokio::spawn(pb_web_server::serve(state, listener));
 
-    signals(&engine).await;
-    tracing::info!("stopping");
+    let fatal = tokio::select! {
+        () = signals(&engine) => None,
+        f = engine.fatal() => Some(f),
+    };
+    match &fatal {
+        Some(f) => tracing::error!(error = %f, "stopping: a part of the bot failed for good (it is started again)"),
+        None => tracing::info!("stopping"),
+    }
     let _ = stop_tx.send(true);
     match tokio::time::timeout(Duration::from_secs(10), web).await {
         Ok(Ok(Err(e))) => tracing::warn!(error = %e, "the web server stopped with an error"),
@@ -231,9 +237,16 @@ async fn run(data: &Path, cfg: Config) -> Result<(), Fail> {
         _ => {}
     }
     engine.shutdown().await;
-    inference.shutdown();
+    // The model threads are joined off the async threads.
+    let models = tokio::task::spawn_blocking(move || inference.shutdown());
+    if tokio::time::timeout(Duration::from_secs(5), models).await.is_err() {
+        tracing::warn!("the model threads did not stop within 5 s");
+    }
     tracing::info!("stopped");
-    Ok(())
+    match fatal {
+        Some(f) => Err(Fail(Exit::Internal, f.to_string())),
+        None => Ok(()),
+    }
 }
 
 /// Waits for SIGTERM or Ctrl-C; SIGHUP reads the settings and voice files again on the way.

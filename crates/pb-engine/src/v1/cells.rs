@@ -3,6 +3,7 @@
 //! ([`Cells`] is the hub's cell source) and rebuilt a few times a second while something changed.
 
 use std::collections::{BTreeSet, VecDeque};
+use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -18,7 +19,9 @@ use pb_store_api::{SentenceFilter, SentenceKind};
 
 use super::core::Core;
 use super::live::{person_topic, summary};
+use super::mailbox::Mailbox;
 use super::moderation::decision_view;
+use super::supervise::{ActorError, Life, Policy, Supervised};
 
 /// What changed since the last rebuild.
 #[derive(Debug, Default)]
@@ -335,15 +338,45 @@ async fn load_recent(core: &Core, g: GuildId, u: UserId) {
 }
 
 /// Rebuilds what changed, four times a second.
-pub async fn refresh(core: Arc<Core>) {
-    let mut sidebar_known: BTreeSet<GuildId> = BTreeSet::new();
-    let mut wall_tiles: BTreeSet<(GuildId, UserId)> = BTreeSet::new();
-    let mut swept = tokio::time::Instant::now();
-    loop {
-        tokio::time::sleep(Duration::from_millis(250)).await;
+pub(crate) struct Views {
+    sidebar_known: BTreeSet<GuildId>,
+    wall_tiles: BTreeSet<(GuildId, UserId)>,
+    swept: tokio::time::Instant,
+}
+
+impl Supervised for Views {
+    type Ctx = Arc<Core>;
+    type Msg = Infallible;
+    const NAME: &'static str = "views";
+    const POLICY: Policy = Policy::Restart;
+
+    /// Everything is built afresh (after a crash too).
+    async fn start(core: &Arc<Core>) -> Result<Self, ActorError> {
+        core.mark_all();
+        Ok(Views {
+            sidebar_known: BTreeSet::new(),
+            wall_tiles: BTreeSet::new(),
+            swept: tokio::time::Instant::now(),
+        })
+    }
+
+    async fn run(mut self, core: Arc<Core>, _: &mut Mailbox<Infallible>, life: Life) -> Result<(), ActorError> {
+        loop {
+            tokio::select! {
+                () = tokio::time::sleep(Duration::from_millis(250)) => {}
+                () = life.cancel.cancelled() => return Ok(()),
+            }
+            life.beat();
+            self.refresh(&core);
+        }
+    }
+}
+
+impl Views {
+    fn refresh(&mut self, core: &Arc<Core>) {
         // Person views nobody watches any more go (they are built again when someone opens one).
-        if swept.elapsed() > Duration::from_secs(60) {
-            swept = tokio::time::Instant::now();
+        if self.swept.elapsed() > Duration::from_secs(60) {
+            self.swept = tokio::time::Instant::now();
             core.live.hub.drop_unwatched(|t| !matches!(t, Topic::Person { .. }));
         }
         let d = core
@@ -351,20 +384,20 @@ pub async fn refresh(core: Arc<Core>) {
             .lock()
             .map(|mut d| std::mem::take(&mut *d))
             .unwrap_or_default();
-        let guilds: BTreeSet<GuildId> = if d.all { communities(&core) } else { d.guilds.clone() };
+        let guilds: BTreeSet<GuildId> = if d.all { communities(core) } else { d.guilds.clone() };
         // The sidebar: communities appear, change and go.
-        let now = communities(&core);
-        for g in guilds.iter().chain(now.difference(&sidebar_known)) {
+        let now = communities(core);
+        for g in guilds.iter().chain(now.difference(&self.sidebar_known)) {
             if now.contains(g) {
                 core.live.sidebar(SidebarDelta::Community {
-                    community: sidebar_community(&core, *g),
+                    community: sidebar_community(core, *g),
                 });
             }
         }
-        for g in sidebar_known.difference(&now) {
+        for g in self.sidebar_known.difference(&now) {
             core.live.sidebar(SidebarDelta::CommunityGone { guild: *g });
         }
-        sidebar_known = now;
+        self.sidebar_known = now;
         // Community pages that are open.
         for g in &guilds {
             let t = Topic::Guild { guild: *g };
@@ -372,7 +405,7 @@ pub async fn refresh(core: Arc<Core>) {
                 core.live.hub.publish(
                     &t,
                     pb_live_proto::TopicDelta::Guild(GuildDelta::View {
-                        view: Box::new(guild_state(&core, *g)),
+                        view: Box::new(guild_state(core, *g)),
                     }),
                 );
             }
@@ -389,30 +422,30 @@ pub async fn refresh(core: Arc<Core>) {
                     g,
                     u,
                     PersonDelta::Presence {
-                        presence: presence(&core, g, u),
+                        presence: presence(core, g, u),
                     },
                 );
                 core.live.person(
                     g,
                     u,
                     PersonDelta::Tracking {
-                        tracking: tracking(&core, g, u),
+                        tracking: tracking(core, g, u),
                     },
                 );
-                core.live.person(g, u, PersonDelta::Who { who: who(&core, g, u) });
+                core.live.person(g, u, PersonDelta::Who { who: who(core, g, u) });
                 let eff = core.settings.current().effective(Some(g), Some(u));
                 core.live.person(g, u, PersonDelta::Summary { summary: summary(&eff) });
             }
         }
         // The wall: one tile per person the bot listens to.
         let listening: BTreeSet<(GuildId, UserId)> = core.listening.lock().map(|l| l.clone()).unwrap_or_default();
-        for (g, u) in listening.difference(&wall_tiles) {
+        for (g, u) in listening.difference(&self.wall_tiles) {
             let channel = core.voice().of_user(*u).find(|v| v.guild == *g).map(|v| v.channel);
             let Some(channel) = channel else { continue };
             let tile = pb_live_proto::Tile {
                 guild: *g,
                 community: core.guilds().guild_name(*g),
-                who: who(&core, *g, *u),
+                who: who(core, *g, *u),
                 channel: ChannelRef {
                     id: channel,
                     name: core.guilds().channel_name(*g, channel),
@@ -423,9 +456,9 @@ pub async fn refresh(core: Arc<Core>) {
             };
             core.live.wall(WallDelta::Tile { tile: Box::new(tile) });
         }
-        for (g, u) in wall_tiles.difference(&listening) {
+        for (g, u) in self.wall_tiles.difference(&listening) {
             core.live.wall(WallDelta::TileGone { guild: *g, user: *u });
         }
-        wall_tiles = listening;
+        self.wall_tiles = listening;
     }
 }
