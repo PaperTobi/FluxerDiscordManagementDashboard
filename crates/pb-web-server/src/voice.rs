@@ -42,7 +42,7 @@ fn line_of(f: &Fields) -> Option<LineKey> {
 }
 
 /// `POST /voice-lines`: `op` = `set_text` (lang, text), `remove_text` (lang), `add_clip` (clip), `remove_clip`
-/// (clip), `clear`.
+/// (clip), `clear` (after a confirmation).
 pub async fn edit(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
     let s = match st.sender(&headers, &f) {
         Ok(s) => s,
@@ -61,6 +61,9 @@ pub async fn edit(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<
     let lang = field(&f, "lang").and_then(|l| l.parse::<Lang>().ok());
     let clip = field(&f, "clip").and_then(|c| c.parse::<BlobHash>().ok());
     let op = field(&f, "op").unwrap_or_default().to_owned();
+    if op == "clear" && !confirmed(&f) {
+        return ask_first("line-clear", &f, &["scope", "line"]);
+    }
     if op == "add_clip" && clip.is_none_or(|c| st.engine.clip(&c).is_none()) {
         return st.done(&s, &f, false, text(loc, "ui-no-such-clip", &[]));
     }

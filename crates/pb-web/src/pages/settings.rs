@@ -39,7 +39,7 @@ pub fn parse_scope(s: &str) -> Option<Scope> {
     }
 }
 
-fn source_id(s: Source) -> &'static str {
+pub(crate) fn source_id(s: Source) -> &'static str {
     match s {
         Source::Person => "source-person",
         Source::Server => "source-server",
@@ -455,7 +455,7 @@ const WORKS_WITH: &[(SettingKey, SettingKey)] = &[
 ];
 
 /// A value as a short text for people (a channel by its name, nothing as "not set").
-fn value_label(key: SettingKey, guild: Option<pb_domain::GuildId>, value: &Value, loc: Locale) -> String {
+pub(crate) fn value_label(key: SettingKey, guild: Option<pb_domain::GuildId>, value: &Value, loc: Locale) -> String {
     match (key.meta().kind, value) {
         (_, Value::Null) => text(loc, "ui-not-set", &[]),
         (_, Value::String(s)) if s.is_empty() => text(loc, "ui-not-set", &[]),

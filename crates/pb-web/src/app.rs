@@ -300,6 +300,7 @@ fn Page(children: Children) -> impl IntoView {
                     <span class="name">{v.name.clone()}</span>
                     <form method="post" action="/auth/logout" class="row">
                         <input type="hidden" name="csrf" value=v.csrf.clone()/>
+                        <input type="hidden" name="back" value=path.clone()/>
                         <button class="link">{text(loc, "ui-nav-logout", &[])}</button>
                         <button class="link muted" name="everywhere" value="1" title=text(loc, "ui-logout-everywhere-help", &[])>
                             {text(loc, "ui-logout-everywhere", &[])}

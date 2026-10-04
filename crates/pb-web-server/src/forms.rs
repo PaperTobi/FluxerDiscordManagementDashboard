@@ -217,6 +217,13 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
         return st.done(&s, &f, false, text(loc, "ui-not-allowed", &[]));
     }
     let clear = field(&f, "action") == Some("clear");
+    // Going back to the inherited value of the System section (the instance, the web UI's address) or of a whole list
+    // is asked first: one click could cut the bot off or empty the list.
+    let weighty = (pb_web::pages::settings::kept_by_reset(key) && key != SettingKey::Paused)
+        || matches!(key.meta().kind, FieldKind::Ids { .. });
+    if clear && weighty && !confirmed(&f) {
+        return ask_first("setting-clear", &f, &["scope", "key"]);
+    }
     let value = match key.meta().kind {
         FieldKind::Escalation => escalation_json(&f),
         FieldKind::Voices | FieldKind::LineVoices => voices_json(&f),

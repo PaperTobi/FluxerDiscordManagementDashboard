@@ -1952,3 +1952,106 @@ async fn a_saved_or_refused_setting_says_so_next_to_it() {
     );
     w.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn resetting_a_line_the_connection_or_logging_out_everywhere_asks_first() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let scope = format!("server:{G}");
+    // A voice line's own texts and clips.
+    let line = |op: &'static str, confirm: bool| {
+        let mut f = vec![
+            ("csrf", csrf.clone()),
+            ("scope", scope.clone()),
+            ("line", "greeting".to_owned()),
+            ("op", op.to_owned()),
+            ("back", format!("/c/{G}/voice-lines")),
+        ];
+        if op == "set_text" {
+            f.extend([("lang", "en".to_owned()), ("text", "Hello {name}".to_owned())]);
+        }
+        if confirm {
+            f.push(("confirm", "1".to_owned()));
+        }
+        f
+    };
+    let post = async |path: &str, form: Vec<(&'static str, String)>| {
+        let f: Vec<(&str, &str)> = form.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        w.post(path, Some(&owner), &f).await
+    };
+    post("/voice-lines", line("set_text", false)).await;
+    let greeting = || {
+        w.engine
+            .settings()
+            .current()
+            .voice_lines(pb_domain::Scope::Server { guild: GuildId(G) })
+            .and_then(|s| s.get(&"greeting".parse().unwrap()).cloned())
+    };
+    assert!(greeting().is_some());
+    let r = post("/voice-lines", line("clear", false)).await;
+    let to = r.location.clone().unwrap();
+    assert!(to.starts_with("/confirm?what=line-clear&"), "{to}");
+    let page = w.get(&to, Some(&owner)).await.body;
+    assert!(page.contains("Remove the own clips and texts of “Greeting”?"), "{page}");
+    assert!(
+        page.contains("The line loses its 0 clips and its text in Alpha."),
+        "{page}"
+    );
+    assert!(greeting().is_some());
+    post("/voice-lines", line("clear", true)).await;
+    assert!(greeting().is_none());
+    // The Fluxer instance: what it goes back to, and that the bot reconnects.
+    let r = post(
+        "/settings",
+        vec![
+            ("csrf", csrf.clone()),
+            ("scope", "global".to_owned()),
+            ("key", "instance".to_owned()),
+            ("action", "clear".to_owned()),
+            ("back", "/system".to_owned()),
+        ],
+    )
+    .await;
+    let to = r.location.clone().unwrap();
+    assert!(
+        to.starts_with("/confirm?what=setting-clear&scope=global&key=instance"),
+        "{to}"
+    );
+    let page = w.get(&to, Some(&owner)).await.body;
+    assert!(
+        page.contains("https://api.fluxer.app") && page.contains("connects to Fluxer again"),
+        "{page}"
+    );
+    assert!(
+        setting(&w, pb_domain::Scope::Global, "instance").is_some(),
+        "unchanged until confirmed"
+    );
+    // Logging out on all devices.
+    let r = w
+        .post(
+            "/auth/logout",
+            Some(&owner),
+            &[("csrf", &csrf), ("everywhere", "1"), ("back", "/system")],
+        )
+        .await;
+    let to = r.location.clone().unwrap();
+    assert_eq!(to, "/confirm?what=logout-all&back=%2Fsystem");
+    assert!(
+        w.get("/", Some(&owner)).await.body.contains("class=\"sidebar\""),
+        "still logged in"
+    );
+    let page = w.get(&to, Some(&owner)).await.body;
+    assert!(page.contains("Log out on all devices?"), "{page}");
+    w.post(
+        "/auth/logout",
+        Some(&owner),
+        &[("csrf", &csrf), ("everywhere", "1"), ("confirm", "1")],
+    )
+    .await;
+    assert!(
+        !w.get("/", Some(&owner)).await.body.contains("class=\"sidebar\""),
+        "logged out"
+    );
+    w.stop().await;
+}

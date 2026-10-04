@@ -303,7 +303,7 @@ ui-track-the-bot = Der Bot verfolgt sich nicht selbst.
 ui-tracked-everywhere = { $name } wird in jeder Community verfolgt; das beendet der Besitzer auf der Seite der Person oder auf der Systemseite.
 ui-digest-last-sent = Der letzte Bericht hat den Besitzer erreicht (er reichte bis { $when }).
 ui-digest-failed = Der letzte Bericht konnte nicht zugestellt werden: { $error }. Fluxer lehnt Direktnachrichten ab, wenn der Besitzer sie von Bots nicht annimmt; „Bericht jetzt senden“ versucht es erneut.
-ui-logout-everywhere = überall
+ui-logout-everywhere = Auf allen Geräten abmelden
 ui-logout-everywhere-help = Auf allen Geräten abmelden (wenn eine Anmeldung in falsche Hände geraten sein könnte).
 ui-permissions-help = Fehlende Berechtigungen gibt man der Rolle des Bots in den Community-Einstellungen von Fluxer (Rollen), oder für einen Kanal in dessen Berechtigungen.
 ui-say-own-text = Text
@@ -491,3 +491,18 @@ ui-vl-uses = nutzt „{ $line }“ ({ $from })
 
 ## Was Speichern bewirkt hat
 ui-saved-what = Gespeichert: { $what }.
+
+## Weitere Rückfragen
+ui-confirm-line-clear = Die eigenen Clips und Texte von „{ $line }“ entfernen?
+ui-confirm-line-clear-what = Der Sprachtext verliert { $where } { $clips ->
+        [one] seinen Clip
+       *[other] seine { $clips } Clips
+    } und { $texts ->
+        [one] seinen Text
+       *[other] seine { $texts } Texte
+    }. Der Bot sagt dann, was der Sprachtext weiter oben sagt (oder den eingebauten Text).
+ui-confirm-setting-clear = „{ $setting }“ zurücksetzen?
+ui-confirm-setting-clear-what = Es gilt wieder { $value } ({ $from }).
+ui-confirm-setting-clear-reconnect = Der Bot verbindet sich damit neu mit Fluxer.
+ui-confirm-logout-all = Auf allen Geräten abmelden?
+ui-confirm-logout-all-what = Jede deiner Anmeldungen endet, auf jedem Gerät, auch diese. Nutze das, wenn jemand eine Anmeldung übernommen haben könnte.

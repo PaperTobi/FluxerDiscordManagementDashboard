@@ -283,15 +283,28 @@ pub async fn callback(State(st): State<WebState>, headers: HeaderMap, Query(q): 
 pub struct LogoutForm {
     #[serde(default)]
     csrf: String,
-    /// Ends every login of this person (on every device), not just this one.
+    /// Ends every login of this person (on every device), not just this one (after a confirmation).
     #[serde(default)]
     everywhere: Option<String>,
+    #[serde(default)]
+    confirm: Option<String>,
+    /// The page to go back to when the confirmation is cancelled.
+    #[serde(default)]
+    back: Option<String>,
 }
 
 /// `POST /auth/logout`
 pub async fn logout(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<LogoutForm>) -> Response {
     match st.sessions.lookup(&headers) {
         Some(s) if st.sessions.csrf_ok(&s.key, &f.csrf) => {
+            if f.everywhere.is_some() && f.confirm.as_deref() != Some("1") {
+                let back = safe_next(f.back.as_deref());
+                let to = format!(
+                    "/confirm?what=logout-all&back={}",
+                    url::form_urlencoded::byte_serialize(back.as_bytes()).collect::<String>()
+                );
+                return redirect_with(&to, vec![]);
+            }
             if f.everywhere.is_some() {
                 st.sessions.remove_user(s.record.user).await;
             } else {

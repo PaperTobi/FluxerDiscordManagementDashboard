@@ -303,7 +303,7 @@ ui-track-the-bot = The bot does not track itself.
 ui-tracked-everywhere = { $name } is tracked in every community; the owner stops that on their page or on the System page.
 ui-digest-last-sent = The last report reached the owner (it covered the time up to { $when }).
 ui-digest-failed = The last report could not be delivered: { $error }. Fluxer refuses direct messages when the owner does not accept them from bots; “Send the report now” tries again.
-ui-logout-everywhere = everywhere
+ui-logout-everywhere = Log out on all devices
 ui-logout-everywhere-help = Log out on every device (when a login may have been taken over).
 ui-permissions-help = Missing permissions are given to the bot's role in Fluxer's community settings (Roles), or for one channel in its permissions.
 ui-say-own-text = Text
@@ -491,3 +491,18 @@ ui-vl-uses = uses “{ $line }” ({ $from })
 
 ## What a save did
 ui-saved-what = Saved: { $what }.
+
+## More confirmations
+ui-confirm-line-clear = Remove the own clips and texts of “{ $line }”?
+ui-confirm-line-clear-what = The line loses { $clips ->
+        [one] its clip
+       *[other] its { $clips } clips
+    } and { $texts ->
+        [one] its text
+       *[other] its { $texts } texts
+    } { $where }. The bot then says what the line says further up (or the built-in text).
+ui-confirm-setting-clear = Reset “{ $setting }”?
+ui-confirm-setting-clear-what = It goes back to { $value } ({ $from }).
+ui-confirm-setting-clear-reconnect = The bot connects to Fluxer again with it.
+ui-confirm-logout-all = Log out on all devices?
+ui-confirm-logout-all-what = Every login of yours ends, on every device, this one too. Use this when a login may have been taken over.

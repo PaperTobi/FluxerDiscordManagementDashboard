@@ -1,5 +1,6 @@
 //! `/confirm`: "Really …?" before something that cannot be undone: deleting a recording, removing a clip a voice line
-//! uses, no longer tracking someone, emptying a swear jar, resetting every setting at a scope. A form that does one of
+//! uses, no longer tracking someone, emptying a swear jar, resetting every setting at a scope, removing a voice line's
+//! own clips and texts, resetting what keeps the bot connected or a whole list, logging out on all devices. A form that does one of
 //! these (or takes an entry off a list in the settings) and arrives without `confirm=1` sends the browser here (with what it is about, not its token); this page says
 //! what will happen and sends the same form again, confirmed. No scripts needed.
 
@@ -48,6 +49,21 @@ pub fn ConfirmPage() -> impl IntoView {
         "untrack" => guild_user().map(|(g, u)| untrack(&v, g, u)),
         "clip" => get("clip").parse::<BlobHash>().ok().and_then(|h| clip(&v, h)),
         "reset" => super::settings::parse_scope(&get("scope")).and_then(|s| reset(&v, s)),
+        "line-clear" => match (
+            super::settings::parse_scope(&get("scope")),
+            get("line").parse::<pb_voicelines::LineKey>().ok(),
+        ) {
+            (Some(s), Some(k)) => line_clear(&v, s, k),
+            _ => None,
+        },
+        "setting-clear" => match (
+            super::settings::parse_scope(&get("scope")),
+            get("key").parse::<SettingKey>().ok(),
+        ) {
+            (Some(s), Some(k)) => setting_clear(&v, s, k),
+            _ => None,
+        },
+        "logout-all" => Some(logout_all(&v)),
         "list-remove" => match (
             super::settings::parse_scope(&get("scope")),
             get("key").parse::<SettingKey>().ok(),
@@ -326,4 +342,95 @@ fn list_remove(v: &Viewer, scope: Scope, key: SettingKey, id: u64) -> Option<Ask
         ],
         button: text(loc, "ui-remove", &[]),
     })
+}
+
+/// May this login change things at `scope`?
+fn may_change(v: &Viewer, scope: Scope) -> bool {
+    match scope {
+        Scope::Global => v.owner,
+        Scope::Server { guild } | Scope::Person { guild, .. } => v.may_see(guild),
+    }
+}
+
+fn line_clear(v: &Viewer, scope: Scope, key: pb_voicelines::LineKey) -> Option<Ask> {
+    let loc = v.locale;
+    if !may_change(v, scope) {
+        return None;
+    }
+    let tree = app().engine.settings().current();
+    let slot = tree.voice_lines(scope)?.get(&key)?.clone();
+    let line = super::voicelines::line_title(loc, &key.0);
+    Some(Ask {
+        title: text(loc, "ui-confirm-line-clear", &[("line", line.into())]),
+        body: vec![text(
+            loc,
+            "ui-confirm-line-clear-what",
+            &[
+                ("where", scope_where(loc, scope).into()),
+                ("clips", slot.clips.len().into()),
+                ("texts", slot.text.len().into()),
+            ],
+        )],
+        list: Vec::new(),
+        action: "/voice-lines",
+        fields: vec![
+            ("scope", scope_param(scope)),
+            ("line", key.to_string()),
+            ("op", "clear".to_owned()),
+        ],
+        button: text(loc, "ui-use-inherited", &[]),
+    })
+}
+
+fn setting_clear(v: &Viewer, scope: Scope, key: SettingKey) -> Option<Ask> {
+    let loc = v.locale;
+    if !may_change(v, scope) || (key.who() == pb_settings::Who::Owner && !v.owner) {
+        return None;
+    }
+    // The value it goes back to: the settings as they would be without it.
+    let mut without = app().engine.settings().current().tree().clone();
+    without.clear(scope, key, true).ok()?;
+    let (value, source) = super::settings::effective_value(&without, scope, key);
+    let mut body = vec![text(
+        loc,
+        "ui-confirm-setting-clear-what",
+        &[
+            (
+                "value",
+                super::settings::value_label(key, scope.guild(), &value, loc).into(),
+            ),
+            ("from", text(loc, super::settings::source_id(source), &[]).into()),
+        ],
+    )];
+    if key.apply() == pb_settings::Apply::Reconnect {
+        body.push(text(loc, "ui-confirm-setting-clear-reconnect", &[]));
+    }
+    Some(Ask {
+        title: text(
+            loc,
+            "ui-confirm-setting-clear",
+            &[("setting", setting_name(loc, key).into())],
+        ),
+        body,
+        list: Vec::new(),
+        action: "/settings",
+        fields: vec![
+            ("scope", scope_param(scope)),
+            ("key", key.name()),
+            ("action", "clear".to_owned()),
+        ],
+        button: text(loc, "ui-use-inherited", &[]),
+    })
+}
+
+fn logout_all(v: &Viewer) -> Ask {
+    let loc = v.locale;
+    Ask {
+        title: text(loc, "ui-confirm-logout-all", &[]),
+        body: vec![text(loc, "ui-confirm-logout-all-what", &[])],
+        list: Vec::new(),
+        action: "/auth/logout",
+        fields: vec![("everywhere", "1".to_owned())],
+        button: text(loc, "ui-logout-everywhere", &[]),
+    }
 }
