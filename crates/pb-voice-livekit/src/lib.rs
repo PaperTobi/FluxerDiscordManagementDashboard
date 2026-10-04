@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn reads_fluxer_participant_names() {
         let id = identity_named("user_1234567890123456789_abc_def");
-        assert_eq!(id.user(), Some(pb_domain::UserId(1_521_205_242_656_456_704)));
+        assert_eq!(id.user(), Some(pb_domain::UserId(1_234_567_890_123_456_789)));
         assert_eq!(id.person.map(|(_, c)| c.0).as_deref(), Some("abc_def"));
         for other in ["bot", "user_", "user_12", "user_12_", "user_x_1"] {
             assert_eq!(identity_named(other).person, None, "{other}");

@@ -144,7 +144,7 @@ mod tests {
     #[test]
     fn ids_round_trip_as_strings() {
         let id: UserId = "1234567890123456789".parse().expect("valid id");
-        assert_eq!(id.get(), 1_521_205_242_656_456_704);
+        assert_eq!(id.get(), 1_234_567_890_123_456_789);
         let json = serde_json::to_string(&id).expect("serialise");
         assert_eq!(json, "\"1234567890123456789\"");
         assert_eq!(serde_json::from_str::<UserId>(&json).expect("deserialise"), id);

@@ -14,8 +14,8 @@ It runs as one program (best in one **Podman** container, as an ordinary user), 
 and voices are downloaded once, pinned to upstream revisions and checked against their SHA-256; nothing is downloaded
 while the bot runs. Everything it keeps is in one data directory.
 
-The bot is written in Rust. The Python version it replaces is in this repository's history (its last commit is
-`f809129`); its data can be imported (see *Moving from the Python bot*).
+The bot is written in Rust. It replaces an earlier Python bot, whose data can be imported (see *Moving from the Python
+bot*).
 
 - [Requirements](#requirements)
 - [1. Create the bot in Fluxer](#1-create-the-bot-in-fluxer)
