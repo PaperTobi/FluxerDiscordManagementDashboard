@@ -1,9 +1,19 @@
 # Rust build output (also the espeak-ng build, the browser bundle and downloaded weights)
 target/
+*.rs.bk
+*.profraw
+lcov.info
 
 # runtime data and logs
 data/
 *.log
+*.db-shm
+*.db-wal
+
+# local config and secrets (the bot is configured in the web UI; never commit tokens)
+.env
+.env.*
+*.env
 
 # model weights and other large downloads
 *.safetensors
@@ -12,3 +22,18 @@ data/
 
 # the Rust tests' golden data is small and part of the source
 !crates/*/tests/golden/*.safetensors
+
+# editors, OS files and temporary files
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# leftovers of other toolchains
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/

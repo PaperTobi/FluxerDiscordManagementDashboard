@@ -5,3 +5,10 @@ data/
 *.log
 *.part
 *.onnx
+.git/
+.env
+.env.*
+.idea/
+.vscode/
+*.swp
+.DS_Store
