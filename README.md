@@ -61,7 +61,7 @@ cd profanity-watch
 podman build -t profanity-watch .
 podman volume create profanity-watch-data
 
-podman run -d --name profanity-watch --restart=unless-stopped \
+podman run -d --name profanity-watch --restart=unless-stopped --stop-timeout=30 \
   -p 8790:8790 \
   --read-only --cap-drop=ALL --security-opt no-new-privileges \
   -v profanity-watch-data:/data:U \

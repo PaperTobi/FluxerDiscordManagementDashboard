@@ -231,9 +231,10 @@ async fn run(data: &Path, cfg: Config) -> Result<(), Fail> {
         None => tracing::info!("stopping"),
     }
     let _ = stop_tx.send(true);
-    match tokio::time::timeout(Duration::from_secs(10), web).await {
+    // Live pages close at once; a request in progress gets 2 s.
+    match tokio::time::timeout(Duration::from_secs(2), web).await {
         Ok(Ok(Err(e))) => tracing::warn!(error = %e, "the web server stopped with an error"),
-        Err(_) => tracing::warn!("the web server did not stop within 10 s"),
+        Err(_) => tracing::warn!("the web server did not stop within 2 s"),
         _ => {}
     }
     engine.shutdown().await;

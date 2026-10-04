@@ -44,7 +44,8 @@ HealthStartPeriod=3m
 HealthRetries=4
 # an unhealthy container is killed; systemd's Restart= below then starts a fresh one
 HealthOnFailure=kill
-StopTimeout=20
+# an orderly stop: the web UI (2 s), the work in hand and leaving voice (at most 17 s), the models (5 s)
+StopTimeout=30
 
 [Service]
 # the classifier and the voices need about 3 GB on CPU at peak
