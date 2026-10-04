@@ -21,6 +21,8 @@ L5 = ["L0", "L1", "L2", "L3", "L4", "L5"]
 
 [dev_allow]
 any = ["pb-testkit", "pb-fluxer-fake"]
+# The engine's scenarios run it on the real store and Fluxer client (against the fake Fluxer).
+L3 = ["pb-fluxer", "pb-store"]
 # The web server's end-to-end tests run it on the real store, inference and Fluxer client.
 L4 = ["L2"]
 

@@ -69,3 +69,4 @@ for the whole build. Our own connections use graviola. See the `ring` entry in `
 | Daily log files | tracing-appender 0.2.5 (tokio-rs, 2026-04) | — |
 | HTTPS for the web UI | tokio-rustls 0.26.6 (the rustls organisation, 2026-09), crypto through pb-tls (graviola); the TLS listener is ours (about 80 lines, handshakes concurrent) | axum-server: one more layer for what axum's `Listener` trait already allows |
 | Terminal output | anstream 1.0, comfy-table 8, indicatif 0.18 (all released in 2026) | — |
+| The engine's scenario tests (no weights, no LiveKit) | nothing new: pb-testkit's stand-in models (`fakemodels`) and in-process voice, the fake Fluxer, and crates already in the tree (tempfile 3.27, 2026-03, repository active 2026-10; futures; async-trait; tracing-subscriber; tokio's `test-util`) | — |

@@ -6662,6 +6662,7 @@ dependencies = [
 name = "pb-engine"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "bytes",
  "fastrand",
  "futures",
@@ -6669,7 +6670,9 @@ dependencies = [
  "pb-audio",
  "pb-commands",
  "pb-domain",
+ "pb-fluxer",
  "pb-fluxer-api",
+ "pb-fluxer-fake",
  "pb-i18n",
  "pb-infer",
  "pb-live",
@@ -6678,14 +6681,19 @@ dependencies = [
  "pb-policy",
  "pb-segment",
  "pb-settings",
+ "pb-store",
  "pb-store-api",
+ "pb-testkit",
  "pb-voice-api",
  "pb-voicelines",
+ "secrecy",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "url",
 ]
 

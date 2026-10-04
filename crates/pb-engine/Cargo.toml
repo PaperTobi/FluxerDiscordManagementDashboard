@@ -35,7 +35,15 @@ tracing.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
+pb-fluxer.workspace = true
+pb-fluxer-fake.workspace = true
+pb-store.workspace = true
+pb-testkit = { workspace = true, features = ["fakemodels", "memvoice"] }
+secrecy.workspace = true
+tempfile = "3"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }
+tracing-subscriber.workspace = true
 
 [lints]
 workspace = true
