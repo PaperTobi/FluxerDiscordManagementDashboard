@@ -95,7 +95,11 @@ pub fn PersonLive(initial: PersonState, locale: Locale) -> impl IntoView {
                         let window = fmt::window(locale, c.window_ms);
                         text(locale, "ui-in-window-value", &[("n", c.in_window.into()), ("window", window.into())])
                     }}</dd>
-                    <dt>{t("ui-next-step")}</dt><dd>{move || counts().step + 1}</dd>
+                    // `step` already is the step of the next violation (0: none set for it).
+                    <dt>{t("ui-next-step")}</dt><dd>{move || match counts().step {
+                        0 => "—".to_owned(),
+                        n => n.to_string(),
+                    }}</dd>
                 </dl>
                 {move || state.with(|s| s.summary.observe_only).then(|| view! { <p class="chip warn">{t("ui-observe-only")}</p> })}
             </section>
@@ -146,7 +150,7 @@ fn Belt(card: SentenceCard, now: RwSignal<i64>, locale: Locale) -> impl IntoView
                 {card.dropped.map(|d| view! { <span class="chip">{fmt::dropped(locale, d)}</span> })}
                 {card.error.clone().map(|e| view! { <span class="chip bad" title=e>{text(locale, "ui-failed", &[])}</span> })}
                 {move || (shown().station == Station::Decision).then(|| {
-                    let top = verdict.as_ref().map(|v| (v.top(), v.score(v.top())));
+                    let top = verdict.as_ref().and_then(crate::fmt::flagged);
                     view! {
                         {top.map(|(l, sc)| view! { <span class="top">{fmt::label(locale, l)} " " {fmt::pct(sc)}</span> })}
                         {decision.map(|d| view! { <span class=format!("chip {}", fmt::decision_class(d))>{fmt::decision(locale, d)}</span> })}

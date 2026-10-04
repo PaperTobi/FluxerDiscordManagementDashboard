@@ -31,6 +31,12 @@ pub fn ago(loc: Locale, now: i64, then: i64) -> String {
     }
 }
 
+/// Why a sentence counted: the first type it was flagged for, with its score (`None`: nothing was flagged; the highest
+/// score of a clean sentence says nothing).
+pub fn flagged(v: &pb_live_proto::VerdictView) -> Option<(pb_domain::Label, f32)> {
+    v.flagged.first().map(|l| (*l, v.score(*l)))
+}
+
 /// A station's name.
 pub fn station(loc: Locale, s: Station) -> String {
     let id = match s {

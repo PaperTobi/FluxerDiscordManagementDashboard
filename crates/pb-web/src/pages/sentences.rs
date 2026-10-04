@@ -150,15 +150,9 @@ fn row(v: &Viewer, rec: &SentenceRecord, audio: bool, show_who: bool, back: &str
     }
 }
 
-/// The highest score (or the flagged type) at a glance; every type against its bar when opened.
+/// The flagged type at a glance (a clean sentence: just "Scores"); every type against its bar when opened.
 fn scores(loc: Locale, rec: &SentenceRecord) -> impl IntoView + use<> {
-    let top = rec.flagged.first().copied().unwrap_or_else(|| {
-        Label::ALL
-            .iter()
-            .copied()
-            .max_by(|a, b| rec.scores[a.index()].total_cmp(&rec.scores[b.index()]))
-            .unwrap_or(Label::Profanity)
-    });
+    let top = rec.flagged.first().copied();
     let bar = |l: Label| rec.thresholds.iter().find(|(t, _)| *t == l).map(|(_, b)| *b);
     let rows = Label::ALL
         .iter()
@@ -175,7 +169,10 @@ fn scores(loc: Locale, rec: &SentenceRecord) -> impl IntoView + use<> {
         .collect_view();
     view! {
         <details class="scores">
-            <summary>{fmt::label(loc, top)} " " <b>{fmt::pct(rec.scores[top.index()])}</b></summary>
+            <summary>{match top {
+                Some(l) => view! { {fmt::label(loc, l)} " " <b>{fmt::pct(rec.scores[l.index()])}</b> }.into_any(),
+                None => view! { <span class="muted">{text(loc, "ui-scores", &[])}</span> }.into_any(),
+            }}</summary>
             <table class="mini">
                 <tbody>{rows}</tbody>
             </table>

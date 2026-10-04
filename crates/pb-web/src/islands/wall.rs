@@ -102,7 +102,7 @@ fn Card(card: SentenceCard, now: RwSignal<i64>, locale: Locale) -> impl IntoView
         {move || {
             let s = shown();
             (s.station == Station::Decision).then(|| {
-                let top = verdict.as_ref().map(|v| (v.top(), v.score(v.top())));
+                let top = verdict.as_ref().and_then(crate::fmt::flagged);
                 view! {
                     {top.map(|(l, sc)| view! { <span class="top">{fmt::label(locale, l)} " " {fmt::pct(sc)}</span> })}
                     {decision.map(|d| view! { <span class=format!("chip {}", fmt::decision_class(d))>{fmt::decision(locale, d)}</span> })}
