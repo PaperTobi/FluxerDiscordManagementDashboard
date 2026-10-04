@@ -1,6 +1,6 @@
 [package]
 name = "pb-testkit"
-description = "Test helpers: local LiveKit server, tokens, participants, an in-process voice transport, golden data"
+description = "Test helpers: local LiveKit server, tokens, participants, an in-process voice transport, stand-in models, golden data"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -22,6 +22,7 @@ base64 = { workspace = true, optional = true }
 async-trait = { workspace = true, optional = true }
 pb-domain = { workspace = true, optional = true }
 pb-fluxer-api = { workspace = true, optional = true }
+pb-models-api = { workspace = true, optional = true }
 pb-voice-api = { workspace = true, optional = true }
 
 [features]
@@ -29,6 +30,11 @@ pb-voice-api = { workspace = true, optional = true }
 livekit = ["dep:livekit", "dep:pb-voice-livekit", "dep:tokio", "dep:futures", "dep:hmac", "dep:sha2", "dep:base64"]
 # An in-process voice transport (sample-exact audio, no server).
 memvoice = ["dep:tokio", "dep:async-trait", "dep:pb-domain", "dep:pb-fluxer-api", "dep:pb-voice-api"]
+# Stand-in models that hear plain tones (no weights): voice activity, the classifier and text-to-speech.
+fakemodels = ["dep:pb-domain", "dep:pb-models-api"]
+
+[dev-dependencies]
+pb-models-api = { workspace = true, features = ["contract-tests"] }
 
 [lints]
 workspace = true

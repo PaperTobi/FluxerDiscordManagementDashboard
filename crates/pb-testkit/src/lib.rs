@@ -6,6 +6,8 @@ pub mod golden;
 pub mod lk;
 #[cfg(feature = "memvoice")]
 pub mod memvoice;
+#[cfg(feature = "fakemodels")]
+pub mod models;
 
 use std::path::PathBuf;
 

@@ -6923,6 +6923,7 @@ dependencies = [
  "pb-audio",
  "pb-domain",
  "pb-fluxer-api",
+ "pb-models-api",
  "pb-voice-api",
  "pb-voice-livekit",
  "rubato",
