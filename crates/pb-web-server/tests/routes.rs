@@ -653,6 +653,21 @@ async fn the_setup_wizard_from_code_to_owner() {
         )
         .await;
     assert!(forged.cookie("pb_notice").is_some());
+    // An address that does not answer: told so, and what was typed stays in the field.
+    let r = w
+        .post(
+            "/setup",
+            Some(&setup),
+            &[
+                ("step", "instance"),
+                ("csrf", &csrf),
+                ("value", "http://127.0.0.1:9/api"),
+            ],
+        )
+        .await;
+    assert!(r.cookie("pb_notice").is_some(), "{r:?}");
+    let page = w.get("/setup", Some(&setup)).await.body;
+    assert!(page.contains("value=\"http://127.0.0.1:9/api\""), "{page}");
     let r = w
         .post(
             "/setup",
@@ -664,6 +679,7 @@ async fn the_setup_wizard_from_code_to_owner() {
     // A token that is not a bot token, then a rejected one, then the right one.
     let page = w.get("/setup", Some(&setup)).await;
     assert!(page.body.contains("Bot token"), "{}", page.body);
+    assert!(page.body.contains("The token is checked at"), "{}", page.body);
     let r = w
         .post(
             "/setup",

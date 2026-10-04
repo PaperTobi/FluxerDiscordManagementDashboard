@@ -33,6 +33,8 @@ struct WizardSession {
     instance_ok: bool,
     /// A done step opened again (shown until it is saved again or kept as it is).
     revisit: Option<SetupStep>,
+    /// The instance address last typed that did not work (shown again instead of the saved one).
+    typed_instance: Option<String>,
 }
 
 struct Guess {
@@ -86,12 +88,13 @@ impl WebState {
     pub(crate) fn setup_view(&self, headers: &HeaderMap, ip: Option<IpAddr>) -> SetupView {
         let secrets = self.secrets.get();
         let key = self.wizard_session(headers);
-        let (instance_ok, revisit, wait) = {
+        let (instance_ok, revisit, typed_instance, wait) = {
             let w = self.wizard();
             let session = key.as_ref().and_then(|k| w.sessions.get(k));
             (
                 session.is_some_and(|s| s.instance_ok),
                 session.and_then(|s| s.revisit),
+                session.and_then(|s| s.typed_instance.clone()),
                 w.wait(ip),
             )
         };
@@ -122,6 +125,7 @@ impl WebState {
                 .map(|k| self.sessions.signer().tag("setup-csrf", &k))
                 .unwrap_or_default(),
             instance: eff.instance.value.to_string(),
+            typed_instance,
             bot: self
                 .engine
                 .identity()
@@ -200,6 +204,7 @@ pub async fn submit(
                 started: Instant::now(),
                 instance_ok: false,
                 revisit: None,
+                typed_instance: None,
             },
         );
         let c = set_cookie(
@@ -239,13 +244,24 @@ pub async fn submit(
             back(None, None)
         }
         "instance" => {
+            // What was typed stays in the field when it does not work (not the saved address).
+            let typed = |v: Option<String>| {
+                if let Some(s) = st.wizard().sessions.get_mut(&key) {
+                    s.typed_instance = v;
+                }
+            };
             let origin: InstanceUrl = match value.parse() {
                 Ok(o) => o,
-                Err(e) => return back(Some((false, pb_i18n::value_error(loc, &e))), None),
+                Err(e) => {
+                    typed(Some(value.clone()));
+                    return back(Some((false, pb_i18n::value_error(loc, &e))), None);
+                }
             };
             if let Err(e) = st.engine.discover(origin.url()).await {
+                typed(Some(value.clone()));
                 return back(Some((false, pb_web::fmt::engine_error(loc, &e))), None);
             }
+            typed(None);
             let set = st
                 .engine
                 .settings()
@@ -343,7 +359,17 @@ pub(crate) async fn log_in(st: &WebState, loc: Locale) -> Result<(), String> {
     let attempt = st.engine.reconnect();
     match st.engine.login_outcome(attempt, LOGIN_WAIT).await {
         Connection::Ready => Ok(()),
-        Connection::TokenRejected => Err(text(loc, "setup-token-rejected", &[])),
+        Connection::TokenRejected => {
+            let instance = st
+                .engine
+                .settings()
+                .current()
+                .effective(None, None)
+                .instance
+                .value
+                .to_string();
+            Err(text(loc, "setup-token-rejected-at", &[("instance", instance.into())]))
+        }
         Connection::NoVoice => Err(text(loc, "ui-fluxer-no-voice", &[])),
         Connection::Retrying(e) | Connection::Stopped(e) => {
             Err(text(loc, "setup-token-unreachable", &[("error", e.into())]))

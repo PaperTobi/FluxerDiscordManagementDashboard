@@ -83,6 +83,8 @@ pub struct SetupView {
     pub csrf: String,
     /// The Fluxer instance (API address).
     pub instance: String,
+    /// What was last typed for the instance when it did not work.
+    pub typed_instance: Option<String>,
     /// The bot's name once its token works.
     pub bot: Option<String>,
     /// The address Fluxer sends people back to after logging in (register it with the application).

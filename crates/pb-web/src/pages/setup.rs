@@ -91,13 +91,19 @@ pub fn SetupPage() -> impl IntoView {
                 <label>
                     {tt("setup-instance-label")}
                     <input name="value" type="text" inputmode="url" spellcheck="false" autocomplete="off"
-                        value=s.instance.clone() placeholder="https://api.fluxer.app" required autofocus/>
+                        value=s.typed_instance.clone().unwrap_or_else(|| s.instance.clone())
+                        placeholder="https://api.fluxer.app" required autofocus/>
                 </label>
             </StepForm>
         }
         .into_any(),
         SetupStep::Token => view! {
             <p>{tt("setup-token-help")}</p>
+            // The token has to belong to this instance: say which one, and let it be changed.
+            <p class="muted">
+                {text(loc, "setup-token-instance", &[("instance", s.instance.clone().into())])}
+                <Nav step="goto" value="instance" csrf=s.csrf.clone() label=tt("setup-change-step")/>
+            </p>
             {s.has_token.then(|| view! { <p class="muted">{tt("setup-token-saved")}</p> })}
             <StepForm step="token" csrf=s.csrf.clone()>
                 <label>
