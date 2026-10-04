@@ -243,6 +243,9 @@ pub fn App() -> impl IntoView {
                 <Route path=StaticSegment("reports") view=|| view! { <Page><pages::reports::ReportsPage/></Page> }/>
                 <Route path=StaticSegment("audit") view=|| view! { <Page><pages::audit::AuditPage/></Page> }/>
                 <Route path=StaticSegment("system") view=|| view! { <Page><pages::system::SystemPage/></Page> }/>
+                <Route path=StaticSegment("settings") view=|| view! { <Page><pages::settings::GlobalSettingsPage/></Page> }/>
+                <Route path=(StaticSegment("settings"), ParamSegment("section")) view=|| view! { <Page><pages::settings::GlobalSettingsPage/></Page> }/>
+                <Route path=(StaticSegment("c"), ParamSegment("g"), StaticSegment("settings"), ParamSegment("section")) view=|| view! { <Page><pages::community::CommunityPage/></Page> }/>
                 <Route path=(StaticSegment("c"), ParamSegment("g")) view=|| view! { <Page><pages::community::CommunityPage/></Page> }/>
                 <Route path=(StaticSegment("c"), ParamSegment("g"), ParamSegment("tab")) view=|| view! { <Page><pages::community::CommunityPage/></Page> }/>
                 <Route path=(StaticSegment("c"), ParamSegment("g"), StaticSegment("p"), ParamSegment("u")) view=|| view! { <Page><pages::person::PersonPage/></Page> }/>
@@ -291,6 +294,7 @@ fn Page(children: Children) -> impl IntoView {
                     {nav("/voice-lines", "ui-nav-voice-lines")}
                     {nav("/reports", "ui-nav-reports")}
                     {nav("/audit", "ui-nav-audit")}
+                    {v.owner.then(|| nav("/settings", "ui-nav-settings"))}
                     {v.owner.then(|| nav("/system", "ui-nav-system"))}
                 </nav>
                 <h3 class="section">{text(loc, "ui-nav-communities", &[])}</h3>

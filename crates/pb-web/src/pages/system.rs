@@ -7,7 +7,7 @@ use pb_live::CellSource;
 use pb_live_proto::{Topic, TopicState};
 
 use super::NotFound;
-use super::settings::SettingsForm;
+use super::settings::SectionCard;
 use crate::app::{app, viewer};
 use crate::islands::SystemLive;
 
@@ -121,7 +121,10 @@ pub fn SystemPage() -> impl IntoView {
             </div>
         </section>
         <Voices/>
-        <SettingsForm scope=Scope::Global back="/system".to_string()/>
+        <section class="card">
+            <p>{t("ui-settings-moved")} " " <a href="/settings">{t("ui-settings-global-title")}</a></p>
+        </section>
+        <SectionCard scope=Scope::Global section=pb_settings::Section::System back="/system".to_string()/>
     }
     .into_any()
 }

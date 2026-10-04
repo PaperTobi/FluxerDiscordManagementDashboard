@@ -13,7 +13,15 @@ use reqwest::header::HOST;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
-const PAGES: &[&str] = &["/", "/voice-lines", "/reports", "/audit", "/system"];
+const PAGES: &[&str] = &[
+    "/",
+    "/voice-lines",
+    "/reports",
+    "/audit",
+    "/system",
+    "/settings",
+    "/settings/detection",
+];
 
 #[tokio::test(flavor = "multi_thread")]
 async fn anonymous_visitors_get_the_login_page() {
@@ -129,7 +137,7 @@ async fn who_may_log_in_and_what_each_login_sees() {
 async fn every_page_renders_for_every_kind_of_login() {
     let w = Web::start(true).await;
     let mut paths: Vec<String> = PAGES.iter().map(|p| (*p).to_owned()).collect();
-    for tab in ["", "/voice-lines", "/settings", "/reports"] {
+    for tab in ["", "/voice-lines", "/settings", "/settings/detection", "/reports"] {
         paths.push(format!("/c/{G}{tab}"));
     }
     for tab in ["", "/history", "/evidence", "/voice-lines", "/settings"] {
@@ -140,7 +148,8 @@ async fn every_page_renders_for_every_kind_of_login() {
         for path in &paths {
             let p = w.get(path, Some(&cookie)).await;
             let in_alpha = path.starts_with("/c/");
-            let expect = if (in_alpha && !alpha) || (path == "/system" && user != OWNER) {
+            let owners_only = path == "/system" || path.starts_with("/settings");
+            let expect = if (in_alpha && !alpha) || (owners_only && user != OWNER) {
                 404
             } else {
                 200
@@ -301,9 +310,11 @@ async fn settings_forms_respect_scope_and_role() {
     .await;
     let esc = setting(w, server, "escalation").expect("escalation saved");
     assert_eq!(esc.as_array().map(Vec::len), Some(2), "{esc}");
-    // The settings page shows where values come from.
-    let page = w.get(&format!("/c/{G}/settings"), Some(&ada)).await.body;
-    assert!(page.contains("set here") && page.contains("from global"), "badges");
+    // The settings pages show where values come from.
+    let page = w.get(&format!("/c/{G}/settings/escalation"), Some(&ada)).await.body;
+    assert!(page.contains("set here"), "badges");
+    let page = w.get(&format!("/c/{G}/settings/detection"), Some(&ada)).await.body;
+    assert!(page.contains("from global"), "badges");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1248,29 +1259,45 @@ async fn settings_forms_fold_the_rare_ones() {
     let w = Web::start(true).await;
     let owner = w.login(OWNER).await.unwrap();
     let csrf = w.page_csrf(&owner).await;
+    // The settings for every community are pages of their own, one per section, not part of the System page.
+    let home = w.get("/settings", Some(&owner)).await.body;
+    assert!(home.contains("href=\"/settings/detection\"") && home.contains("href=\"/settings/tracking\""));
     let system = w.get("/system", Some(&owner)).await.body;
-    // The tag of the Advanced section.
+    assert!(
+        !system.contains("id=\"set-threshold\"") && system.contains("id=\"set-cpu_threads\""),
+        "{system}"
+    );
+    let page = w.get("/settings/detection", Some(&owner)).await.body;
+    // The tag of the section's Advanced part.
     let folder = |page: &str| {
-        let at = page.find("<details id=\"advanced\"").expect("an Advanced section");
+        let at = page
+            .find("<details id=\"advanced-detection\"")
+            .expect("an Advanced part");
         (at, page[at..].split('>').next().unwrap().to_owned())
     };
-    let (advanced, tag) = folder(&system);
+    let (advanced, tag) = folder(&page);
+    assert!(!tag.contains(" open"), "{tag}");
+    let threshold = page.find("id=\"set-threshold\"").expect("the threshold");
+    let end_silence = page
+        .find("id=\"set-end_silence\"")
+        .expect("the pause that ends a sentence");
     assert!(
-        tag.contains("class=\"card settings-section advanced\"") && !tag.contains(" open"),
-        "{tag}"
-    );
-    let threads = system.find("id=\"set-cpu_threads\"").expect("the thread setting");
-    let threshold = system.find("id=\"set-threshold\"").expect("the threshold");
-    assert!(
-        threshold < advanced && advanced < threads,
+        threshold < advanced && advanced < end_silence,
         "everyday first, the rare ones folded"
     );
-    assert!(system.contains("<details class=\"help\">"), "help texts folded");
-    assert!(system.contains("<label for=\"in-threshold\">") && system.contains("id=\"in-threshold\""));
+    assert!(!page.contains("id=\"set-audience\""), "one section on a page");
+    assert!(page.contains("<details class=\"help\">"), "help texts folded");
+    assert!(page.contains("<label for=\"in-threshold\">") && page.contains("id=\"in-threshold\""));
     // Saving an advanced setting comes back with it open.
-    assert!(system.contains("value=\"/system?advanced=1#set-cpu_threads\""));
-    let open = w.get("/system?advanced=1", Some(&owner)).await.body;
+    assert!(page.contains("value=\"/settings/detection?advanced=detection#set-end_silence\""));
+    let open = w.get("/settings/detection?advanced=detection", Some(&owner)).await.body;
     assert!(folder(&open).1.contains(" open"), "opened after saving one");
+    assert_eq!(w.get("/settings/nothing", Some(&owner)).await.status, 404);
+    assert_eq!(
+        w.get("/settings/system", Some(&owner)).await.status,
+        404,
+        "on the System page"
+    );
     // Two settings set here (and the instance, from the start).
     for (key, value) in [("threshold", "0.7"), ("strikes", "2")] {
         w.post(
@@ -1282,14 +1309,15 @@ async fn settings_forms_fold_the_rare_ones() {
                 ("key", key),
                 ("value", value),
                 ("action", "set"),
-                ("back", "/system"),
+                ("back", "/settings/detection"),
             ],
         )
         .await;
     }
-    let system = w.get("/system", Some(&owner)).await.body;
+    let home = w.get("/settings", Some(&owner)).await.body;
+    assert!(home.contains("2 changed here"), "{home}");
     // The reset offer counts what it would remove: not the instance (a reset never cuts the bot off from Fluxer).
-    assert!(system.contains("2 settings are set here."), "{system}");
+    assert!(home.contains("2 settings are set here."), "{home}");
     w.stop().await;
 }
 
@@ -1366,7 +1394,7 @@ async fn a_setting_says_where_the_setting_it_needs_lives() {
         let at = page.find("id=\"set-modlog_audio\"").expect("the mod-log audio setting");
         page[at..].split("</form>").next().unwrap().to_owned()
     };
-    let system = row(&w.get("/system", Some(&owner)).await.body);
+    let system = row(&w.get("/settings/reporting", Some(&owner)).await.body);
     assert!(
         system.contains("Works together with “Mod log channel”, which is set per community:"),
         "{system}"
@@ -1374,7 +1402,7 @@ async fn a_setting_says_where_the_setting_it_needs_lives() {
     // Each community with its channel, linked to that setting there.
     let item = |row: &str, g: u64| {
         let at = row
-            .find(&format!("<a href=\"/c/{g}/settings#set-modlog_channel\">"))
+            .find(&format!("<a href=\"/c/{g}/settings/reporting#set-modlog_channel\">"))
             .unwrap_or_else(|| panic!("a link to {g}'s mod-log channel: {row}"));
         row[at..].split("</li>").next().unwrap().to_owned()
     };
@@ -1394,11 +1422,11 @@ async fn a_setting_says_where_the_setting_it_needs_lives() {
         ],
     )
     .await;
-    let system = row(&w.get("/system", Some(&owner)).await.body);
+    let system = row(&w.get("/settings/reporting", Some(&owner)).await.body);
     let alpha = item(&system, G);
     assert!(alpha.contains("#Lounge"), "{alpha}");
     // In a community both are on the same page: nothing to point at.
-    let community = row(&w.get(&format!("/c/{G}/settings"), Some(&owner)).await.body);
+    let community = row(&w.get(&format!("/c/{G}/settings/reporting"), Some(&owner)).await.body);
     assert!(!community.contains("Works together"), "{community}");
     w.stop().await;
 }
@@ -1530,11 +1558,11 @@ async fn chat_commands_are_explained_in_the_web_ui() {
     let w = Web::start(true).await;
     let owner = w.login(OWNER).await.unwrap();
     let csrf = w.page_csrf(&owner).await;
-    // On the System page beside the commands' settings, with the prefix in use.
-    let system = w.get("/system", Some(&owner)).await.body;
+    // Beside the commands' settings (for every community), with the prefix in use.
+    let system = w.get("/settings/commands", Some(&owner)).await.body;
     let at = system
         .find("id=\"chat-commands\"")
-        .expect("the chat commands on the System page");
+        .expect("the chat commands beside their settings");
     assert!(
         system[..at].contains("id=\"section-commands\""),
         "in the chat commands section"
@@ -1563,7 +1591,7 @@ async fn chat_commands_are_explained_in_the_web_ui() {
         overview.contains("id=\"chat-commands\"") && overview.contains("<code>?w add @user…</code>"),
         "{overview}"
     );
-    let settings = w.get(&format!("/c/{G}/settings"), Some(&ada)).await.body;
+    let settings = w.get(&format!("/c/{G}/settings/reporting"), Some(&ada)).await.body;
     assert!(
         settings.contains(&format!("href=\"/c/{G}#chat-commands\""))
             && settings.contains("<code>?w jar [@user]</code>"),
@@ -1603,7 +1631,7 @@ async fn id_lists_change_one_entry_at_a_time() {
         let end = rest[10..].find("id=\"set-").map_or(rest.len(), |e| e + 10);
         rest[..end].to_owned()
     };
-    let system = w.get("/system", Some(&owner)).await.body;
+    let system = w.get("/settings/tracking", Some(&owner)).await.body;
     let tracked = row(&system, "tracked_everywhere");
     assert!(
         tracked.contains("None yet.") && !tracked.contains("name=\"value\""),
@@ -1832,10 +1860,14 @@ async fn no_page_has_an_element_id_twice() {
     for path in [
         "/".to_owned(),
         "/system".to_owned(),
+        "/settings".to_owned(),
+        "/settings/detection".to_owned(),
+        "/settings/tracking".to_owned(),
         "/voice-lines".to_owned(),
         "/invite".to_owned(),
         format!("/c/{G}"),
         format!("/c/{G}/settings"),
+        format!("/c/{G}/settings/detection"),
         format!("/c/{G}/voice-lines"),
         format!("/c/{G}/p/{MAX}"),
         format!("/c/{G}/p/{MAX}/settings"),
@@ -1910,7 +1942,7 @@ async fn a_saved_or_refused_setting_says_so_next_to_it() {
     let w = Web::start(true).await;
     let owner = w.login(OWNER).await.unwrap();
     let csrf = w.page_csrf(&owner).await;
-    let back = format!("/c/{G}/settings");
+    let back = format!("/c/{G}/settings/detection");
     let scope = format!("server:{G}");
     let save = async |value: &str| {
         w.post(

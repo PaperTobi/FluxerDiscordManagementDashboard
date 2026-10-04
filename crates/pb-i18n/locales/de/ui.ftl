@@ -506,3 +506,14 @@ ui-confirm-setting-clear-what = Es gilt wieder { $value } ({ $from }).
 ui-confirm-setting-clear-reconnect = Der Bot verbindet sich damit neu mit Fluxer.
 ui-confirm-logout-all = Auf allen Geräten abmelden?
 ui-confirm-logout-all-what = Jede deiner Anmeldungen endet, auf jedem Gerät, auch diese. Nutze das, wenn jemand eine Anmeldung übernommen haben könnte.
+
+## Einstellungsseiten
+ui-nav-settings = Einstellungen
+ui-settings-global-title = Einstellungen für jede Community
+ui-settings-intro-global = Sie gelten in jeder Community. Eine Community, oder eine Person darin, kann einen eigenen Wert haben; der gilt dann dort.
+ui-settings-intro-server = Einstellungen für { $community }. Was hier nicht geändert ist, folgt den Einstellungen für jede Community.
+ui-settings-set-here = { $count ->
+        [one] eine hier geändert
+       *[other] { $count } hier geändert
+    }
+ui-settings-moved = Die Einstellungen für jede Community haben eigene Seiten:

@@ -506,3 +506,14 @@ ui-confirm-setting-clear-what = It goes back to { $value } ({ $from }).
 ui-confirm-setting-clear-reconnect = The bot connects to Fluxer again with it.
 ui-confirm-logout-all = Log out on all devices?
 ui-confirm-logout-all-what = Every login of yours ends, on every device, this one too. Use this when a login may have been taken over.
+
+## Settings pages
+ui-nav-settings = Settings
+ui-settings-global-title = Settings for every community
+ui-settings-intro-global = These apply in every community. A community, or a person in one, can have its own value; that then wins there.
+ui-settings-intro-server = Settings for { $community }. What is not changed here follows the settings for every community.
+ui-settings-set-here = { $count ->
+        [one] one changed here
+       *[other] { $count } changed here
+    }
+ui-settings-moved = The settings for every community have their own pages:

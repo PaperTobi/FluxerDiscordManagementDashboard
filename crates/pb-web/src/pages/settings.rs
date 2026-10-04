@@ -488,7 +488,10 @@ fn works_with(other: SettingKey, scope: Scope, viewer: &Viewer) -> AnyView {
             .map(|g| {
                 let (value, _) = effective_value(&tree, Scope::Server { guild: g }, other);
                 (
-                    format!("/c/{g}/settings#{anchor}"),
+                    format!(
+                        "{}#{anchor}",
+                        section_href(Scope::Server { guild: g }, other.meta().section)
+                    ),
                     gs.guild_name(g),
                     value_label(other, Some(g), &value, loc),
                 )
@@ -501,8 +504,8 @@ fn works_with(other: SettingKey, scope: Scope, viewer: &Viewer) -> AnyView {
             .owner
             .then(|| {
                 (
-                    format!("/system#{anchor}"),
-                    text(loc, "ui-nav-system", &[]),
+                    format!("{}#{anchor}", section_href(Scope::Global, other.meta().section)),
+                    text(loc, "ui-nav-settings", &[]),
                     value_label(other, None, &value, loc),
                 )
             })
@@ -569,7 +572,7 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
     let anchor = format!("set-{}", key.name());
     // Saving comes back to this setting (with "Advanced" open when it is in there).
     let back = if advanced(key) {
-        format!("{back}?advanced=1#{anchor}")
+        format!("{back}?advanced={}#{anchor}", meta.section.key())
     } else {
         format!("{back}#{anchor}")
     };
@@ -633,91 +636,212 @@ fn ordered(keys: Vec<SettingKey>) -> Vec<SettingKey> {
     general.into_iter().chain(per_label).collect()
 }
 
-/// `keys` grouped by section (sections without any left out).
-fn by_section(keys: &[SettingKey]) -> Vec<(Section, Vec<SettingKey>)> {
+/// The settings of `section` that can be set at `scope`, in display order.
+fn section_keys(scope: Scope, section: Section) -> Vec<SettingKey> {
+    let kind = scope.kind();
+    ordered(
+        SettingKey::all()
+            .into_iter()
+            .filter(|k| k.scopes().contains(&kind) && k.meta().section == section)
+            .collect(),
+    )
+}
+
+/// The sections a scope's settings pages show (globally the System section is on the System page).
+pub fn page_sections(scope: Scope) -> Vec<Section> {
     Section::ALL
         .into_iter()
-        .filter_map(|section| {
-            let mine: Vec<SettingKey> = keys.iter().copied().filter(|k| k.meta().section == section).collect();
-            (!mine.is_empty()).then(|| (section, ordered(mine)))
-        })
+        .filter(|s| !(scope == Scope::Global && *s == Section::System))
+        .filter(|s| !section_keys(scope, *s).is_empty())
         .collect()
 }
 
-/// Every setting that can be set at `scope`: the everyday ones by section, then "Advanced" (folded), then resetting
-/// everything set here.
+/// A section by its name in URLs.
+pub fn section_of(key: &str) -> Option<Section> {
+    Section::ALL.into_iter().find(|s| s.key() == key)
+}
+
+/// Where a section of a scope's settings is: its own page (`/settings/detection`, `/c/1/settings/detection`), the
+/// System page, or (for a person, whose settings are one page) its place on that page.
+pub fn section_href(scope: Scope, section: Section) -> String {
+    match (scope, section) {
+        (Scope::Global, Section::System) => "/system".into(),
+        (Scope::Global, s) => format!("/settings/{}", s.key()),
+        (Scope::Server { guild }, s) => format!("/c/{guild}/settings/{}", s.key()),
+        (Scope::Person { guild, user }, s) => format!("/c/{guild}/p/{user}/settings#section-{}", s.key()),
+    }
+}
+
+/// One section's settings: the everyday ones, then the rarely changed ones folded under "Advanced" (open when one of
+/// them was just saved). `back`: the page the forms come back to.
 #[component]
-pub fn SettingsForm(scope: Scope, back: String) -> impl IntoView {
+pub fn SectionCard(scope: Scope, section: Section, back: String) -> impl IntoView {
     let Some(v) = viewer() else {
         return ().into_any();
     };
     let loc = v.locale;
-    let kind = scope.kind();
-    let keys: Vec<SettingKey> = SettingKey::all()
-        .into_iter()
-        .filter(|k| k.scopes().contains(&kind))
-        .collect();
-    let (more, basic): (Vec<SettingKey>, Vec<SettingKey>) = keys.into_iter().partition(|k| advanced(*k));
-    let sections = by_section(&basic);
-    let more = by_section(&more);
-    let open = use_query_map().with_untracked(|q| q.get("advanced").is_some());
+    let (more, basic): (Vec<SettingKey>, Vec<SettingKey>) =
+        section_keys(scope, section).into_iter().partition(|k| advanced(*k));
+    let open = use_query_map().with_untracked(|q| q.get("advanced").as_deref() == Some(section.key()));
     let row = |key: SettingKey| view! { <SettingRow key scope viewer=v.clone() back=back.clone()/> };
-    // A menu of the sections first: the page is long.
-    let menu = sections
-        .iter()
-        .map(|(section, _)| {
-            view! { <a href=format!("#section-{}", section.key())>{section_name(loc, *section)}</a> }
-        })
-        .collect_view();
-    let cards = sections
-        .into_iter()
-        .map(|(section, keys)| {
-            // The chat commands' reference beside their settings (on the System page).
-            let commands = (section == Section::Commands && scope == Scope::Global)
-                .then(|| view! { <super::commands::ChatCommands guild=None locale=loc/> });
-            view! {
-                <section class="card settings-section" id=format!("section-{}", section.key())>
-                    <h2>{section_name(loc, section)}</h2>
-                    {keys.into_iter().map(row).collect_view()}
-                    {commands}
-                </section>
-            }
-        })
-        .collect_view();
-    let advanced_card = (!more.is_empty()).then(|| {
+    // The chat commands' reference beside their settings (globally).
+    let commands = (section == Section::Commands && scope == Scope::Global)
+        .then(|| view! { <super::commands::ChatCommands guild=None locale=loc/> });
+    let folded = (!more.is_empty()).then(|| {
         view! {
-            <details class="card settings-section advanced" id="advanced" open=open>
-                <summary><h2>{text(loc, "ui-advanced", &[])}</h2></summary>
+            <details class="advanced" id=format!("advanced-{}", section.key()) open=open>
+                <summary><h3>{text(loc, "ui-advanced", &[])}</h3></summary>
                 <p class="muted small">{text(loc, "ui-advanced-help", &[])}</p>
-                {more.into_iter().map(|(section, keys)| view! {
-                    <h3>{section_name(loc, section)}</h3>
-                    {keys.into_iter().map(row).collect_view()}
-                }).collect_view()}
+                {more.into_iter().map(row).collect_view()}
             </details>
         }
     });
-    let resettable = resettable(scope, v.owner).len();
-    let reset = (resettable > 0).then(|| {
-        view! {
-            <section class="card settings-reset">
-                <form method="post" action="/settings/reset" class="row">
-                    <input type="hidden" name="csrf" value=v.csrf.clone()/>
-                    <input type="hidden" name="scope" value=scope_param(scope)/>
-                    <input type="hidden" name="back" value=back.clone()/>
-                    <span class="grow muted">{text(loc, "ui-reset-settings-help", &[("count", resettable.into())])}</span>
-                    <button class="button danger">{text(loc, "ui-reset-settings", &[])}</button>
-                </form>
-            </section>
-        }
-    });
+    view! {
+        <section class="card settings-section" id=format!("section-{}", section.key())>
+            <h2>{section_name(loc, section)}</h2>
+            {basic.into_iter().map(row).collect_view()}
+            {folded}
+            {commands}
+        </section>
+    }
+    .into_any()
+}
+
+/// The links to a scope's settings sections (the current one marked).
+#[component]
+fn SectionNav(scope: Scope, current: Option<Section>) -> impl IntoView {
+    let loc = crate::app::locale();
     view! {
         <nav class="settings-menu">
-            {menu}
-            {advanced_card.is_some().then(|| view! { <a href="#advanced">{text(loc, "ui-advanced", &[])}</a> })}
+            {page_sections(scope)
+                .into_iter()
+                .map(|s| view! { <a href=section_href(scope, s) class:active=current == Some(s)>{section_name(loc, s)}</a> })
+                .collect_view()}
         </nav>
-        {cards}
-        {advanced_card}
+    }
+}
+
+/// Resetting everything set at `scope` (after a confirmation), when anything is.
+#[component]
+fn ResetCard(scope: Scope, back: String) -> impl IntoView {
+    let Some(v) = viewer() else {
+        return ().into_any();
+    };
+    let loc = v.locale;
+    let resettable = resettable(scope, v.owner).len();
+    (resettable > 0)
+        .then(|| {
+            view! {
+                <section class="card settings-reset">
+                    <form method="post" action="/settings/reset" class="row">
+                        <input type="hidden" name="csrf" value=v.csrf.clone()/>
+                        <input type="hidden" name="scope" value=scope_param(scope)/>
+                        <input type="hidden" name="back" value=back/>
+                        <span class="grow muted">{text(loc, "ui-reset-settings-help", &[("count", resettable.into())])}</span>
+                        <button class="button danger">{text(loc, "ui-reset-settings", &[])}</button>
+                    </form>
+                </section>
+            }
+        })
+        .into_any()
+}
+
+/// A scope's settings: one section on its own page, or (a person's, `section` `None`) every section on one page.
+#[component]
+pub fn SettingsForm(scope: Scope, back: String, #[prop(optional)] section: Option<Section>) -> impl IntoView {
+    let sections = match section {
+        Some(s) => vec![s],
+        None => page_sections(scope),
+    };
+    let nav = match (scope, section) {
+        // A person's sections are on one page: the menu jumps.
+        (Scope::Person { .. }, _) | (_, None) => view! {
+            <nav class="settings-menu">
+                {sections.iter().map(|s| {
+                    let loc = crate::app::locale();
+                    view! { <a href=format!("#section-{}", s.key())>{section_name(loc, *s)}</a> }
+                }).collect_view()}
+            </nav>
+        }
+        .into_any(),
+        _ => view! { <SectionNav scope current=section/> }.into_any(),
+    };
+    let reset = section
+        .is_none()
+        .then(|| view! { <ResetCard scope back=back.clone()/> });
+    view! {
+        {nav}
+        {sections.into_iter().map(|s| view! { <SectionCard scope section=s back=back.clone()/> }).collect_view()}
         {reset}
+    }
+}
+
+/// `/settings` and a community's Settings tab: what each section holds and how much is set here, and resetting
+/// everything set here.
+#[component]
+pub fn SettingsHome(scope: Scope, back: String) -> impl IntoView {
+    let loc = crate::app::locale();
+    let set_here = app().engine.settings().current().overrides(scope).keys();
+    let intro = match scope {
+        Scope::Global => text(loc, "ui-settings-intro-global", &[]),
+        Scope::Server { guild } => text(
+            loc,
+            "ui-settings-intro-server",
+            &[("community", app().engine.guilds().guild_name(guild).into())],
+        ),
+        Scope::Person { .. } => String::new(),
+    };
+    let rows = page_sections(scope)
+        .into_iter()
+        .map(|s| {
+            let n = set_here.iter().filter(|k| k.meta().section == s).count();
+            view! {
+                <li>
+                    <a href=section_href(scope, s)>{section_name(loc, s)}</a>
+                    {(n > 0).then(|| view! { <span class="muted small">{text(loc, "ui-settings-set-here", &[("count", n.into())])}</span> })}
+                </li>
+            }
+        })
+        .collect_view();
+    view! {
+        <p class="muted">{intro}</p>
+        <section class="card">
+            <ul class="section-list">{rows}</ul>
+        </section>
+        <ResetCard scope back/>
+    }
+}
+
+/// `/settings` and `/settings/:section` (the bot owner): the settings for every community.
+#[component]
+pub fn GlobalSettingsPage() -> impl IntoView {
+    let Some(v) = viewer() else {
+        return ().into_any();
+    };
+    if !v.owner {
+        return view! { <super::NotFound/> }.into_any();
+    }
+    let loc = v.locale;
+    let param = leptos_router::hooks::use_params_map().with_untracked(|p| p.get("section"));
+    let section = match param.as_deref().map(section_of) {
+        None => None,
+        Some(Some(s)) if page_sections(Scope::Global).contains(&s) => Some(s),
+        Some(_) => return view! { <super::NotFound/> }.into_any(),
+    };
+    let back = match section {
+        Some(s) => section_href(Scope::Global, s),
+        None => "/settings".to_owned(),
+    };
+    view! {
+        <header class="page-head"><h1>{text(loc, "ui-settings-global-title", &[])}</h1></header>
+        {match section {
+            Some(s) => view! {
+                <SectionNav scope=Scope::Global current=Some(s)/>
+                <SectionCard scope=Scope::Global section=s back/>
+            }
+            .into_any(),
+            None => view! { <SettingsHome scope=Scope::Global back/> }.into_any(),
+        }}
     }
     .into_any()
 }

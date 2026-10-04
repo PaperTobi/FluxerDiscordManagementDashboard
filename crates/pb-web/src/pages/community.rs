@@ -7,7 +7,7 @@ use pb_i18n::{Locale, text};
 use pb_live::CellSource;
 use pb_live_proto::{Topic, TopicState};
 
-use super::settings::SettingsForm;
+use super::settings::{SettingsForm, SettingsHome};
 use super::{NotFound, Tabs};
 use crate::app::{app, viewer};
 use crate::islands::{GuildLive, MemberPicker};
@@ -19,7 +19,12 @@ pub fn CommunityPage() -> impl IntoView {
         .with_untracked(|p| p.get("g"))
         .and_then(|s| s.parse::<u64>().ok())
         .map(GuildId);
-    let tab = params.with_untracked(|p| p.get("tab")).unwrap_or_default();
+    // `/c/:g/settings/:section` is the Settings tab too.
+    let section = params.with_untracked(|p| p.get("section"));
+    let tab = match section {
+        Some(_) => "settings".to_owned(),
+        None => params.with_untracked(|p| p.get("tab")).unwrap_or_default(),
+    };
     let Some(v) = viewer() else {
         return ().into_any();
     };
@@ -80,7 +85,17 @@ pub fn CommunityPage() -> impl IntoView {
             <section class="card"><super::commands::ChatCommands guild=Some(g) locale=loc/></section>
         }
         .into_any(),
-        "settings" => view! { <SettingsForm scope=Scope::Server { guild: g } back=here.clone()/> }.into_any(),
+        "settings" => {
+            let scope = Scope::Server { guild: g };
+            match section.as_deref().map(super::settings::section_of) {
+                None => view! { <SettingsHome scope back=here.clone()/> }.into_any(),
+                Some(Some(s)) if super::settings::page_sections(scope).contains(&s) => {
+                    let back = format!("{base}/settings/{}", s.key());
+                    view! { <SettingsForm scope back section=s/> }.into_any()
+                }
+                Some(_) => view! { <NotFound/> }.into_any(),
+            }
+        }
         "voice-lines" => {
             view! { <super::voicelines::VoiceLinesEditor scope=Scope::Server { guild: g } back=here.clone()/> }
                 .into_any()
