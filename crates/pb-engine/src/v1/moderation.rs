@@ -11,10 +11,11 @@ use pb_infer::Scored;
 use pb_live_proto::{CutWhy, DecisionView, PersonDelta, SentenceCard, Stamps, VerdictView, ViolationItem, Who};
 use pb_policy::{Chan, ClearReason, DecideInput, Decider, Decision, Violations};
 use pb_settings::Recordings;
-use pb_store_api::{BlobAdded, BlobRole, CutCause, DecisionRecord, Event, SentenceRecord, SentenceSource};
+use pb_store_api::{CutCause, DecisionRecord, SentenceRecord, SentenceSource};
 use pb_voicelines::{Field, Fields, Line, Sel};
 
 use super::core::{Core, PlayItem, RoomHandle};
+use super::enforcer::Followup;
 use super::mailbox::Mailbox;
 use super::supervise::{ActorError, Life, Policy, Supervised};
 
@@ -264,25 +265,10 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
         Recordings::Flagged => !flagged.is_empty(),
         Recordings::All => true,
     };
-    let wav = Bytes::from(pb_audio::wav16(&pb_audio::to_i16(&h.pcm), pb_voice_api::LISTEN_RATE));
-    let mut events = Vec::new();
-    let mut audio = None;
-    if keep_audio {
-        match core.deps.blobs.put(wav.clone()).await {
-            Ok(info) => {
-                if info.new {
-                    events.push(Event::BlobAdded(BlobAdded {
-                        hash: info.hash,
-                        size: info.size,
-                        media_type: "audio/wav".into(),
-                        role: BlobRole::Recording,
-                    }));
-                }
-                audio = Some(info.hash);
-            }
-            Err(e) => tracing::error!(error = %e, "a recording could not be kept"),
-        }
-    }
+    // Actions and reports follow flagged sentences of people still tracked (reports may attach the recording).
+    let follow_up = !flagged.is_empty() && still_tracked;
+    let wav = (keep_audio || follow_up)
+        .then(|| Bytes::from(pb_audio::wav16(&pb_audio::to_i16(&h.pcm), pb_voice_api::LISTEN_RATE)));
     let sentence = SentenceRecord {
         id: h.id,
         guild: g,
@@ -298,14 +284,16 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
         flagged: flagged.clone(),
         decision: record,
         jar,
-        audio,
+        // The recorder stores the recording and fills this in.
+        audio: None,
         infer_ms: Some(scored.infer_ms),
         cut_to_verdict_ms: Some(u32::try_from(((now_mono - h.cut_mono) * 1000.0).max(0.0) as u64).unwrap_or(u32::MAX)),
         model: model_name(core),
         source: SentenceSource::Live,
     };
-    events.push(Event::Sentence(Box::new(sentence.clone())));
-    core.record(events).await;
+    // Handed to the recorder before the warning is queued: the sentence is recorded before what refers to it.
+    core.recorder
+        .sentence(sentence.clone(), wav.clone().filter(|_| keep_audio));
     if jar && let Ok(mut j) = core.jar.lock() {
         *j.entry((g, u)).or_insert(0) += 1;
     }
@@ -412,20 +400,17 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
         _ => {}
     }
 
-    // The action, then one report with its result (in their own task: Fluxer may be slow).
-    if !flagged.is_empty() && still_tracked {
-        let core2 = core.clone();
-        let s2 = sentence.clone();
-        let room = h.room.clone();
-        let step = step_info.map(|(_, _, step)| step);
-        tokio::spawn(async move {
-            let action = match step.as_ref().and_then(|st| st.action.kind().map(|k| (st, k))) {
-                Some((st, kind)) => {
-                    Some(super::actions::step_action(&core2, &s2, kind, st, room, Some(language)).await)
-                }
-                None => None,
-            };
-            super::reports::flagged(&core2, &s2, step.as_ref(), action.as_ref(), &wav).await;
-        });
+    // The action, then one report with its result (per person in order; Fluxer may be slow).
+    if follow_up && let Some(wav) = wav {
+        let followup = Followup {
+            sentence,
+            step: step_info.map(|(_, _, step)| step),
+            room: h.room.clone(),
+            heard: language,
+            wav,
+        };
+        if core.enforcer.send(followup).is_err() {
+            tracing::error!("the action and reports for a flagged sentence were dropped: the enforcer has stopped");
+        }
     }
 }

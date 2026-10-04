@@ -445,13 +445,7 @@ fn remember_person(
     }))
 }
 
-/// Records names in one append, without holding up the gateway's events (their order does not matter).
-fn record_names(core: &Arc<Core>, events: Vec<Event>) {
-    if events.is_empty() {
-        return;
-    }
-    let core = core.clone();
-    tokio::spawn(async move {
-        core.record(events).await;
-    });
+/// Records names in one batch, in the order seen, without holding up the gateway's events.
+fn record_names(core: &Core, events: Vec<Event>) {
+    core.record(events);
 }

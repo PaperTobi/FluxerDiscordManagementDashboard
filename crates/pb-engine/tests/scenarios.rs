@@ -597,7 +597,6 @@ async fn the_next_warning_is_rendered_in_the_language_last_heard() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "fixed by step 10 of proposal 0004"]
 async fn a_slow_disk_does_not_hold_back_the_warning() {
     let rig = Rig::start(Setup::default()).await;
     let mic = rig.alice_joins().await;

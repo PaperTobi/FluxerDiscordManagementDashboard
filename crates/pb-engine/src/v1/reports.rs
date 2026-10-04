@@ -69,8 +69,7 @@ pub async fn send(
         ok,
         error,
         with_audio,
-    })])
-    .await;
+    })]);
     ok
 }
 
@@ -395,6 +394,9 @@ pub async fn digest_once(core: &Arc<Core>, force: bool) -> Result<bool, super::e
         None,
     )
     .await;
+    // The next check reads when this one went out from the index: it must be there by then.
+    core.recorder.barrier().await;
+    core.index_caught_up().await;
     Ok(ok)
 }
 

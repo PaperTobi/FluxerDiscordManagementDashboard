@@ -110,7 +110,7 @@ pub async fn step_action(
     } else {
         record.outcome = ActionOutcome::NotConnected;
     }
-    core.record(vec![Event::Action(Box::new(record.clone()))]).await;
+    core.record(vec![Event::Action(Box::new(record.clone()))]);
     if record.undo_at.is_some() {
         let _ = core.undo.send(record.clone());
     }
@@ -263,7 +263,7 @@ async fn undo(core: &Arc<Core>, a: &ActionRecord, retry_at: Timestamp) -> bool {
         undoes: Some(a.id),
         retry_at: retry.then_some(retry_at),
     };
-    core.record(vec![Event::Action(Box::new(rec.clone()))]).await;
+    core.record(vec![Event::Action(Box::new(rec.clone()))]);
     show(core, &rec);
     // Still in voice with the bot: say that the mute is over.
     if lifted {

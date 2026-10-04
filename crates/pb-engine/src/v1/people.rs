@@ -117,8 +117,7 @@ pub(crate) async fn learn_person(core: &Core, guild: GuildId, user: UserId) {
                     display_name: u.global_name.clone(),
                     nick: m.nick.clone(),
                     avatar: u.avatar.clone(),
-                })])
-                .await;
+                })]);
                 core.mark_person(guild, user);
             }
         }

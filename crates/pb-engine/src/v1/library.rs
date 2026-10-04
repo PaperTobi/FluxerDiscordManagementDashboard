@@ -106,7 +106,7 @@ impl Engine {
             }),
             Event::ClipSaved(Box::new(rec.clone())),
         ];
-        if !self.core.record(events).await {
+        if !self.core.record_durably(events).await {
             return Err(EngineError::LogHalted);
         }
         self.core.put_clip(rec.clone());
@@ -157,7 +157,11 @@ impl Engine {
         rec.lang = lang;
         rec.transcript = transcript.filter(|t| !t.trim().is_empty());
         rec.by = by;
-        if !self.core.record(vec![Event::ClipSaved(Box::new(rec.clone()))]).await {
+        if !self
+            .core
+            .record_durably(vec![Event::ClipSaved(Box::new(rec.clone()))])
+            .await
+        {
             return Err(EngineError::LogHalted);
         }
         self.core.put_clip(rec.clone());
@@ -171,7 +175,7 @@ impl Engine {
         }
         if !self
             .core
-            .record(vec![Event::ClipRemoved(ClipRemoved { render, by })])
+            .record_durably(vec![Event::ClipRemoved(ClipRemoved { render, by })])
             .await
         {
             return Err(EngineError::LogHalted);
@@ -203,7 +207,7 @@ impl Engine {
         self.core.deps.blobs.delete(&hash).await?;
         if !self
             .core
-            .record(vec![Event::BlobDeleted(BlobDeleted { hash, by, reason })])
+            .record_durably(vec![Event::BlobDeleted(BlobDeleted { hash, by, reason })])
             .await
         {
             return Err(EngineError::LogHalted);

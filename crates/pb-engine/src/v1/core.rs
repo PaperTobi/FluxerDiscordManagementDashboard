@@ -7,7 +7,7 @@ use pb_domain::PlayPurpose;
 use pb_domain::{Audience, BlobHash, ChannelId, GuildId, Lang, SentenceId, UserId};
 use pb_fluxer_api::FluxerCtl;
 use pb_policy::Chan;
-use pb_store_api::{Actor, ClipRecord, Event, NewEvent, PlayRecord};
+use pb_store_api::{Actor, ClipRecord, Event, PlayRecord};
 use pb_voicelines::{Fields, Line};
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -16,6 +16,7 @@ use super::deps::Deps;
 use super::guilds::Guilds;
 use super::live::Live;
 use super::mailbox::Addr;
+use super::recorder::Recorder;
 use super::settings::SettingsService;
 use super::supervise::Supervisor;
 
@@ -113,6 +114,8 @@ pub struct Core {
     pub jar: Mutex<HashMap<(GuildId, UserId), u64>>,
     /// Timed mutes to lift (to the undo scheduler).
     pub undo: Addr<pb_store_api::ActionRecord>,
+    /// Actions and reports for flagged sentences.
+    pub(super) enforcer: Addr<super::enforcer::Followup>,
     /// The clip played last per person and line (not repeated next time).
     pub no_repeat: Mutex<pb_voicelines::NoRepeat>,
     /// People whose microphone the bot listens to now.
@@ -129,6 +132,8 @@ pub struct Core {
     pub connection: watch::Sender<Login>,
     /// The application's registered OAuth2 redirect addresses, and when Fluxer was last asked.
     pub redirects: Mutex<(Option<tokio::time::Instant>, Vec<String>)>,
+    /// The event log's single writer.
+    pub(super) recorder: Recorder,
     /// Runs the long-lived actors.
     pub(super) sup: Supervisor,
     /// Asks the gateway actor to log in again (the attempt number).
@@ -313,18 +318,13 @@ impl Core {
         self.ctl().map(|c| c.me().user.id)
     }
 
-    /// Appends events (logged when the log refuses; moderation goes on in memory).
-    pub async fn record(&self, events: Vec<Event>) -> bool {
-        let new: Vec<NewEvent> = events.iter().filter_map(|e| e.to_new(None)).collect();
-        if new.is_empty() {
-            return true;
-        }
-        match self.deps.log.append(new).await {
-            Ok(_) => true,
-            Err(e) => {
-                tracing::error!(error = %e, "events could not be recorded");
-                false
-            }
-        }
+    /// Records events after everything handed over before, without waiting for the disk (see [`Recorder`]).
+    pub fn record(&self, events: Vec<Event>) {
+        self.recorder.record(events);
+    }
+
+    /// Records events and waits until they are on disk; `false` when that failed (the recorder logged why).
+    pub async fn record_durably(&self, events: Vec<Event>) -> bool {
+        self.recorder.record_acked(events).await.is_ok()
     }
 }

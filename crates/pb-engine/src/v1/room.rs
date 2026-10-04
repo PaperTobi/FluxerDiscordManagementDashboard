@@ -454,7 +454,7 @@ async fn playback(
                 },
             );
         }
-        core.record(vec![Event::Played(Box::new(record.clone()))]).await;
+        core.record(vec![Event::Played(Box::new(record.clone()))]);
         if let Some(done) = item.done.take() {
             let _ = done.send(record);
         }

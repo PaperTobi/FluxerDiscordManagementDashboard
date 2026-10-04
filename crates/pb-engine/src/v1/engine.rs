@@ -21,12 +21,14 @@ use super::cells::Views;
 use super::control::{self, SessionEnd};
 use super::core::{Connection, Core, Login, PlayItem, Snapshot};
 use super::deps::Deps;
+use super::enforcer::Enforcer;
 use super::error::EngineError;
 use super::guilds::Guilds;
 use super::health::{ActorHealth, ActorState, EngineHealth, FatalError};
 use super::live::Live;
 use super::mailbox::{Mailbox, mailbox};
 use super::moderation::Moderation;
+use super::recorder::{Recorder, Storage, Writer};
 use super::reports::DigestTimer;
 use super::settings::SettingsService;
 use super::supervise::{ActorError, Life, Policy, Supervised, Supervisor};
@@ -48,8 +50,10 @@ impl Engine {
     /// Starts everything with the settings `tree` (already loaded from the files).
     pub async fn start(deps: Deps, tree: SettingsTree) -> Result<Engine, StoreError> {
         let settings = SettingsService::new(tree, deps.settings_files.clone(), deps.log.clone());
+        let (rec_tx, rec_mb) = mailbox();
         let (mod_tx, mod_mb) = mailbox();
         let (undo_tx, undo_mb) = mailbox();
+        let (enforcer_tx, enforcer_mb) = mailbox();
         let live = Live::new(deps.hub.clone());
         let core = Arc::new(Core {
             settings,
@@ -65,6 +69,7 @@ impl Engine {
             voice: Snapshot::default(),
             jar: Mutex::new(HashMap::new()),
             undo: undo_tx,
+            enforcer: enforcer_tx,
             no_repeat: Mutex::new(Default::default()),
             listening: Mutex::new(Default::default()),
             names_recorded: Mutex::new(Default::default()),
@@ -77,6 +82,7 @@ impl Engine {
                 state: Connection::NoToken,
             })
             .0,
+            recorder: Recorder::new(rec_tx),
             sup: Supervisor::default(),
             restart: watch::Sender::new(0),
             stop: watch::Sender::new(false),
@@ -97,6 +103,13 @@ impl Engine {
             );
         }
         core.index_caught_up().await;
+        core.sup.spawn::<Writer>(
+            Storage {
+                log: core.deps.log.clone(),
+                blobs: core.deps.blobs.clone(),
+            },
+            rec_mb,
+        );
         for c in index.clips().await? {
             core.put_clip(c.record);
         }
@@ -151,13 +164,13 @@ impl Engine {
         let sup = &core.sup;
         sup.spawn::<Moderation>(core.clone(), mod_mb);
         sup.spawn::<Undo>(core.clone(), undo_mb);
+        sup.spawn::<Enforcer>(core.clone(), enforcer_mb);
         sup.spawn_alone::<DigestTimer>(core.clone());
         sup.spawn_alone::<Threads>(core.clone());
         sup.spawn_alone::<Views>(core.clone());
         core.record(vec![Event::Started(Started {
             version: core.deps.version.clone(),
-        })])
-        .await;
+        })]);
         sup.spawn_alone::<Gateway>(core.clone());
         sup.spawn_alone::<SystemStatus>(core.clone());
         Ok(Engine { core })
@@ -508,7 +521,7 @@ impl Engine {
 
     /// Records an event (web logins, uploads).
     pub async fn record(&self, events: Vec<Event>) -> bool {
-        self.core.record(events).await
+        self.core.record_durably(events).await
     }
 
     /// Stops: leaves voice, closes the gateway, records the stop, ends the actors.
@@ -517,7 +530,7 @@ impl Engine {
         let clean = tokio::time::timeout(Duration::from_secs(10), self.core.sup.ended(Gateway::NAME))
             .await
             .is_ok();
-        self.core.record(vec![Event::Stopped(Stopped { clean })]).await;
+        self.core.record_durably(vec![Event::Stopped(Stopped { clean })]).await;
         self.core.sup.stop(Duration::from_secs(5)).await;
     }
 }

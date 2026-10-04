@@ -556,8 +556,7 @@ fn status(core: &Core, g: GuildId, loc: Locale) -> String {
 
 /// Empties a person's swear jar (web UI).
 pub async fn reset_jar(core: &Core, g: GuildId, u: UserId, by: Actor) {
-    core.record(vec![Event::JarReset(JarReset { guild: g, user: u, by })])
-        .await;
+    core.record(vec![Event::JarReset(JarReset { guild: g, user: u, by })]);
     let _ = core.moderation.send(ModMsg::JarReset(g, u));
 }
 

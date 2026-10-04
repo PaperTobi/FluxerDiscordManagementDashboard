@@ -106,6 +106,13 @@ impl<T> Mailbox<T> {
         m
     }
 
+    /// The next message if one is waiting.
+    pub fn try_recv(&mut self) -> Option<T> {
+        let m = self.rx.try_recv().ok();
+        self.took(m.is_some());
+        m
+    }
+
     fn took(&self, some: bool) {
         if some {
             self.activity.received.fetch_add(1, Ordering::Relaxed);
