@@ -7,7 +7,7 @@
 # again), and a small runtime image (glibc: LiveKit's libwebrtc needs it). Nothing is downloaded when the bot runs.
 
 # ---------------------------------------------------------------------------------------------------------- build
-FROM docker.io/library/rust:1.99-bookworm AS build
+FROM docker.io/library/rust:1.99.0-bookworm AS build
 
 # apt drops to this user to download. Builders without user namespaces (chroot isolation) cannot: pass
 # --build-arg APT_SANDBOX_USER=root there.

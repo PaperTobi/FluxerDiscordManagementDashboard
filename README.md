@@ -286,10 +286,12 @@ and which old settings no longer exist (the old caps).
 |---|---|
 | The page does not open | container running (`podman ps`)? same network? firewall (`8790/tcp`)? open it by IP |
 | "This address is not one of the bot's web UI addresses" | open it by IP, then set *System → Web UI address* or *Extra host names* |
-| Login fails at Fluxer | the redirect address is not registered exactly (setup step 4; the login names the address) |
+| Login fails at Fluxer | the redirect address is not registered exactly (setup step 4; the login names the address), or the client secret is wrong (enter it again on the setup's last step, or *System → Client secret*) |
 | "Record a clip" is greyed out | the page is not opened over HTTPS (see *HTTPS*) or on localhost; upload a file instead |
 | Exit code 78 | the log says why (configuration, model files, CPU); `pb doctor` checks everything |
 | Exit code 3 | another bot process uses the same data directory |
+| `rustc: symbol lookup error: …librustc_driver….so: undefined symbol …` | the distribution's Rust package does not match its LLVM libraries (a partial update, or packages from different repositories): install rustup instead (*Development*) |
+| `target/release/pb`: unknown command / no such file | the build before it failed: scroll up to its first error |
 | *System* says the instance has voice turned off | that Fluxer instance has no voice calls; nothing for the bot to do there |
 | Does not join voice | person not tracked or paused, missing Connect, or an end-to-end encrypted call (setting *Join end-to-end encrypted calls*) |
 | Flagged but no warning | strikes not reached yet, *Observe only (silent)* is on, the person is deafened, or the bot may not speak (it writes in the chat instead) |
@@ -306,9 +308,22 @@ mod-log channel. The bot is visible in the call while it listens.
 
 ## Development
 
-Tools: Rust (see `rust-version` in `Cargo.toml`) with the `wasm32-unknown-unknown` target, clang 21+ (LiveKit's
-libwebrtc is built against Chromium's libc++), cmake and ninja (espeak-ng), git, and for the checks
+Tools: Rust through [rustup](https://rustup.rs) (the release in `rust-toolchain.toml`, with the `wasm32-unknown-unknown`
+target for the browser bundle), clang 21+ and lld (LiveKit's libwebrtc is built against Chromium's libc++), glib
+headers and pkg-config (libwebrtc), cmake and ninja (espeak-ng), git, and for the checks
 `cargo install --locked cargo-deny cargo-shear`.
+
+```bash
+# Arch, CachyOS, Manjaro (rustup replaces the distribution's `rust` package)
+sudo pacman -S --needed base-devel rustup clang lld pkgconf glib2 cmake ninja git
+# Debian, Ubuntu: rustup from https://rustup.rs; clang 21 from https://apt.llvm.org (the Containerfile's build stage
+# lists the packages)
+
+rustup toolchain install     # in this directory: the release and target from rust-toolchain.toml
+```
+
+A distribution's own Rust package works only if it is that release, has the wasm32 target and matches the system's
+LLVM libraries; rustup brings its own and avoids all three problems.
 
 ```bash
 cargo xtask espeak-ng        # the pinned espeak-ng, into target/espeak-ng

@@ -1,0 +1,7 @@
+# The Rust release this project is built and tested with. rustup installs it, with the browser (wasm32) target, on the
+# first `cargo` command in this directory. Keep it in step with `rust-version` in Cargo.toml and the Containerfile.
+[toolchain]
+channel = "1.99.0"
+targets = ["wasm32-unknown-unknown"]
+components = ["clippy", "rustfmt"]
+profile = "minimal"
