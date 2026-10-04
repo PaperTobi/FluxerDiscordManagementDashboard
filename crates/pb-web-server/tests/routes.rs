@@ -1768,3 +1768,59 @@ async fn id_lists_change_one_entry_at_a_time() {
     }
     w.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_community_page_opened_later_shows_earlier_violations() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let rec = pb_store_api::SentenceRecord {
+        id: pb_domain::SentenceId::new(),
+        guild: GuildId(G),
+        channel: pb_domain::ChannelId(LOUNGE),
+        user: UserId(MAX),
+        started: jiff::Timestamp::now(),
+        dur_ms: 1500,
+        level_db: None,
+        cut: pb_store_api::CutCause::Pause,
+        scores: [0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.9, 0.0],
+        language: pb_domain::ClfLang::En,
+        thresholds: vec![(pb_domain::Label::Profanity, 0.5)],
+        flagged: vec![pb_domain::Label::Profanity],
+        decision: pb_store_api::DecisionRecord::Warn {
+            label: pb_domain::Label::Profanity,
+            score: 0.9,
+            step: 1,
+            count: 1,
+        },
+        jar: true,
+        audio: None,
+        infer_ms: None,
+        cut_to_verdict_ms: None,
+        model: "test".into(),
+        source: pb_store_api::SentenceSource::Live,
+    };
+    assert!(
+        w.engine
+            .record(vec![pb_store_api::Event::Sentence(Box::new(rec))])
+            .await
+    );
+    let shows = async |path: &str| {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let body = w.get(path, Some(&owner)).await.body;
+            if body.contains("Warned (step 1)") {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < end,
+                "{path} never showed the violation: {body}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    };
+    // Once the index has it (the Reports page reads the index) …
+    shows("/reports").await;
+    // … the community's live list, made when the page is first opened, starts with it.
+    shows(&format!("/c/{G}")).await;
+    w.stop().await;
+}

@@ -10,8 +10,8 @@ use pb_domain::{Audience, GuildId, UserId};
 use pb_live::CellSource;
 use pb_live_proto::{
     Call, ChannelRef, Connection, Counts, Dot, GuildDelta, GuildState, Participant, PersonDelta, PersonState, Presence,
-    SentenceCard, SidebarCommunity, SidebarDelta, SidebarPerson, Stamps, Topic, TopicState, TrackedPerson, Tracking,
-    WallDelta, Who,
+    SentenceCard, SidebarCommunity, SidebarDelta, SidebarPerson, Stamps, Topic, TopicDelta, TopicState, TrackedPerson,
+    Tracking, ViolationItem, WallDelta, Who,
 };
 use pb_policy::{Chan, e2ee_active};
 use pb_store_api::{SentenceFilter, SentenceKind};
@@ -268,6 +268,9 @@ impl CellSource for Cells {
                     core.live
                         .hub
                         .set(topic.clone(), TopicState::Guild(Box::new(guild_state(core, *guild))));
+                    let (core2, g) = (core.clone(), *guild);
+                    core.sup
+                        .spawn_task("community view", async move { fill_guild(&core2, g).await });
                 }
                 true
             }
@@ -291,6 +294,62 @@ impl CellSource for Cells {
             }
             _ => core.live.hub.has(topic),
         }
+    }
+}
+
+/// The latest violations of a community (or of every community) from the log's index, oldest first: a live view that
+/// starts empty (a community page opened for the first time, the wall after a start) shows what happened before.
+async fn recent_violations(core: &Core, guild: Option<GuildId>) -> Vec<ViolationItem> {
+    let f = SentenceFilter {
+        guilds: guild.map(|g| vec![g]),
+        kind: SentenceKind::Violations,
+        ..SentenceFilter::default()
+    };
+    let limit = u32::try_from(pb_live_proto::LIVE_VIOLATIONS).unwrap_or(50);
+    let Ok(page) = core.deps.index.sentences(&f, None, limit).await else {
+        return Vec::new();
+    };
+    let gs = core.guilds();
+    page.items
+        .iter()
+        .rev()
+        .filter_map(|row| {
+            let r = &row.record;
+            let (label, score, step, count) = r.decision.violation()?;
+            Some(ViolationItem {
+                sentence: r.id,
+                guild: r.guild,
+                community: gs.guild_name(r.guild),
+                channel: ChannelRef {
+                    id: r.channel,
+                    name: gs.channel_name(r.guild, r.channel),
+                },
+                who: who(core, r.guild, r.user),
+                label,
+                score,
+                step,
+                count,
+                decision: decision_view(&r.decision),
+                at_ms: r.started.as_millisecond() + i64::from(r.dur_ms),
+            })
+        })
+        .collect()
+}
+
+/// A community's view, just made: its latest violations (the live list only gets new ones).
+pub(crate) async fn fill_guild(core: &Core, g: GuildId) {
+    let topic = Topic::Guild { guild: g };
+    for violation in recent_violations(core, Some(g)).await {
+        core.live
+            .hub
+            .publish(&topic, TopicDelta::Guild(GuildDelta::Violation { violation }));
+    }
+}
+
+/// The wall after a start: the latest violations of every community.
+pub(crate) async fn fill_wall(core: &Core) {
+    for violation in recent_violations(core, None).await {
+        core.live.wall(WallDelta::Violation { violation });
     }
 }
 
@@ -374,8 +433,11 @@ impl Supervised for Views {
     const NAME: &'static str = "views";
     const POLICY: Policy = Policy::Restart;
 
-    /// Everything is built afresh (after a crash too).
-    async fn start(_: &Arc<Core>) -> Result<Self, ActorError> {
+    /// Everything is built afresh (after a crash too), and the wall gets the latest violations back.
+    async fn start(core: &Arc<Core>) -> Result<Self, ActorError> {
+        let core2 = core.clone();
+        core.sup
+            .spawn_task("wall violations", async move { fill_wall(&core2).await });
         Ok(Views {
             dirty: Dirty {
                 all: true,
