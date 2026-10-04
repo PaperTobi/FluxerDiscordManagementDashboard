@@ -2,7 +2,8 @@
 //!
 //! Hidden tabs keep only the sidebar; a tab that comes back starts a new view and gets fresh snapshots; a frozen or
 //! hidden-and-discarded page closes its socket and reconnects when it is shown again; an ended login shows "log in
-//! again" instead of reconnecting forever.
+//! again" instead of reconnecting forever. A socket that stays silent (the server pings every 15 s; a dead network
+//! path never says so) is replaced after 45 s, and a computer that comes back online reconnects at once.
 
 use pb_live_proto::{Topic, TopicState};
 
@@ -57,6 +58,11 @@ mod imp {
 
     type Listener = Rc<dyn Fn(&TopicState)>;
 
+    /// A socket without a frame for this long is taken for dead (three of the server's pings missed).
+    const SILENT_MS: i64 = 45_000;
+    /// How often the silence is checked.
+    const WATCH_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
+
     struct Client {
         tracker: RefCell<TopicTracker>,
         ws: RefCell<Option<WebSocket>>,
@@ -64,6 +70,8 @@ mod imp {
         next_id: Cell<u64>,
         clock: RefCell<ClockOffset>,
         failures: Cell<u32>,
+        /// When the socket last opened or brought a frame (ms, local clock).
+        last_frame: Cell<i64>,
         /// The login ended: no reconnecting.
         ended: Cell<bool>,
         /// The page is frozen or being left: no reconnecting until it is shown again.
@@ -100,12 +108,14 @@ mod imp {
                 next_id: Cell::new(1),
                 clock: RefCell::new(ClockOffset::default()),
                 failures: Cell::new(0),
+                last_frame: Cell::new(now_ms()),
                 ended: Cell::new(false),
                 frozen: Cell::new(false),
                 handlers: RefCell::new(Vec::new()),
             });
             *c.borrow_mut() = Some(new.clone());
             page_events(&new);
+            watchdog(&new);
             connect(&new);
             new
         })
@@ -126,10 +136,12 @@ mod imp {
         }
     }
 
+    /// Opens the socket, unless one is open or opening (a reconnect timer and the `online` event may both ask).
     fn connect(c: &Rc<Client>) {
-        if c.ended.get() || c.frozen.get() {
+        if c.ended.get() || c.frozen.get() || c.ws.borrow().is_some() {
             return;
         }
+        c.last_frame.set(now_ms());
         let Some(loc) = web_sys::window().map(|w| w.location()) else {
             return;
         };
@@ -146,11 +158,13 @@ mod imp {
         let (c1, c2, c3) = (c.clone(), c.clone(), c.clone());
         let onopen = Closure::<dyn FnMut(Event)>::new(move |_| {
             c1.failures.set(0);
+            c1.last_frame.set(now_ms());
             set_body_class("offline", false);
             let hello = c1.tracker.borrow_mut().hello();
             send(&c1, &hello);
         });
         let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
+            c2.last_frame.set(now_ms());
             let Some(text) = e.data().as_string() else { return };
             match serde_json::from_str::<ServerMsg>(&text) {
                 Ok(m) => receive(&c2, m),
@@ -183,6 +197,31 @@ mod imp {
         let delay = (1000u32 << n.min(5)).min(30_000);
         let c2 = c.clone();
         leptos::prelude::set_timeout(move || connect(&c2), std::time::Duration::from_millis(u64::from(delay)));
+    }
+
+    /// Drops the socket (whatever state it is in) and opens a new one now.
+    fn replace_socket(c: &Rc<Client>) {
+        if c.ended.get() || c.frozen.get() {
+            return;
+        }
+        close(c);
+        set_body_class("offline", true);
+        connect(c);
+    }
+
+    /// Replaces a socket that has been silent too long: a connection the network dropped without a word (a laptop
+    /// that slept, a router that forgot it) looks open forever otherwise.
+    fn watchdog(c: &Rc<Client>) {
+        let c = c.clone();
+        let check = move || {
+            let open = c.ws.borrow().is_some();
+            if open && now_ms() - c.last_frame.get() > SILENT_MS {
+                leptos::logging::warn!("the live connection was silent too long; connecting again");
+                replace_socket(&c);
+            }
+        };
+        // The interval lives as long as the page.
+        let _ = leptos::prelude::set_interval_with_handle(check, WATCH_EVERY);
     }
 
     fn close(c: &Client) {
@@ -243,10 +282,19 @@ mod imp {
         }
     }
 
-    /// Hidden tabs, frozen pages and pages being left.
+    /// Hidden tabs, frozen pages, pages being left, and a computer that is online again.
     fn page_events(c: &Rc<Client>) {
         let Some(doc) = document() else { return };
         let Some(win) = web_sys::window() else { return };
+        // Back online (another network, out of sleep): the old socket is likely dead, and waiting out the backoff
+        // would only delay; connect now.
+        let c0 = c.clone();
+        let on_online = Closure::<dyn FnMut(Event)>::new(move |_| {
+            c0.failures.set(0);
+            replace_socket(&c0);
+        });
+        let _ = win.add_event_listener_with_callback("online", on_online.as_ref().unchecked_ref());
+        on_online.forget();
         let c1 = c.clone();
         let on_visibility = Closure::<dyn FnMut(Event)>::new(move |_| {
             let msg = c1.tracker.borrow_mut().set_visible(visible());
