@@ -12,6 +12,9 @@ use super::old::OldDb;
 
 /// The old bot's default text-to-speech voice (its language is the language of texts at scopes without a voice).
 const OLD_DEFAULT_VOICE: &str = "en_US-lessac-medium";
+/// The old bot's "every community" (tracked rows and person settings `*:<user>`).
+const ANY: &str = "*";
+const ANY_PREFIX: &str = "*:";
 /// The languages the bot speaks out of the box (a spoken name is the same in all of them).
 const BUILTIN_LANGS: [&str; 2] = ["de", "en"];
 
@@ -100,10 +103,26 @@ fn line_for(t: &str, step: Option<&str>) -> Option<LineKey> {
 /// Converts the old settings and tracked people into changes of `tree`.
 pub fn convert(old: &OldDb, tree: &mut SettingsTree, clips: &BTreeMap<String, BlobHash>) -> SettingsImport {
     let mut by_scope: BTreeMap<Scope, BTreeMap<String, Value>> = BTreeMap::new();
+    // The old bot's person settings for every community (`*:<user>`).
+    let mut everywhere: BTreeMap<UserId, BTreeMap<String, Value>> = BTreeMap::new();
     let mut rows = 0;
     let mut notes = Vec::new();
     for r in &old.settings {
         rows += 1;
+        let (scope_kind, id) = (r.text(0).unwrap_or_default(), r.text(1).unwrap_or_default());
+        if let (Some(user), Some(key)) = (
+            id.strip_prefix(ANY_PREFIX)
+                .filter(|_| scope_kind == "person")
+                .and_then(|u| u.parse().ok()),
+            r.text(2),
+        ) {
+            let value = r
+                .text(3)
+                .and_then(|t| serde_json::from_str(&t).ok())
+                .unwrap_or(Value::Null);
+            everywhere.entry(user).or_default().insert(key, value);
+            continue;
+        }
         let (Some(scope), Some(key)) = (
             scope_of(&r.text(0).unwrap_or_default(), &r.text(1).unwrap_or_default()),
             r.text(2),
@@ -116,6 +135,41 @@ pub fn convert(old: &OldDb, tree: &mut SettingsTree, clips: &BTreeMap<String, Bl
             .and_then(|t| serde_json::from_str(&t).ok())
             .unwrap_or(Value::Null);
         by_scope.entry(scope).or_default().insert(key, value);
+    }
+    // A person's settings for every community apply in each community they are tracked in or have settings in, under
+    // the ones for that community (as the old bot layered them). Communities they join later do not get them.
+    let communities_of = |user: UserId, by_scope: &BTreeMap<Scope, BTreeMap<String, Value>>| {
+        let mut gs: Vec<GuildId> = old
+            .tracked
+            .iter()
+            .filter(|r| r.text(1).and_then(|u| u.parse::<UserId>().ok()) == Some(user))
+            .filter_map(|r| r.text(0).and_then(|g| g.parse().ok()))
+            .chain(by_scope.keys().filter_map(|s| match s {
+                Scope::Person { guild, user: u } if *u == user => Some(*guild),
+                _ => None,
+            }))
+            .collect();
+        gs.sort();
+        gs.dedup();
+        gs
+    };
+    for (user, keys) in everywhere {
+        let guilds = communities_of(user, &by_scope);
+        notes.push(format!(
+            "settings of {user} for every community ({}) were applied in the communities they are tracked in or have              settings in ({}); they do not apply in other communities",
+            keys.keys().cloned().collect::<Vec<_>>().join(", "),
+            if guilds.is_empty() {
+                "none".to_owned()
+            } else {
+                guilds.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")
+            }
+        ));
+        for guild in guilds {
+            let own = by_scope.entry(Scope::Person { guild, user }).or_default();
+            for (k, v) in &keys {
+                own.entry(k.clone()).or_insert_with(|| v.clone());
+            }
+        }
     }
     let voice_of = |s: Scope| {
         by_scope
@@ -377,7 +431,16 @@ pub fn convert(old: &OldDb, tree: &mut SettingsTree, clips: &BTreeMap<String, Bl
                 .to_owned(),
         );
     }
+    let mut tracked_everywhere: Vec<UserId> = cx.tree.effective(None, None).tracked_everywhere.value.clone();
     for r in &old.tracked {
+        if r.text(0).as_deref() == Some(ANY) {
+            match r.text(1).and_then(|u| u.parse::<UserId>().ok()) {
+                Some(user) if !tracked_everywhere.contains(&user) => tracked_everywhere.push(user),
+                Some(_) => {}
+                None => cx.out.notes.push(format!("a tracked row was skipped: {:?}", r.0)),
+            }
+            continue;
+        }
         let (Some(guild), Some(user)) = (
             r.text(0).and_then(|g| g.parse::<GuildId>().ok()),
             r.text(1).and_then(|u| u.parse::<UserId>().ok()),
@@ -393,6 +456,11 @@ pub fn convert(old: &OldDb, tree: &mut SettingsTree, clips: &BTreeMap<String, Bl
         if let Some(c) = cx.tree.track(guild, user, by, at) {
             cx.out.changes.push(c);
         }
+    }
+    // People tracked in every community.
+    if tracked_everywhere != cx.tree.effective(None, None).tracked_everywhere.value {
+        let ids: Vec<String> = tracked_everywhere.iter().map(ToString::to_string).collect();
+        cx.set(Scope::Global, SettingKey::TrackedEverywhere, json!(ids), "tracked *");
     }
     cx.out
 }

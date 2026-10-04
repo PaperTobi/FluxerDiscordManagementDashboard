@@ -58,7 +58,8 @@ async fn imports_the_old_data_directory() {
             report.jar,
             report.pending_mutes
         ),
-        (2, 2, 4, 1, 1)
+        (3, 2, 4, 1, 1),
+        "two tracked in the community, one in every community"
     );
     assert!(report.secrets);
     for removed in [
@@ -100,9 +101,19 @@ async fn imports_the_old_data_directory() {
     assert_eq!(community.max_sentence.value.get().millis(), 6000);
     assert_eq!(community.min_voiced.value.get().millis(), 250);
     let person = loaded.effective(Some(G), Some(U1));
-    assert!((person.threshold.value.get() - 0.4).abs() < 1e-9);
+    assert!(
+        (person.threshold.value.get() - 0.4).abs() < 1e-9,
+        "the setting for this community wins over the one for every community"
+    );
+    assert_eq!(person.strikes.value.get(), 3, "from the settings for every community");
     assert_eq!(person.voice_language.value.to_string(), "en");
+    assert!(loaded.effective(Some(G), Some(U2)).observe_only.value);
     assert!(loaded.is_tracked(G, U1) && loaded.is_tracked(G, U2));
+    // Tracked in every community.
+    let u3 = UserId(444_444_444_444_444_444);
+    assert_eq!(global.tracked_everywhere.value, vec![u3]);
+    assert!(loaded.is_tracked(G, u3));
+    assert!(report.to_text().contains("for every community"), "{}", report.to_text());
     let lines = |s| loaded.voice_lines(s).cloned().unwrap_or_default();
     let warn1 = &lines(Scope::Global)[&"warning.any.1".parse().unwrap()];
     assert_eq!(warn1.text[&"de".parse().unwrap()], "Hey {name}, pass auf!");
