@@ -372,10 +372,15 @@ pub async fn say(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<F
         return st.done(&s, &f, false, text(s.locale, "ui-not-allowed", &[]));
     };
     let said = field(&f, "text").unwrap_or_default().trim().to_owned();
-    let what = match field(&f, "preset").filter(|p| !p.is_empty()) {
-        Some(p) => pb_engine::SayWhat::Preset(p.to_owned()),
-        None if said.is_empty() => return st.done(&s, &f, false, text(s.locale, "ui-say-empty", &[])),
-        None => pb_engine::SayWhat::Text {
+    let clip = field(&f, "clip").filter(|c| !c.is_empty());
+    let what = match (clip, field(&f, "preset").filter(|p| !p.is_empty())) {
+        (Some(c), _) => match c.parse::<pb_domain::BlobHash>() {
+            Ok(h) => pb_engine::SayWhat::Clip(h),
+            Err(_) => return st.done(&s, &f, false, text(s.locale, "ui-no-such-clip", &[])),
+        },
+        (None, Some(p)) => pb_engine::SayWhat::Preset(p.to_owned()),
+        (None, None) if said.is_empty() => return st.done(&s, &f, false, text(s.locale, "ui-say-empty", &[])),
+        (None, None) => pb_engine::SayWhat::Text {
             text: said,
             lang: match field(&f, "lang").filter(|l| !l.is_empty()) {
                 Some(l) => match l.parse() {

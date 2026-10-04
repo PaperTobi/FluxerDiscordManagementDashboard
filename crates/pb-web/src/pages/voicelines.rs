@@ -11,7 +11,7 @@ use pb_voicelines::{Line, LineKey, Sel, Slot};
 use super::settings::{language_list, scope_param};
 use crate::app::{Viewer, app, viewer};
 use crate::fmt;
-use crate::islands::ClipRecorder;
+use crate::islands::{ClipRecorder, PreviewPlayer};
 
 /// A line's name.
 pub fn line_title(loc: Locale, line: &Line) -> String {
@@ -162,6 +162,7 @@ fn LineRow(key: LineKey, scope: Scope, v: Viewer, back: String, clips: Vec<ClipR
     };
     let line = key.to_string();
     let preview = format!("/media/preview?scope={}&line={line}", scope_param(scope));
+    let preview_langs = preview_languages(scope, &key, &clips);
     let preferred = preferred_lang(scope);
     let clip_name = |h: &pb_domain::BlobHash| {
         clips
@@ -175,7 +176,7 @@ fn LineRow(key: LineKey, scope: Scope, v: Viewer, back: String, clips: Vec<ClipR
             <div class="vline-head">
                 <b>{line_title(loc, &key.0)}</b>
                 <span class="badge" class:here=here.is_some()>{badge}</span>
-                <audio controls preload="none" src=preview title=text(loc, "ui-preview", &[])></audio>
+                <PreviewPlayer src=preview langs=preview_langs locale=loc/>
             </div>
             {(!slot.clips.is_empty()).then(|| view! {
                 <ul class="slot-clips">
@@ -254,6 +255,44 @@ pub fn clip_uses(tree: &pb_settings::SettingsTree, clip: &pb_domain::BlobHash) -
             scan(Scope::Person { guild: *g, user: *u }, &person.voice_lines);
         }
     }
+    out
+}
+
+/// The languages a line's preview offers: those of its texts and clips here and above, and those a voice speaks.
+fn preview_languages(scope: Scope, key: &LineKey, clips: &[ClipRow]) -> Vec<(String, String)> {
+    let tree = app().engine.settings().current();
+    let mut codes: Vec<String> = app()
+        .engine
+        .voices()
+        .iter()
+        .map(|v| {
+            v.language
+                .split(['_', '-'])
+                .next()
+                .unwrap_or(&v.language)
+                .to_lowercase()
+        })
+        .collect();
+    for s in scopes_above(scope).into_iter().chain([scope]) {
+        if let Some(slot) = tree.voice_lines(s).and_then(|x| x.get(key)) {
+            codes.extend(slot.text.keys().map(ToString::to_string));
+            codes.extend(slot.clips.iter().filter_map(|h| {
+                clips
+                    .iter()
+                    .find(|c| c.record.render == *h)
+                    .and_then(|c| c.record.lang.as_ref().map(ToString::to_string))
+            }));
+        }
+    }
+    let mut out: Vec<(String, String)> = codes
+        .into_iter()
+        .map(|c| {
+            let name = fmt::language(&c);
+            (c, name)
+        })
+        .collect();
+    out.sort_by(|a, b| a.1.cmp(&b.1));
+    out.dedup_by(|a, b| a.0 == b.0);
     out
 }
 

@@ -11,7 +11,7 @@ use super::settings::SettingsForm;
 use super::{NotFound, Tabs};
 use crate::app::{Viewer, app, viewer};
 use crate::fmt;
-use crate::islands::{Avatar, PersonLive};
+use crate::islands::{Avatar, PersonLive, SayGate};
 
 #[component]
 pub fn PersonPage() -> impl IntoView {
@@ -58,17 +58,20 @@ pub fn PersonPage() -> impl IntoView {
     })
     .collect::<Vec<_>>();
     let live_engine = engine.clone();
+    let (say_viewer, say_back, index) = (v.clone(), here.clone(), app().index);
     let body = match tab.as_str() {
         "" => view! {
             <Suspense fallback=|| ()>
                 {Suspend::new(async move {
-                    live_engine
-                        .person_view(g, u)
-                        .await
-                        .map(|s| view! { <PersonLive initial=s locale=loc/> })
+                    let s = live_engine.person_view(g, u).await?;
+                    let clips = index.clips().await.unwrap_or_default();
+                    let presence = s.presence.clone();
+                    Some(view! {
+                        <PersonLive initial=s locale=loc/>
+                        <SayNow guild=g user=u viewer=say_viewer back=say_back presence clips/>
+                    })
                 })}
             </Suspense>
-            <SayNow guild=g user=u viewer=v.clone() back=here.clone()/>
         }
         .into_any(),
         "history" => view! {
@@ -120,11 +123,20 @@ pub fn PersonPage() -> impl IntoView {
     .into_any()
 }
 
-/// "Say now": a text in a language, spoken in the call this person is in (only they, or everyone, hear it as the
-/// audience setting says).
+/// "Say now", in the call this person is in (only they, or everyone, hear it as the audience setting says): a text in
+/// a language, a clip from the library, or a Say preset. Switched off, with the reason, while they are not in a call
+/// with the bot.
 #[component]
-fn SayNow(guild: GuildId, user: UserId, viewer: Viewer, back: String) -> impl IntoView {
+fn SayNow(
+    guild: GuildId,
+    user: UserId,
+    viewer: Viewer,
+    back: String,
+    presence: pb_live_proto::Presence,
+    clips: Vec<pb_store_api::ClipRow>,
+) -> impl IntoView {
     let loc = viewer.locale;
+    let t = move |id: &str| text(loc, id, &[]);
     let langs = super::settings::language_list();
     let presets = app()
         .engine
@@ -132,28 +144,53 @@ fn SayNow(guild: GuildId, user: UserId, viewer: Viewer, back: String) -> impl In
         .current()
         .scoped_slots(guild, Some(user))
         .say_presets();
+    let hidden = move || {
+        view! {
+            <input type="hidden" name="csrf" value=viewer.csrf.clone()/>
+            <input type="hidden" name="back" value=back.clone()/>
+            <input type="hidden" name="guild" value=guild.to_string()/>
+            <input type="hidden" name="user" value=user.to_string()/>
+        }
+    };
     view! {
-        <section class="card">
-            <h2>{text(loc, "ui-say-now", &[])}</h2>
-            <form method="post" action="/say" class="row">
-                <input type="hidden" name="csrf" value=viewer.csrf.clone()/>
-                <input type="hidden" name="back" value=back/>
-                <input type="hidden" name="guild" value=guild.to_string()/>
-                <input type="hidden" name="user" value=user.to_string()/>
-                {(!presets.is_empty()).then(|| view! {
-                    <select name="preset">
-                        <option value="">{text(loc, "ui-say-own-text", &[])}</option>
-                        {presets.into_iter().map(|p| view! { <option value=p.clone()>{p.replace('-', " ")}</option> }).collect_view()}
+        <section class="card say-now">
+            <h2>{t("ui-say-now")}</h2>
+            <SayGate guild user initial=presence locale=loc>
+                <form method="post" action="/say" class="row">
+                    {hidden()}
+                    <span class="say-kind">{t("ui-say-own-text")}</span>
+                    <input name="text" class="grow" required placeholder=t("ui-say-placeholder")/>
+                    <select name="lang" title=t("ui-say-language")>
+                        <option value="">{t("ui-their-language")}</option>
+                        {langs.into_iter().map(|l| view! { <option value=l.clone()>{fmt::language(&l)}</option> }).collect_view()}
                     </select>
+                    <button class="button primary">{t("ui-say")}</button>
+                </form>
+                {(!clips.is_empty()).then(|| view! {
+                    <form method="post" action="/say" class="row">
+                        {hidden()}
+                        <span class="say-kind">{t("ui-say-clip")}</span>
+                        <select name="clip" class="grow" required>
+                            {clips.into_iter().map(|c| {
+                                let tag = c.record.lang.as_ref().map(|l| format!(" ({l})")).unwrap_or_default();
+                                view! { <option value=c.record.render.to_string()>{format!("{}{tag}", c.record.name)}</option> }
+                            }).collect_view()}
+                        </select>
+                        <button class="button">{t("ui-say-play")}</button>
+                    </form>
                 })}
-                <input name="text" class="grow" placeholder=text(loc, "ui-say-placeholder", &[])/>
-                <select name="lang">
-                    <option value="">{text(loc, "ui-their-language", &[])}</option>
-                    {langs.into_iter().map(|l| view! { <option value=l.clone()>{fmt::language(&l)}</option> }).collect_view()}
-                </select>
-                <button class="button primary">{text(loc, "ui-say", &[])}</button>
-            </form>
-            <p class="muted small">{text(loc, "ui-say-help", &[])}</p>
+                {(!presets.is_empty()).then(|| view! {
+                    <form method="post" action="/say" class="row">
+                        {hidden()}
+                        <span class="say-kind">{t("ui-say-preset")}</span>
+                        <select name="preset" class="grow" required>
+                            {presets.into_iter().map(|p| view! { <option value=p.clone()>{p.replace('-', " ")}</option> }).collect_view()}
+                        </select>
+                        <button class="button">{t("ui-say")}</button>
+                    </form>
+                })}
+            </SayGate>
+            <p class="muted small">{t("ui-say-help")}</p>
         </section>
     }
 }

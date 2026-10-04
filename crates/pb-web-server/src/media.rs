@@ -73,9 +73,12 @@ pub async fn sentence(State(st): State<WebState>, Path(id): Path<String>, req: R
 pub struct PreviewQuery {
     scope: String,
     line: String,
+    /// Said in this language (empty: as the bot would choose there now).
+    #[serde(default)]
+    lang: String,
 }
 
-/// `GET /media/preview?scope=…&line=…`: a voice line as the bot would say it there now.
+/// `GET /media/preview?scope=…&line=…[&lang=…]`: a voice line as the bot would say it there now, or in a language.
 pub async fn preview(State(st): State<WebState>, headers: HeaderMap, Query(q): Query<PreviewQuery>) -> Response {
     let Some(login) = st.sessions.lookup(&headers) else {
         return StatusCode::UNAUTHORIZED.into_response();
@@ -96,7 +99,14 @@ pub async fn preview(State(st): State<WebState>, headers: HeaderMap, Query(q): Q
     let Some(guild) = guild.filter(|g| access.may_see(*g)) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    match st.engine.preview(guild, person, key.0, None).await {
+    let lang = match q.lang.trim() {
+        "" => None,
+        l => match l.parse::<pb_domain::Lang>() {
+            Ok(l) => Some(l),
+            Err(_) => return StatusCode::NOT_FOUND.into_response(),
+        },
+    };
+    match st.engine.preview(guild, person, key.0, lang).await {
         Ok(r) => (
             [(header::CONTENT_TYPE, "audio/wav"), (header::CACHE_CONTROL, "no-store")],
             r.wav(),

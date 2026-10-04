@@ -558,3 +558,15 @@ details.advanced[open] > summary { margin-bottom: 8px; }
 .id-picker { display: flex; flex-direction: column; gap: 6px; }
 .id-picker label.inline { gap: 6px; }
 .id-picker .row select { max-width: 280px; }
+
+/* ---------------------------------------------------------------- say now, previews */
+
+/* "Say now": switched off (with the reason) while the person is not in a call with the bot */
+fieldset.say-gate { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+fieldset.say-gate:disabled { opacity: 0.55; }
+.say-kind { min-width: 64px; color: var(--muted); }
+.say-why { margin: 8px 0 0; }
+
+/* a voice line's preview with its language */
+.preview { gap: 6px; flex-wrap: nowrap; }
+.preview select { padding: 4px 8px; font-size: 0.85rem; max-width: 220px; }

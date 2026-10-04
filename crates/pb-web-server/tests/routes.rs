@@ -1419,3 +1419,56 @@ async fn a_setting_says_where_the_setting_it_needs_lives() {
     assert!(!community.contains("Works together"), "{community}");
     w.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn say_now_needs_a_call_and_plays_clips() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let clip = upload_clip(&w, &owner, &csrf, "Calm down").await;
+    let page = w.get(&format!("/c/{G}/p/{MAX}"), Some(&owner)).await.body;
+    assert!(page.contains("<fieldset disabled class=\"say-gate\">"), "{page}");
+    assert!(page.contains("They are not in a call."));
+    assert!(
+        page.contains(&format!("<option value=\"{clip}\">Calm down (en)</option>")),
+        "{page}"
+    );
+    let r = w
+        .post(
+            "/say",
+            Some(&owner),
+            &[
+                ("csrf", &csrf),
+                ("guild", &G.to_string()),
+                ("user", &MAX.to_string()),
+                ("clip", &clip),
+                ("back", "/"),
+            ],
+        )
+        .await;
+    assert!(notice(&w, &owner, &r).await.contains("They are not in a call."));
+    // A voice line can be heard in a chosen language; an unknown one is refused.
+    let scope = format!("server:{G}");
+    w.post(
+        "/voice-lines",
+        Some(&owner),
+        &[
+            ("csrf", &csrf),
+            ("scope", &scope),
+            ("line", "greeting"),
+            ("op", "add_clip"),
+            ("clip", &clip),
+            ("back", "/"),
+        ],
+    )
+    .await;
+    let lines = w.get(&format!("/c/{G}/voice-lines"), Some(&owner)).await.body;
+    assert!(
+        lines.contains("As the bot would say it"),
+        "a language choice for previews"
+    );
+    let preview = |lang: &str| format!("/media/preview?scope={scope}&line=greeting&lang={lang}");
+    assert_eq!(w.get(&preview("de"), Some(&owner)).await.status, 200);
+    assert_eq!(w.get(&preview("no%20language"), Some(&owner)).await.status, 404);
+    w.stop().await;
+}
