@@ -292,7 +292,8 @@ and which old settings no longer exist (the old caps).
 | Exit code 78 | the log says why (configuration, model files, CPU); `pb doctor` checks everything |
 | Exit code 3 | another bot process uses the same data directory |
 | `rustc: symbol lookup error: …librustc_driver….so: undefined symbol …` | the distribution's Rust package does not match its LLVM libraries (a partial update, or packages from different repositories): install rustup instead (*Development*) |
-| `rustup could not choose a version of cargo to run` | `rustup default stable`, then in the project directory `rustup toolchain install` |
+| `rustup could not choose a version of cargo to run` | `rustup default nightly`, then in the project directory `rustup toolchain install` |
+| `can't find crate for core` … `wasm32-unknown-unknown` | the browser target is missing: in the project directory `rustup toolchain install` (or `rustup target add wasm32-unknown-unknown`) |
 | `target/release/pb`: unknown command / no such file | the build before it failed: scroll up to its first error |
 | *System* says the instance has voice turned off | that Fluxer instance has no voice calls; nothing for the bot to do there |
 | Does not join voice | person not tracked or paused, missing Connect, or an end-to-end encrypted call (setting *Join end-to-end encrypted calls*) |
@@ -310,8 +311,9 @@ mod-log channel. The bot is visible in the call while it listens.
 
 ## Development
 
-Tools: Rust through [rustup](https://rustup.rs) (the release in `rust-toolchain.toml`, with the `wasm32-unknown-unknown`
-target for the browser bundle), clang 21+ and lld (LiveKit's libwebrtc is built against Chromium's libc++), glib
+Tools: Rust nightly through [rustup](https://rustup.rs) (`rust-toolchain.toml` names it, with the
+`wasm32-unknown-unknown` target for the browser bundle; a stable Rust of at least `rust-version` in `Cargo.toml` works
+too), clang 21+ and lld (LiveKit's libwebrtc is built against Chromium's libc++), glib
 headers and pkg-config (libwebrtc), cmake and ninja (espeak-ng), git, and for the checks
 `cargo install --locked cargo-deny cargo-shear`.
 
@@ -321,11 +323,11 @@ sudo pacman -S --needed base-devel rustup clang lld pkgconf glib2 cmake ninja gi
 # Debian, Ubuntu: rustup from https://rustup.rs; clang 21 from https://apt.llvm.org (the Containerfile's build stage
 # lists the packages)
 
-rustup default stable        # a Rust for everything else (without it: "rustup could not choose a version")
-rustup toolchain install     # in this directory: the release and target from rust-toolchain.toml
+rustup default nightly       # a Rust for everything else (without it: "rustup could not choose a version")
+rustup toolchain install     # in this directory: nightly and the wasm32 target, as rust-toolchain.toml says
 ```
 
-A distribution's own Rust package works only if it is that release, has the wasm32 target and matches the system's
+A distribution's own Rust package works only if it is recent enough, has the wasm32 target and matches the system's
 LLVM libraries; rustup brings its own and avoids all three problems.
 
 ```bash

@@ -86,18 +86,31 @@ fn main() {
             let mut vad = pb_vad_silero::SileroVad::load(&w.join("silero-vad")).expect("vad");
             let pcm = speech(60.0);
             let (frames, _) = pcm.as_chunks::<FRAME>();
-            let mut state = vad.new_state();
-            let t = Instant::now();
-            for f in frames {
-                vad.step(std::slice::from_ref(f), &mut [&mut state]);
+            for streams in [1usize, 8, 32] {
+                // Each stream starts at a different place in the speech; best and median of five passes.
+                let mut runs: Vec<f64> = (0..5)
+                    .map(|_| {
+                        let mut states: Vec<_> = (0..streams).map(|_| vad.new_state()).collect();
+                        let mut batch = vec![[0.0f32; FRAME]; streams];
+                        let t = Instant::now();
+                        for k in 0..frames.len() {
+                            for (s, f) in batch.iter_mut().enumerate() {
+                                *f = frames[(k + s * 37) % frames.len()];
+                            }
+                            let mut refs: Vec<_> = states.iter_mut().collect();
+                            vad.step(&batch, &mut refs);
+                        }
+                        t.elapsed().as_secs_f64() * 1e6 / (frames.len() * streams) as f64
+                    })
+                    .collect();
+                runs.sort_by(f64::total_cmp);
+                println!(
+                    r#"{{"part":"vad","runtime":"rust","streams":{streams},"frames":{},"us_per_frame_best":{:.1},"us_per_frame_median":{:.1}}}"#,
+                    frames.len(),
+                    runs[0],
+                    runs[runs.len() / 2]
+                );
             }
-            let ms = t.elapsed().as_secs_f64() * 1000.0;
-            println!(
-                r#"{{"part":"vad","runtime":"rust-burn-cpu","frames":{},"us_per_frame":{:.1},"streams_realtime":{:.0}}}"#,
-                frames.len(),
-                ms * 1000.0 / frames.len() as f64,
-                60_000.0 / ms
-            );
         }
         "tts" => {
             let mut tts =
