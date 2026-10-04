@@ -77,6 +77,27 @@ The first build takes a while (count on 30–60 minutes): it compiles the bot an
 Updating: `git pull && podman build -t profanity-watch .`, then remove and start the container again (the volume keeps
 everything).
 
+### Prebuilt image (no build)
+
+Every push to this repository builds the image in GitHub Actions and publishes it to the GitHub Container Registry, so
+you can skip the 30-60 minute build:
+
+```bash
+podman pull ghcr.io/papertobi/fluxerdiscordmanagementdashboard:latest
+podman volume create profanity-watch-data
+
+podman run -d --name profanity-watch --restart=unless-stopped \
+  -p 8790:8790 \
+  --read-only --cap-drop=ALL --security-opt no-new-privileges \
+  -v profanity-watch-data:/data:U \
+  ghcr.io/papertobi/fluxerdiscordmanagementdashboard:latest
+```
+
+Tags: `latest` (the `main` branch), `main`, `sha-<commit>` for an exact version, and `1.2.3` for a release tag `v1.2.3`.
+Update: `podman pull ...:latest`, then remove and start the container again. If the package is private (the default for a
+private repository), log in first: `podman login ghcr.io -u <your GitHub user>` with a token that has `read:packages`;
+or make the package public in its settings on GitHub.
+
 ### With systemd (quadlets, Fedora CoreOS)
 
 `deploy/quadlet/` has three units (rootless, recommended, or rootful; Podman 5.2+). They build the image from the
