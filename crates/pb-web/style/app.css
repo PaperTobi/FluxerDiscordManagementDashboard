@@ -586,3 +586,8 @@ details.chat-commands[open] > summary { margin-bottom: 8px; }
 .chat-help p { margin: 4px 0; }
 .chat-help code, .chat-command code { padding: 1px 5px; border-radius: 5px; background: var(--panel-2); }
 .chat-command { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+
+/* ---------------------------------------------------------------- anchors */
+
+/* What a link or a saved form jumps to stays clear of the sticky section menu. */
+.setting, .vline, details.chat-commands, .pause-everywhere, .card[id] { scroll-margin-top: 64px; }

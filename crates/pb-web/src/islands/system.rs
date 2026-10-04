@@ -97,6 +97,8 @@ pub fn SystemLive(initial: SystemState, locale: Locale, csrf: String) -> impl In
                             "digest" => t("ui-part-digest"),
                             "threads" => t("ui-part-threads"),
                             "views" => t("ui-part-views"),
+                            "recorder" => t("ui-part-recorder"),
+                            "enforcer" => t("ui-part-enforcer"),
                             "gateway" => t("ui-part-gateway"),
                             "system" => t("ui-part-system"),
                             other => other.to_owned(),

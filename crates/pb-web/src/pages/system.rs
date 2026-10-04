@@ -27,7 +27,8 @@ fn Voices() -> impl IntoView {
                 <tbody>
                     {voices.into_iter().map(|x| view! {
                         <tr>
-                            <td>{crate::fmt::language(&x.language)}</td>
+                            // `de_DE`: the language by its name, the region as Piper writes it.
+                            <td>{crate::fmt::language(&x.language.split(['_', '-']).next().unwrap_or_default().to_lowercase())}</td>
                             <td><code>{x.id}</code></td>
                             <td class="muted">{x.quality}</td>
                         </tr>

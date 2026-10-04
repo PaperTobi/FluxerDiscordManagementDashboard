@@ -479,3 +479,8 @@ ui-everywhere-hint = People tracked in every community are taken off that list o
 ui-paused-done = Paused { $where }: the bot leaves voice there, listens to nobody and says nothing.
 ui-resumed-done = Resumed { $where }: the bot follows the tracked people there again.
 ui-in-every-community = in every community
+
+## Names of the bot's parts, people by id
+ui-part-recorder = Writing the event log
+ui-part-enforcer = Actions and messages
+audit-by-id = someone (ID { $id })

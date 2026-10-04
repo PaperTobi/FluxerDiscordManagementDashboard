@@ -44,7 +44,15 @@ fn community(g: GuildId) -> String {
 fn actor(loc: Locale, a: &Actor) -> String {
     match (&a.name, a.user, a.via) {
         (Some(n), _, _) => n.clone(),
-        (None, Some(u), _) => format!("<@{u}>"),
+        // Someone without a name in the entry: as the bot knows them, else by id.
+        (None, Some(u), _) => {
+            let who = super::lists::person(&app().engine, u.0);
+            if who.name == u.to_string() {
+                text(loc, "audit-by-id", &[("id", u.to_string().into())])
+            } else {
+                who.name
+            }
+        }
         (None, None, Via::File) => text(loc, "audit-by-file", &[]),
         (None, None, Via::Import) => text(loc, "audit-by-old-bot", &[]),
         (None, None, _) => text(loc, "audit-by-bot", &[]),

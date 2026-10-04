@@ -1824,3 +1824,29 @@ async fn a_community_page_opened_later_shows_earlier_violations() {
     shows(&format!("/c/{G}")).await;
     w.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn no_page_has_an_element_id_twice() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    for path in [
+        "/".to_owned(),
+        "/system".to_owned(),
+        "/voice-lines".to_owned(),
+        "/invite".to_owned(),
+        format!("/c/{G}"),
+        format!("/c/{G}/settings"),
+        format!("/c/{G}/voice-lines"),
+        format!("/c/{G}/p/{MAX}"),
+        format!("/c/{G}/p/{MAX}/settings"),
+        format!("/c/{G}/p/{MAX}/voice-lines"),
+    ] {
+        let body = w.get(&path, Some(&owner)).await.body;
+        let mut seen = std::collections::BTreeSet::new();
+        for part in body.split(" id=\"").skip(1) {
+            let id = part.split('"').next().unwrap();
+            assert!(seen.insert(id.to_owned()), "{path}: id {id:?} twice");
+        }
+    }
+    w.stop().await;
+}

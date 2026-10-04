@@ -479,3 +479,8 @@ ui-everywhere-hint = Wer in jeder Community verfolgt wird, wird auf der eigenen 
 ui-paused-done = Pausiert { $where }: Der Bot verlässt dort den Sprachkanal, hört niemandem zu und sagt nichts.
 ui-resumed-done = Fortgesetzt { $where }: Der Bot folgt dort den verfolgten Personen wieder.
 ui-in-every-community = in jeder Community
+
+## Namen der Teile des Bots, Personen nach ID
+ui-part-recorder = Ereignisprotokoll schreiben
+ui-part-enforcer = Maßnahmen und Nachrichten
+audit-by-id = jemand (ID { $id })
