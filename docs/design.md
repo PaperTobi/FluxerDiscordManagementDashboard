@@ -168,19 +168,43 @@ evidence and clip uploads → blobs + events, audit → `settings.changed` (sour
 
 ## 3. Runtime
 
-- `Runtime` (process lifetime): inference threads, store, live hub, web server, settings tree. `FluxerSupervisor` owns
-  the current Fluxer login and restarts it without touching the models.
-- Tasks: engine control actor (voice world, guild directory, tracked set, FollowMachine, rooms); RoomTask and
-  PlaybackTask per room; TrackTask per subscribed microphone; ModerationActor; reports, actions, store writer, index
-  follower, web server.
-- Model threads: `vad` (batched step over all streams), `classify` (own thread pool; priority Live > rescore/self-check
-  > import; batch 1 for exact parity; > 30 s split into 30 s windows with 25 s hop, label = max, language = duration-
-  weighted mean), `tts` (Live > preview > prerender). Nothing holds a shared model; access only by job.
+The engine (pb-engine, proposal 0004) is a set of actors. Each owns its state, gets work through an unbounded mailbox
+and publishes what others read; nothing else is shared between them.
+
+- **Supervisor** (tokio-util `TaskTracker` + `CancellationToken`): every long-lived actor runs under it. One that panics
+  or fails starts again after a doubling pause (100 ms .. 30 s) with its state built afresh (from the index where
+  needed) and its mailbox kept, so only the message in hand is lost; more than 5 crashes in 10 minutes, or a crash of a
+  part that cannot be rebuilt, is fatal and `pb run` exits with 1 for the service manager to restart it. Every part's
+  state, restarts and waiting work are on `/healthz` (503 when one failed or has not taken work for a minute) and the
+  System page.
+- **Actors:** `gateway` (one Fluxer login at a time; its session's `control` actor holds the voice world, the community
+  burst, the follow machine and the rooms), `room` per call with its `playback`, `track` per microphone with its
+  `scorer`, `moderation` (decides every scored sentence in order, publishes swear jars, renders a person's next
+  warning ahead of time), `enforcer` (actions and reports, per person in order), `recorder` (the event log's single
+  writer), `undo` (lifts timed mutes, also after a restart), `digest`, `views` (rebuilds live pages from marks),
+  `threads` and `system`.
+- **Published state:** what several parts read (communities, the voice world, rooms and connections, who speaks and
+  listens, the clip library, swear jars, settings resolved per place) is a tokio watch of an `Arc` snapshot that its
+  owner replaces; readers hold no lock. Leaf caches (rendered speech and clips, LRU by bytes) keep short critical
+  sections without awaits.
+- **No disk waits on the way to a warning:** moderation decides, hands the sentence (with the recording to keep) to the
+  recorder and queues the warning without awaiting anything; the recorder writes in hand-over order, one append per
+  batch, the recording first and in the same batch as its sentence. Only what must be durable before it is used
+  (clips, recording deletions, logins, `Stopped`) waits for the acknowledgement.
+- **Model threads:** `vad` (a hand-written Silero step batched over all streams), `classify` (own thread pool; within
+  a priority earliest deadline first, then jobs without one, then late jobs, which are still done; one person's
+  sentences stay in order; > 30 s split into 30 s windows with 25 s hop, label = max, language = duration-weighted
+  mean), `tts` (Live > preview > prerender; a phrase is rendered once while several wait for it). Nothing holds a
+  shared model; access only by job.
 - Queues have no count caps. Lag and backlog are shown on the System page. A verdict that arrives later than
   `max_reaction_delay` (default 15 s, may be "unlimited") is recorded and counted but not voiced.
-- Shutdown: stop web, flush segmenters, finish live jobs until the deadline, leave voice, drain the log, close gateway,
-  exit 0. Exit codes: 0 clean; 1 internal fatal; 3 lock held; 78 permanent configuration problem. A missing or rejected
-  token is a UI state, not an exit.
+- **Shutdown**, each step with a deadline (about 17 s in all): the web UI stops (2 s); no new calls, microphones or chat
+  commands; rooms cut open speech (`CutCause::Shutdown`) and wait for its scoring; moderation decides everything handed
+  over; queued speech is said or recorded as not said and actions and reports finish; the bot leaves voice while the
+  gateway is still open and closes its rooms; the gateway closes; `Stopped` is recorded last (unclean when a step ran
+  out of time) and the log is written out; the model threads are joined off the async threads. Exit codes: 0 clean;
+  1 internal fatal; 3 lock held; 78 permanent configuration problem. A missing or rejected token is a UI state, not an
+  exit.
 
 ## 4. Live updates (no two-tab freeze by construction)
 
