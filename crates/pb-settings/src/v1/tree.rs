@@ -159,7 +159,6 @@ impl SettingsTree {
         self.layer(scope).cloned().unwrap_or_default()
     }
 
-    /// Everything resolved for a place. A pause of the community also pauses everyone in it.
     /// The layers that decide a place's settings, most specific first.
     fn layers(&self, guild: Option<GuildId>, user: Option<UserId>) -> Layers<'_> {
         Layers {
@@ -172,6 +171,9 @@ impl SettingsTree {
         }
     }
 
+    /// Everything resolved for a place. A pause of the community also pauses everyone in it, and the owner's pause
+    /// of the whole bot (`paused` set globally) pauses every community and everyone, whatever they set themselves: it
+    /// is a switch that stops the bot everywhere, not a default.
     pub fn effective(&self, guild: Option<GuildId>, user: Option<UserId>) -> Effective {
         let layers = self.layers(guild, user);
         let (person, server) = (layers.person, layers.server);
@@ -190,7 +192,18 @@ impl SettingsTree {
                 };
             }
         }
+        if self.paused_everywhere() {
+            e.paused = Resolved {
+                value: true,
+                source: Source::Global,
+            };
+        }
         e
+    }
+
+    /// The bot owner paused the whole bot (see [`SettingsTree::effective`]).
+    pub fn paused_everywhere(&self) -> bool {
+        self.global.settings.paused == Some(true)
     }
 
     pub fn guild_allowed(&self, guild: GuildId) -> bool {
@@ -467,6 +480,43 @@ mod tests {
         )
         .expect("allow list");
         assert!(t.tracked_for(G).is_empty(), "not an allowed community");
+    }
+
+    #[test]
+    fn a_pause_everywhere_beats_what_communities_and_people_set() {
+        let mut t = SettingsTree::default();
+        t.track(G, A, None, now());
+        t.set(
+            Scope::Server { guild: G },
+            SettingKey::Paused,
+            serde_json::json!(false),
+            false,
+        )
+        .expect("not paused here");
+        t.set(
+            Scope::Person { guild: G, user: A },
+            SettingKey::Paused,
+            serde_json::json!(false),
+            false,
+        )
+        .expect("not paused for A");
+        assert_eq!(t.tracked_for(G), BTreeSet::from([A]));
+        t.set(Scope::Global, SettingKey::Paused, serde_json::json!(true), true)
+            .expect("pause everywhere");
+        assert!(t.paused_everywhere());
+        assert!(t.tracked_for(G).is_empty() && !t.is_tracked(G, A));
+        for (g, u) in [
+            (None, None),
+            (Some(G), None),
+            (Some(G), Some(A)),
+            (Some(GuildId(99)), None),
+        ] {
+            let p = t.effective(g, u).paused;
+            assert_eq!((p.value, p.source), (true, Source::Global), "{g:?} {u:?}");
+        }
+        t.set(Scope::Global, SettingKey::Paused, serde_json::json!(false), true)
+            .expect("resume");
+        assert_eq!(t.tracked_for(G), BTreeSet::from([A]));
     }
 
     #[test]

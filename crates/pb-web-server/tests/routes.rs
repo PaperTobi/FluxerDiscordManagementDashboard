@@ -991,3 +991,68 @@ async fn serves_https_with_secure_cookies() {
     assert_eq!(w.get("/", Some(&owner)).await.status, 200);
     w.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_owner_pauses_the_whole_bot() {
+    let w = Web::start(true).await;
+    let g = GuildId(G);
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let system = w.get("/system", Some(&owner)).await.body;
+    assert!(system.contains("Pause everywhere"), "{system}");
+    let switch = |value: &'static str| {
+        [
+            ("csrf", csrf.clone()),
+            ("scope", "global".to_owned()),
+            ("key", "paused".to_owned()),
+            ("value", value.to_owned()),
+            ("action", "set".to_owned()),
+            ("back", "/system".to_owned()),
+        ]
+    };
+    let send = async |cookie: &str, form: [(&'static str, String); 6]| {
+        let f: Vec<(&str, &str)> = form.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        w.post("/settings", Some(cookie), &f).await
+    };
+    // An admin cannot.
+    let ada = w.login(ADA).await.unwrap();
+    let mut by_ada = switch("on");
+    by_ada[0].1 = w.page_csrf(&ada).await;
+    send(&ada, by_ada).await;
+    assert!(!w.engine.settings().current().paused_everywhere());
+    // Alpha says "not paused" for itself; the pause everywhere still stops it.
+    w.post(
+        "/settings",
+        Some(&owner),
+        &[
+            ("csrf", &csrf),
+            ("scope", &format!("server:{G}")),
+            ("key", "paused"),
+            ("value", "off"),
+            ("action", "set"),
+            ("back", "/"),
+        ],
+    )
+    .await;
+    assert!(w.engine.settings().current().is_tracked(g, UserId(MAX)));
+    send(&owner, switch("on")).await;
+    let tree = w.engine.settings().current();
+    assert!(tree.paused_everywhere() && tree.tracked_for(g).is_empty());
+    let page = w.get(&format!("/c/{G}"), Some(&ada)).await.body;
+    assert!(page.contains("Paused everywhere"), "{page}");
+    assert!(
+        !page.contains("Pause here") && !page.contains("Resume here"),
+        "the community's own switch is moot"
+    );
+    assert!(page.contains("The bot is paused everywhere"), "every page says so");
+    assert!(
+        !page.contains("/system#pause"),
+        "only the owner gets the link to switch it back"
+    );
+    let system = w.get("/system", Some(&owner)).await.body;
+    assert!(system.contains("Resume everywhere") && system.contains("/system#pause"));
+    send(&owner, switch("off")).await;
+    assert!(!w.engine.settings().current().paused_everywhere());
+    assert!(w.engine.settings().current().is_tracked(g, UserId(MAX)));
+    w.stop().await;
+}

@@ -50,7 +50,7 @@ setting-label-threshold = Schwelle für { $label }
 ## Verfolgen
 
 setting-paused = Pausiert
-    .help = Den Sprachkanal verlassen und nicht mehr zuhören (für eine ganze Community oder eine Person).
+    .help = Den Sprachkanal verlassen, nicht mehr zuhören und nichts sagen: für eine Person, eine ganze Community oder (global gesetzt, auf der Seite System) überall. Eine Pause überall gilt auch dort, wo eine Community oder Person auf „nicht pausiert“ steht.
 setting-guild-allowlist = Nur diese Communitys
     .help = IDs der Communitys, in denen der Bot arbeitet. Leer: jede Community, in der er ist.
 setting-tracked-everywhere = In allen Communitys verfolgt

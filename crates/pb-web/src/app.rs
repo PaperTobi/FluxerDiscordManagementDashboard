@@ -246,6 +246,7 @@ fn Page(children: Children) -> impl IntoView {
         .actions_enabled
         .value;
     let invite = app().host.invite_url(invite_permissions(actions));
+    let paused_everywhere = app().engine.settings().current().paused_everywhere();
     let nav = |href: &'static str, id: &str| {
         let active = if href == "/" {
             path == "/"
@@ -284,7 +285,16 @@ fn Page(children: Children) -> impl IntoView {
                 </div>
                 <SourceLink/>
             </aside>
-            <main class="main"><NoticeBar/>{children()}</main>
+            <main class="main">
+                <NoticeBar/>
+                {paused_everywhere.then(|| view! {
+                    <div class="notice warn" role="status">
+                        {text(loc, "ui-paused-everywhere-banner", &[])}
+                        {v.owner.then(|| view! { " " <a href="/system#pause">{text(loc, "ui-paused-everywhere-where", &[])}</a> })}
+                    </div>
+                })}
+                {children()}
+            </main>
             <div class="banner offline-banner" role="status">{text(loc, "ui-offline", &[])}</div>
             <div class="overlay auth-overlay" role="alertdialog">
                 <p>{text(loc, "ui-auth-expired", &[])}</p>

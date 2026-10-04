@@ -80,12 +80,10 @@ pub fn CommunityPage() -> impl IntoView {
         .into_any(),
         _ => view! { <NotFound/> }.into_any(),
     };
-    view! {
-        <header class="page-head">
-            <h1>{state.name.clone()}</h1>
-            {state.paused.then(|| view! { <span class="chip warn">{text(loc, "ui-paused", &[])}</span> })}
-            {(!state.available).then(|| view! { <span class="chip">{text(loc, "ui-unavailable", &[])}</span> })}
-            <span class="grow"></span>
+    // While the owner paused the whole bot, a community's own switch changes nothing: say so instead of offering it.
+    let everywhere = engine.settings().current().paused_everywhere();
+    let switch = (!everywhere).then(|| {
+        view! {
             <form method="post" action="/settings">
                 <input type="hidden" name="csrf" value=v.csrf.clone()/>
                 <input type="hidden" name="back" value=here.clone()/>
@@ -95,6 +93,19 @@ pub fn CommunityPage() -> impl IntoView {
                 <input type="hidden" name="action" value="set"/>
                 <button class="button">{text(loc, if state.paused { "ui-resume-here" } else { "ui-pause-here" }, &[])}</button>
             </form>
+        }
+    });
+    view! {
+        <header class="page-head">
+            <h1>{state.name.clone()}</h1>
+            {match (everywhere, state.paused) {
+                (true, _) => Some(view! { <span class="chip warn">{text(loc, "ui-paused-everywhere", &[])}</span> }),
+                (false, true) => Some(view! { <span class="chip warn">{text(loc, "ui-paused", &[])}</span> }),
+                (false, false) => None,
+            }}
+            {(!state.available).then(|| view! { <span class="chip">{text(loc, "ui-unavailable", &[])}</span> })}
+            <span class="grow"></span>
+            {switch}
         </header>
         <Tabs items=tabs/>
         {body}

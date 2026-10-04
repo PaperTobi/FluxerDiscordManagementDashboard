@@ -491,3 +491,10 @@ table.mini tr.flagged td { font-weight: 600; color: var(--bad); }
   font-size: 0.9rem;
 }
 .source { display: block; margin-top: 0.75rem; }
+
+/* ---------------------------------------------------------------- the whole bot paused */
+
+.notice.warn { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+.pause-everywhere h2 { margin-bottom: 4px; }
+.pause-everywhere p { margin: 0; }
+.pause-everywhere.paused { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }

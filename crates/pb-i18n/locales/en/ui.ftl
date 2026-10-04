@@ -359,3 +359,13 @@ ui-bot-joining = the bot is joining
 ui-bot-retrying = joining failed; the bot tries again shortly
 ui-bot-leaving = the bot is leaving
 ui-source = Source code (AGPL-3.0)
+
+## Pausing the whole bot
+ui-paused-everywhere = Paused everywhere
+ui-paused-everywhere-banner = The bot is paused everywhere: it listens to nobody and says nothing until the bot owner switches it back on.
+ui-paused-everywhere-where = Switch it back on (System)
+ui-pause-everywhere-title = The bot is running
+ui-pause-everywhere-help = Pausing stops it everywhere at once: it leaves every call, listens to nobody and says nothing until you switch it back on. Settings and tracked people stay as they are.
+ui-pause-everywhere = Pause everywhere
+ui-resume-everywhere-help = The bot listens to nobody and says nothing. Pauses of single communities and people stay in place for when it runs again.
+ui-resume-everywhere = Resume everywhere

@@ -78,8 +78,26 @@ pub fn SystemPage() -> impl IntoView {
         }
         .into_any()
     };
+    let paused = engine.settings().current().paused_everywhere();
     view! {
         <header class="page-head"><h1>{t("ui-nav-system")}</h1></header>
+        <section class="card pause-everywhere" id="pause" class:paused=paused>
+            <form method="post" action="/settings" class="row">
+                <input type="hidden" name="csrf" value=v.csrf.clone()/>
+                <input type="hidden" name="back" value="/system"/>
+                <input type="hidden" name="scope" value="global"/>
+                <input type="hidden" name="key" value="paused"/>
+                <input type="hidden" name="value" value=if paused { "off" } else { "on" }/>
+                <input type="hidden" name="action" value="set"/>
+                <div class="grow">
+                    <h2>{t(if paused { "ui-paused-everywhere" } else { "ui-pause-everywhere-title" })}</h2>
+                    <p class="muted small">{t(if paused { "ui-resume-everywhere-help" } else { "ui-pause-everywhere-help" })}</p>
+                </div>
+                <button class=if paused { "button primary" } else { "button danger" }>
+                    {t(if paused { "ui-resume-everywhere" } else { "ui-pause-everywhere" })}
+                </button>
+            </form>
+        </section>
         {status.map(|s| view! { <SystemLive initial=s locale=loc csrf=v.csrf.clone()/> })}
         <section class="card">
             <h2>{t("ui-fluxer-secrets")}</h2>

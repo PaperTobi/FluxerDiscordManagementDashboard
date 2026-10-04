@@ -50,7 +50,7 @@ setting-label-threshold = Threshold for { $label }
 ## Tracking
 
 setting-paused = Paused
-    .help = Leave voice and stop listening (for a whole community, or for one person).
+    .help = Leave voice, stop listening and say nothing: for one person, a whole community, or (set globally, on the System page) everywhere. A pause everywhere holds even where a community or person is set to not paused.
 setting-guild-allowlist = Only these communities
     .help = Community IDs the bot works in. Empty: every community it is in.
 setting-tracked-everywhere = Tracked in every community

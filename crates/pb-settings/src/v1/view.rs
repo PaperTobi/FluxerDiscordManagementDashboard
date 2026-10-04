@@ -193,5 +193,7 @@ mod tests {
             serde_json::json!(["10", "12"]),
         );
         same_as_tree(&t);
+        set(&mut t, Scope::Global, SettingKey::Paused, serde_json::json!(true));
+        same_as_tree(&t);
     }
 }

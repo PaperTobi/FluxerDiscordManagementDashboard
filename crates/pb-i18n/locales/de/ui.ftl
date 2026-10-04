@@ -359,3 +359,13 @@ ui-bot-joining = der Bot tritt bei
 ui-bot-retrying = Beitritt fehlgeschlagen; der Bot versucht es gleich erneut
 ui-bot-leaving = der Bot verlässt den Kanal
 ui-source = Quellcode (AGPL-3.0)
+
+## Den ganzen Bot pausieren
+ui-paused-everywhere = Überall pausiert
+ui-paused-everywhere-banner = Der Bot ist überall pausiert: Er hört niemandem zu und sagt nichts, bis der Besitzer des Bots ihn wieder einschaltet.
+ui-paused-everywhere-where = Wieder einschalten (System)
+ui-pause-everywhere-title = Der Bot läuft
+ui-pause-everywhere-help = Pausieren hält ihn überall auf einmal an: Er verlässt jeden Anruf, hört niemandem zu und sagt nichts, bis du ihn wieder einschaltest. Einstellungen und verfolgte Personen bleiben, wie sie sind.
+ui-pause-everywhere = Überall pausieren
+ui-resume-everywhere-help = Der Bot hört niemandem zu und sagt nichts. Pausen einzelner Communitys und Personen bleiben bestehen, wenn er wieder läuft.
+ui-resume-everywhere = Überall fortsetzen

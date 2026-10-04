@@ -216,7 +216,6 @@ pub struct LabelLayer {
 const ALL_SCOPES: &[ScopeKind] = &[ScopeKind::Global, ScopeKind::Server, ScopeKind::Person];
 const GS: &[ScopeKind] = &[ScopeKind::Global, ScopeKind::Server];
 const G: &[ScopeKind] = &[ScopeKind::Global];
-const SP: &[ScopeKind] = &[ScopeKind::Server, ScopeKind::Person];
 const S: &[ScopeKind] = &[ScopeKind::Server];
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -483,7 +482,7 @@ fn lang(s: &str) -> Lang {
 
 settings! {
     Tracking {
-        paused(Paused): bool = false; SP, Admins, Live;
+        paused(Paused): bool = false; ALL_SCOPES, Admins, Live;
         guild_allowlist(GuildAllowlist): Vec<GuildId> = Vec::new(); G, Owner, Live;
         tracked_everywhere(TrackedEverywhere): Vec<UserId> = Vec::new(); G, Owner, Live;
         allow_e2ee_downgrade(AllowE2eeDowngrade): bool = false; GS, Admins, Live;
