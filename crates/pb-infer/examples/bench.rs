@@ -1,6 +1,6 @@
 //! Model timings (used for the comparison with the Python bot): `cargo run --release -p pb-infer --example bench --
-//! <cpu|gpu|vad|tts> [threads]` with PB_WEIGHTS set; prints one JSON line per measurement and the process's peak
-//! memory.
+//! <cpu|vad|tts> [threads]` with PB_WEIGHTS set (`--features gpu` adds `gpu`); prints one JSON line per measurement and
+//! the process's peak memory.
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -72,6 +72,7 @@ fn main() {
                 t.elapsed().as_secs_f64() * 1000.0,
             );
         }
+        #[cfg(feature = "gpu")]
         "gpu" => {
             let t = Instant::now();
             let c = pb_classifier_roblox::RobloxClassifier::load_gpu(

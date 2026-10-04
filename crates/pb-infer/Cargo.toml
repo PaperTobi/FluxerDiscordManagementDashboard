@@ -25,5 +25,9 @@ pb-tts-piper.workspace = true
 pb-vad-silero.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
+[features]
+# The bench example's `gpu` part (the classifier on Vulkan).
+gpu = ["pb-classifier-roblox/gpu"]
+
 [lints]
 workspace = true
