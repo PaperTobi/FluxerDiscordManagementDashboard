@@ -555,9 +555,10 @@ details.advanced[open] > summary::after { content: " ▾"; }
 details.advanced[open] > summary { margin-bottom: 8px; }
 .settings-section h3 { margin-top: 16px; }
 .settings-section h3 + .setting { border-top: 0; padding-top: 4px; }
-.id-picker { display: flex; flex-direction: column; gap: 6px; }
-.id-picker label.inline { gap: 6px; }
-.id-picker .row select { max-width: 280px; }
+.id-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.id-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.id-list li .name { font-weight: 600; }
+.list-setting .picker { margin-top: 2px; }
 
 /* ---------------------------------------------------------------- say now, previews */
 

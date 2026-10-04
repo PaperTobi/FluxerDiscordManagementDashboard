@@ -62,7 +62,18 @@ pub fn CommunityPage() -> impl IntoView {
             <GuildLive initial=(*state).clone() locale=loc csrf=v.csrf.clone() back=here.clone()/>
             <section class="card">
                 <h2>{text(loc, "ui-track-someone", &[])}</h2>
-                <MemberPicker guild=g csrf=v.csrf.clone() back=here.clone() locale=loc/>
+                <MemberPicker
+                    guild=Some(g)
+                    action="/people/track".to_owned()
+                    field="user".to_owned()
+                    hidden=vec![
+                        ("csrf".to_owned(), v.csrf.clone()),
+                        ("back".to_owned(), here.clone()),
+                        ("guild".to_owned(), g.to_string()),
+                    ]
+                    button=text(loc, "ui-track", &[])
+                    placeholder=text(loc, "ui-user-id-or-mention", &[])
+                />
                 <p class="muted small">{text(loc, "ui-track-help", &[])}</p>
             </section>
             <PermissionCheck guild=g/>

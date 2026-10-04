@@ -141,6 +141,9 @@ pub fn GuildLive(initial: GuildState, locale: Locale, csrf: String, back: String
                             }
                         </For>
                     </ul>
+                    {move || state.with(|s| s.tracked.iter().any(|p| p.everywhere)).then(|| view! {
+                        <p class="muted small">{t("ui-everywhere-hint")}</p>
+                    })}
                 </Show>
             </section>
         </div>

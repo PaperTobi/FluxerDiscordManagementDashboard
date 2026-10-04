@@ -1223,7 +1223,7 @@ async fn what_cannot_be_undone_is_confirmed_first() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn settings_forms_fold_the_rare_ones_and_pick_ids_by_name() {
+async fn settings_forms_fold_the_rare_ones() {
     let w = Web::start(true).await;
     let owner = w.login(OWNER).await.unwrap();
     let csrf = w.page_csrf(&owner).await;
@@ -1250,70 +1250,24 @@ async fn settings_forms_fold_the_rare_ones_and_pick_ids_by_name() {
     assert!(system.contains("value=\"/system?advanced=1#set-cpu_threads\""));
     let open = w.get("/system?advanced=1", Some(&owner)).await.body;
     assert!(folder(&open).1.contains(" open"), "opened after saving one");
-    // Communities by name; ticking them sets the list (with ids typed beside them).
-    assert!(system.contains(&format!("name=\"value\" value=\"{G}\"")) && system.contains("Beta"));
-    let r = w
-        .post(
+    // Two settings set here (and the instance, from the start).
+    for (key, value) in [("threshold", "0.7"), ("strikes", "2")] {
+        w.post(
             "/settings",
             Some(&owner),
             &[
                 ("csrf", &csrf),
                 ("scope", "global"),
-                ("key", "guild_allowlist"),
-                ("value", &G.to_string()),
-                ("value", &G2.to_string()),
-                ("value", "123"),
+                ("key", key),
+                ("value", value),
                 ("action", "set"),
                 ("back", "/system"),
             ],
         )
         .await;
-    assert_eq!(r.status, 303);
-    assert_eq!(
-        setting(&w, pb_domain::Scope::Global, "guild_allowlist"),
-        Some(serde_json::json!([G.to_string(), G2.to_string(), "123"]))
-    );
-    let system = w.get("/system?advanced=1", Some(&owner)).await.body;
-    assert!(system.contains(&format!("value=\"{G2}\" checked")), "ticked: {system}");
-    // People: added from everyone the bot knows by name (it learns Ada's when she joins a call).
-    w.fake.voice_join(G, LOUNGE, ADA);
-    let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let system = loop {
-        let page = w.get("/system", Some(&owner)).await.body;
-        if page.contains(&format!("<option value=\"{ADA}\">Ada</option>")) || std::time::Instant::now() > end {
-            break page;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    };
-    assert!(system.contains("Add someone…") && system.contains(&format!("<option value=\"{ADA}\">Ada</option>")));
-    w.post(
-        "/settings",
-        Some(&owner),
-        &[
-            ("csrf", &csrf),
-            ("scope", "global"),
-            ("key", "tracked_everywhere"),
-            ("value", &ADA.to_string()),
-            ("value", ""),
-            ("action", "set"),
-            ("back", "/system"),
-        ],
-    )
-    .await;
-    assert_eq!(
-        setting(&w, pb_domain::Scope::Global, "tracked_everywhere"),
-        Some(serde_json::json!([ADA.to_string()]))
-    );
+    }
     let system = w.get("/system", Some(&owner)).await.body;
-    assert!(
-        system.contains(&format!("value=\"{ADA}\" checked")),
-        "Ada is ticked now"
-    );
-    // A community's admin roles by name.
-    let page = w.get(&format!("/c/{G}/settings"), Some(&owner)).await.body;
-    assert!(page.contains("Mods"), "{page}");
-    // The reset offer counts what it would remove: the allow list and tracked everywhere, not the instance (a reset
-    // never cuts the bot off from Fluxer).
+    // The reset offer counts what it would remove: not the instance (a reset never cuts the bot off from Fluxer).
     assert!(system.contains("2 settings are set here."), "{system}");
     w.stop().await;
 }
@@ -1597,5 +1551,199 @@ async fn chat_commands_are_explained_in_the_web_ui() {
     // A person's settings link only the commands that name a person.
     let person = w.get(&format!("/c/{G}/p/{MAX}/settings"), Some(&ada)).await.body;
     assert!(person.contains("<code>?w set strikes 2 [@user]</code>") && !person.contains("<code>?w pause</code>"));
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn id_lists_change_one_entry_at_a_time() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let list = async |cookie: &str, token: &str, scope: &str, key: &str, op: &str, entry: &str, confirm: bool| {
+        let mut f = vec![
+            ("csrf", token),
+            ("scope", scope),
+            ("key", key),
+            ("op", op),
+            ("entry", entry),
+            ("back", "/system"),
+        ];
+        if confirm {
+            f.push(("confirm", "1"));
+        }
+        w.post("/settings/list", Some(cookie), &f).await
+    };
+    let everywhere = || setting(&w, pb_domain::Scope::Global, "tracked_everywhere");
+    // The list is never one text field: entries by name, each removed on its own, and an empty field to add one.
+    let row = |page: &str, key: &str| {
+        let at = page.find(&format!("id=\"set-{key}\"")).expect("the list setting");
+        let rest = &page[at..];
+        // Up to the next setting.
+        let end = rest[10..].find("id=\"set-").map_or(rest.len(), |e| e + 10);
+        rest[..end].to_owned()
+    };
+    let system = w.get("/system", Some(&owner)).await.body;
+    let tracked = row(&system, "tracked_everywhere");
+    assert!(
+        tracked.contains("None yet.") && !tracked.contains("name=\"value\""),
+        "{tracked}"
+    );
+    assert!(tracked.contains("action=\"/settings/list\"") && tracked.contains("name=\"entry\""));
+    // Add by ID (one the bot knows by name once she was in a call).
+    w.fake.voice_join(G, LOUNGE, ADA);
+    let known = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while w.engine.guilds().name(GuildId(G), UserId(ADA)) != "Ada" {
+        assert!(std::time::Instant::now() < known, "the bot learns Ada's name");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let r = list(
+        &owner,
+        &csrf,
+        "global",
+        "tracked_everywhere",
+        "add",
+        &ADA.to_string(),
+        false,
+    )
+    .await;
+    assert!(notice(&w, &owner, &r).await.contains("Ada added."));
+    assert_eq!(everywhere(), Some(serde_json::json!([ADA.to_string()])));
+    // A second time: said so, nothing changes.
+    let r = list(
+        &owner,
+        &csrf,
+        "global",
+        "tracked_everywhere",
+        "add",
+        &format!("<@{ADA}>"),
+        false,
+    )
+    .await;
+    assert!(notice(&w, &owner, &r).await.contains("Ada is already on the list."));
+    assert_eq!(everywhere(), Some(serde_json::json!([ADA.to_string()])));
+    // An ID the bot has never seen is added, with a note; a name nobody has is not.
+    let r = list(&owner, &csrf, "global", "tracked_everywhere", "add", "123456789", false).await;
+    assert!(notice(&w, &owner, &r).await.contains("has not seen this ID yet"));
+    let r = list(
+        &owner,
+        &csrf,
+        "global",
+        "tracked_everywhere",
+        "add",
+        "Nobody Here",
+        false,
+    )
+    .await;
+    assert!(
+        notice(&w, &owner, &r)
+            .await
+            .contains("Nothing called “Nobody Here” is known.")
+    );
+    assert_eq!(everywhere().and_then(|v| v.as_array().map(Vec::len)), Some(2));
+    // Communities by name.
+    let r = list(&owner, &csrf, "global", "guild_allowlist", "add", "beta", false).await;
+    assert!(notice(&w, &owner, &r).await.contains("Beta added."));
+    assert_eq!(
+        setting(&w, pb_domain::Scope::Global, "guild_allowlist"),
+        Some(serde_json::json!([G2.to_string()]))
+    );
+    // Removing asks first, names the consequence (here: the last allowed community), then removes that entry only.
+    let r = list(
+        &owner,
+        &csrf,
+        "global",
+        "guild_allowlist",
+        "remove",
+        &G2.to_string(),
+        false,
+    )
+    .await;
+    let to = r.location.clone().unwrap();
+    assert!(
+        to.starts_with("/confirm?what=list-remove&scope=global&key=guild_allowlist&entry=777777"),
+        "{to}"
+    );
+    let page = w.get(&to, Some(&owner)).await.body;
+    assert!(page.contains("Remove Beta from “Only these communities”?"), "{page}");
+    assert!(page.contains("the last community on the list"), "{page}");
+    let r = list(
+        &owner,
+        &csrf,
+        "global",
+        "tracked_everywhere",
+        "remove",
+        "123456789",
+        true,
+    )
+    .await;
+    assert!(notice(&w, &owner, &r).await.contains("123456789 removed."));
+    assert_eq!(everywhere(), Some(serde_json::json!([ADA.to_string()])));
+    let r = list(
+        &owner,
+        &csrf,
+        "global",
+        "tracked_everywhere",
+        "remove",
+        "123456789",
+        true,
+    )
+    .await;
+    assert!(notice(&w, &owner, &r).await.contains("is not on the list."));
+    // A community's admin may not change the owner's lists; roles are added by name.
+    let bea = w.login(BEA).await.unwrap();
+    let cb = w.page_csrf(&bea).await;
+    let r = list(
+        &bea,
+        &cb,
+        "global",
+        "tracked_everywhere",
+        "remove",
+        &ADA.to_string(),
+        true,
+    )
+    .await;
+    assert!(notice(&w, &bea, &r).await.contains("You may not change this."));
+    assert_eq!(everywhere(), Some(serde_json::json!([ADA.to_string()])));
+    let r = list(
+        &owner,
+        &csrf,
+        &format!("server:{G}"),
+        "admin_role_ids",
+        "add",
+        "Mods",
+        false,
+    )
+    .await;
+    assert!(notice(&w, &owner, &r).await.contains("Mods added."));
+    let server = pb_domain::Scope::Server { guild: GuildId(G) };
+    assert_eq!(
+        setting(&w, server, "admin_role_ids"),
+        Some(serde_json::json!(["888888"]))
+    );
+    // On a person's page the owner tracks them in every community, or stops it.
+    let person = w.get(&format!("/c/{G}/p/{MAX}"), Some(&owner)).await.body;
+    assert!(person.contains("Track in every community"), "{person}");
+    list(
+        &owner,
+        &csrf,
+        "global",
+        "tracked_everywhere",
+        "add",
+        &MAX.to_string(),
+        false,
+    )
+    .await;
+    let person = w.get(&format!("/c/{G}/p/{MAX}"), Some(&owner)).await.body;
+    assert!(person.contains("Stop tracking in every community"));
+    // The community's tracked list says where people tracked everywhere are taken off (the live state follows).
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let page = w.get(&format!("/c/{G}"), Some(&owner)).await.body;
+        if page.contains("on their own page or on the System page") {
+            break;
+        }
+        assert!(std::time::Instant::now() < end, "{page}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
     w.stop().await;
 }

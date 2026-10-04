@@ -5,6 +5,7 @@ pub mod commands;
 pub mod community;
 pub mod confirm;
 pub mod invite;
+pub mod lists;
 pub mod person;
 pub mod reports;
 pub mod sentences;

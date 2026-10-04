@@ -1,12 +1,13 @@
 //! `/confirm`: "Really …?" before something that cannot be undone: deleting a recording, removing a clip a voice line
 //! uses, no longer tracking someone, emptying a swear jar, resetting every setting at a scope. A form that does one of
-//! these and arrives without `confirm=1` sends the browser here (with what it is about, not its token); this page says
+//! these (or takes an entry off a list in the settings) and arrives without `confirm=1` sends the browser here (with what it is about, not its token); this page says
 //! what will happen and sends the same form again, confirmed. No scripts needed.
 
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 use pb_domain::{BlobHash, GuildId, Scope, SentenceId, UserId};
 use pb_i18n::{Locale, setting_name, text};
+use pb_settings::SettingKey;
 
 use super::NotFound;
 use super::settings::scope_param;
@@ -47,6 +48,14 @@ pub fn ConfirmPage() -> impl IntoView {
         "untrack" => guild_user().map(|(g, u)| untrack(&v, g, u)),
         "clip" => get("clip").parse::<BlobHash>().ok().and_then(|h| clip(&v, h)),
         "reset" => super::settings::parse_scope(&get("scope")).and_then(|s| reset(&v, s)),
+        "list-remove" => match (
+            super::settings::parse_scope(&get("scope")),
+            get("key").parse::<SettingKey>().ok(),
+            get("entry").parse::<u64>().ok(),
+        ) {
+            (Some(s), Some(k), Some(id)) => list_remove(&v, s, k, id),
+            _ => None,
+        },
         "jar" => {
             let Some((g, u)) = guild_user() else {
                 return view! { <NotFound/> }.into_any();
@@ -270,5 +279,51 @@ fn reset(v: &Viewer, scope: Scope) -> Option<Ask> {
         action: "/settings/reset",
         fields: vec![("scope", scope_param(scope))],
         button: text(loc, "ui-reset-settings", &[]),
+    })
+}
+
+fn list_remove(v: &Viewer, scope: Scope, key: SettingKey, id: u64) -> Option<Ask> {
+    use super::lists::{Of, entry, ids_of};
+    let loc = v.locale;
+    let allowed = match scope {
+        Scope::Global => v.owner,
+        Scope::Server { guild } | Scope::Person { guild, .. } => v.may_see(guild),
+    };
+    let of = Of::for_key(key)?;
+    if !allowed {
+        return None;
+    }
+    let engine = app().engine;
+    let name = entry(&engine, of, scope, id).0;
+    let tree = engine.settings().current();
+    let ids = ids_of(&super::settings::effective_value(&tree, scope, key).0);
+    let args = [("name", name.clone().into())];
+    let what = match key {
+        SettingKey::GuildAllowlist => "ui-list-remove-guild-allowlist",
+        SettingKey::TrackedEverywhere => "ui-list-remove-tracked-everywhere",
+        SettingKey::AdminUserIds => "ui-list-remove-admin-user-ids",
+        SettingKey::AdminRoleIds => "ui-list-remove-admin-role-ids",
+        _ => "ui-list-remove-what",
+    };
+    let mut body = vec![text(loc, what, &args)];
+    if key == SettingKey::GuildAllowlist && ids == [id] {
+        body.push(text(loc, "ui-list-remove-last-community", &[]));
+    }
+    Some(Ask {
+        title: text(
+            loc,
+            "ui-confirm-list-remove",
+            &[("name", name.into()), ("setting", setting_name(loc, key).into())],
+        ),
+        body,
+        list: Vec::new(),
+        action: "/settings/list",
+        fields: vec![
+            ("scope", scope_param(scope)),
+            ("key", key.name()),
+            ("entry", id.to_string()),
+            ("op", "remove".to_owned()),
+        ],
+        button: text(loc, "ui-remove", &[]),
     })
 }

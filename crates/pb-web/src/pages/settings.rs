@@ -1,6 +1,6 @@
 //! The settings of one scope (global, a community, a person), grouped by section, the everyday ones first and the rest
 //! folded under "Advanced". Each setting is its own small form: the value, where the value in effect comes from, Save,
-//! and "Use inherited" when it is set here; lists of communities, roles and people are picked by name. Owner-only
+//! and "Use inherited" when it is set here; lists of communities, roles and people change one entry at a time. Owner-only
 //! settings are shown to admins but not editable. Everything set at the scope can be reset at once (after a
 //! confirmation).
 
@@ -50,7 +50,7 @@ fn source_id(s: Source) -> &'static str {
 }
 
 /// The value in effect at `scope` as JSON, and where it comes from.
-fn effective(tree: &SettingsTree, scope: Scope, key: SettingKey) -> (Value, Source) {
+pub fn effective_value(tree: &SettingsTree, scope: Scope, key: SettingKey) -> (Value, Source) {
     let (g, u) = match scope {
         Scope::Global => (None, None),
         Scope::Server { guild } => (Some(guild), None),
@@ -143,7 +143,7 @@ fn LangOptions(selected: String, #[prop(default = false)] auto: bool, locale: Lo
 
 /// The id of a setting's input (its label points there; the setting's form has the id `set-…`, the anchor saving
 /// comes back to).
-fn input_id(key: SettingKey) -> String {
+pub(crate) fn input_id(key: SettingKey) -> String {
     format!("in-{}", key.name())
 }
 
@@ -333,135 +333,11 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
             }
             .into_any()
         }
-        FieldKind::Ids { of } => id_picker(of, scope, value, locale, disabled),
-        FieldKind::Hosts | FieldKind::Langs | FieldKind::Prefix => view! {
+        FieldKind::Ids { .. } | FieldKind::Hosts | FieldKind::Langs | FieldKind::Prefix => view! {
             <input id=id name="value" type="text" value=s disabled=disabled/>
         }
         .into_any(),
     }
-}
-
-/// The ids in a list setting's value.
-fn ids_of(value: &Value) -> Vec<u64> {
-    value
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|x| x.as_u64().or_else(|| x.as_str().and_then(|s| s.parse().ok())))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-/// What can be picked for a list of communities, roles or people, by name: (id, name, where it is from).
-fn id_choices(of: &str, scope: Scope, chosen: &[u64]) -> Vec<(u64, String, Option<String>)> {
-    let gs = app().engine.guilds();
-    let mut out: Vec<(u64, String, Option<String>)> = match of {
-        "community" => {
-            let mut ids: std::collections::BTreeSet<u64> = gs.guilds.keys().map(|g| g.0).collect();
-            ids.extend(gs.known_communities.keys().map(|g| g.0));
-            ids.into_iter()
-                .map(|g| (g, gs.guild_name(pb_domain::GuildId(g)), None))
-                .collect()
-        }
-        // The roles of the scope's community, or of every community (each named with its community).
-        "role" => gs
-            .guilds
-            .iter()
-            .filter(|(g, _)| scope.guild().is_none_or(|s| s == **g))
-            .flat_map(|(g, info)| {
-                let mut roles: Vec<_> = info.roles.values().filter(|r| r.id.0 != g.0).collect();
-                roles.sort_by_key(|r| std::cmp::Reverse(r.position));
-                let community = scope.guild().is_none().then(|| info.name.clone());
-                roles
-                    .into_iter()
-                    .map(move |r| (r.id.0, r.name.clone(), community.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .collect(),
-        // People are many: the chosen ones as boxes (named from any community the bot saw them in); others are
-        // added from the list of everyone the bot knows (see `people_to_add`).
-        _ => chosen
-            .iter()
-            .map(|u| {
-                let user = pb_domain::UserId(*u);
-                let name = gs
-                    .guilds
-                    .iter()
-                    .find_map(|(_, i)| i.people.get(&user).map(pb_engine::Person::shown))
-                    .or_else(|| gs.known.iter().find(|((_, x), _)| *x == user).map(|(_, p)| p.shown()))
-                    .unwrap_or_else(|| u.to_string());
-                (*u, name, None)
-            })
-            .collect(),
-    };
-    // Chosen ids the bot does not know by name stay choosable.
-    for id in chosen {
-        if !out.iter().any(|(x, _, _)| x == id) {
-            out.push((*id, id.to_string(), None));
-        }
-    }
-    out
-}
-
-/// Everyone the bot knows by name who is not chosen yet (people, not bots), by name.
-fn people_to_add(chosen: &[u64]) -> Vec<(u64, String)> {
-    let gs = app().engine.guilds();
-    let mut seen = std::collections::BTreeMap::new();
-    for info in gs.guilds.values() {
-        for p in info.people.values().filter(|p| !p.bot) {
-            seen.entry(p.user.0).or_insert_with(|| p.shown());
-        }
-    }
-    for ((_, u), p) in &gs.known {
-        if !p.bot {
-            seen.entry(u.0).or_insert_with(|| p.shown());
-        }
-    }
-    let mut out: Vec<(u64, String)> = seen.into_iter().filter(|(u, _)| !chosen.contains(u)).collect();
-    out.sort_by_key(|a| a.1.to_lowercase());
-    out
-}
-
-/// A list of communities, roles or people, picked by name (a box each), plus a field for ids typed or pasted.
-fn id_picker(of: &str, scope: Scope, value: &Value, locale: Locale, disabled: bool) -> AnyView {
-    let chosen = ids_of(value);
-    let choices = id_choices(of, scope, &chosen);
-    let add = (of == "user").then(|| people_to_add(&chosen));
-    let placeholder = text(
-        locale,
-        match of {
-            "community" => "ui-ids-more-communities",
-            "role" => "ui-ids-more-roles",
-            _ => "ui-ids-more-people",
-        },
-        &[],
-    );
-    view! {
-        <div class="id-picker">
-            {(choices.is_empty() && of != "user").then(|| view! { <p class="muted small">{text(locale, "ui-ids-none-known", &[])}</p> })}
-            {choices.into_iter().map(|(id, name, from)| {
-                let on = chosen.contains(&id);
-                view! {
-                    <label class="inline">
-                        <input type="checkbox" name="value" value=id.to_string() checked=on disabled=disabled/>
-                        {name}
-                        {from.map(|f| view! { <span class="muted small">{f}</span> })}
-                    </label>
-                }
-            }).collect_view()}
-            <div class="row">
-                {add.filter(|a| !a.is_empty()).map(|people| view! {
-                    <select name="value" disabled=disabled aria-label=text(locale, "ui-ids-add-person", &[])>
-                        <option value="">{text(locale, "ui-ids-add-person", &[])}</option>
-                        {people.into_iter().map(|(u, name)| view! { <option value=u.to_string()>{name}</option> }).collect_view()}
-                    </select>
-                })}
-                <input name="value" type="text" placeholder=placeholder.clone() title=placeholder disabled=disabled/>
-            </div>
-        </div>
-    }
-    .into_any()
 }
 
 /// The escalation steps as rows (and one empty row to add a step).
@@ -610,7 +486,7 @@ fn works_with(other: SettingKey, scope: Scope, viewer: &Viewer) -> AnyView {
         let links = guilds
             .into_iter()
             .map(|g| {
-                let (value, _) = effective(&tree, Scope::Server { guild: g }, other);
+                let (value, _) = effective_value(&tree, Scope::Server { guild: g }, other);
                 (
                     format!("/c/{g}/settings#{anchor}"),
                     gs.guild_name(g),
@@ -620,7 +496,7 @@ fn works_with(other: SettingKey, scope: Scope, viewer: &Viewer) -> AnyView {
             .collect();
         ("ui-where-per-community", links)
     } else if kinds.contains(&ScopeKind::Global) {
-        let (value, _) = effective(&tree, Scope::Global, other);
+        let (value, _) = effective_value(&tree, Scope::Global, other);
         let links = viewer
             .owner
             .then(|| {
@@ -658,14 +534,15 @@ fn works_with(other: SettingKey, scope: Scope, viewer: &Viewer) -> AnyView {
 }
 
 /// One setting: its name (the help folded behind a "?"), where its value comes from, the input, Save, "Use inherited"
-/// when it is set here, and where a setting it works together with lives when that is set elsewhere.
+/// when it is set here, and where a setting it works together with lives when that is set elsewhere. A list of
+/// communities, roles or people shows its entries instead, each removed on its own, and adds one at a time.
 #[component]
 fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> impl IntoView {
     let loc = viewer.locale;
     let tree = app().engine.settings().current();
     let meta = key.meta();
     let here = tree.overrides(scope).get_json(key);
-    let (value, source) = effective(&tree, scope, key);
+    let (value, source) = effective_value(&tree, scope, key);
     let disabled = meta.who == Who::Owner && !viewer.owner;
     let is_here = here.is_some();
     let badge = if is_here {
@@ -690,22 +567,35 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
     } else {
         format!("{back}#{anchor}")
     };
+    let head = view! {
+        <div class="setting-head">
+            <label for=input_id(key)>{setting_name(loc, key)}</label>
+            <details class="help">
+                <summary title=text(loc, "ui-help", &[])>"?"</summary>
+                <p>{setting_help(loc, key)}</p>
+            </details>
+            <span class="badge" class:here=is_here>{badge}</span>
+            {(meta.who == Who::Owner).then(|| view! { <span class="badge owner">{text(loc, "ui-owner-only", &[])}</span> })}
+            {super::commands::setting_commands(key, scope, loc)}
+        </div>
+    };
+    if matches!(meta.kind, FieldKind::Ids { .. }) {
+        return view! {
+            <div class="setting list-setting" id=anchor.clone() class:here=is_here>
+                {head}
+                <super::lists::ListBody key scope value viewer back disabled is_here/>
+                {partner}
+            </div>
+        }
+        .into_any();
+    }
     view! {
         <form method="post" action="/settings" class="setting" id=anchor.clone() class:here=is_here>
             <input type="hidden" name="csrf" value=viewer.csrf.clone()/>
             <input type="hidden" name="scope" value=scope_param(scope)/>
             <input type="hidden" name="key" value=key.name()/>
             <input type="hidden" name="back" value=back/>
-            <div class="setting-head">
-                <label for=input_id(key)>{setting_name(loc, key)}</label>
-                <details class="help">
-                    <summary title=text(loc, "ui-help", &[])>"?"</summary>
-                    <p>{setting_help(loc, key)}</p>
-                </details>
-                <span class="badge" class:here=is_here>{badge}</span>
-                {(meta.who == Who::Owner).then(|| view! { <span class="badge owner">{text(loc, "ui-owner-only", &[])}</span> })}
-                {super::commands::setting_commands(key, scope, loc)}
-            </div>
+            {head}
             <div class="row">
                 {input(key, scope, &value, loc, disabled)}
                 {(!disabled).then(|| view! {
@@ -718,6 +608,7 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
             {partner}
         </form>
     }
+    .into_any()
 }
 
 /// The keys of one section in display order: the general ones, then per detection type (switch, then bar).

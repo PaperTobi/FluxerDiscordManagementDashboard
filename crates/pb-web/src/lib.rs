@@ -2,6 +2,9 @@
 //! the browser, sharing one live connection. Changes go through plain HTML forms (they work without scripts) and a
 //! few JSON endpoints of `pb-web-server`.
 
+// Leptos page types nest deeply.
+#![recursion_limit = "512"]
+
 pub mod fmt;
 pub mod islands;
 pub mod live;

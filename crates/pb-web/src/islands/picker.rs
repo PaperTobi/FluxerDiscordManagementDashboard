@@ -1,16 +1,25 @@
-//! "Track someone": a user ID or mention works as it is (a plain form); with scripts, typing a name lists the
-//! community's members whose name starts with it (from Fluxer), and picking one tracks them.
+//! A box to add someone by name: a user ID or mention works as it is (a plain form, also without scripts, where the
+//! server looks the name up); with scripts, typing a name lists matching members (from Fluxer: of one community, or of
+//! every community this login sees), and picking one sends the form with their ID.
 
 use leptos::html::{Form, Input};
 use leptos::prelude::*;
 use pb_domain::GuildId;
-use pb_i18n::{Locale, text};
 use pb_live_proto::Who;
 
 use super::widgets::Avatar;
 
+/// `action` with the `hidden` fields and the person in `field`; `guild`: search that community (else all).
 #[island]
-pub fn MemberPicker(guild: GuildId, csrf: String, back: String, locale: Locale) -> impl IntoView {
+pub fn MemberPicker(
+    guild: Option<GuildId>,
+    action: String,
+    field: String,
+    hidden: Vec<(String, String)>,
+    button: String,
+    placeholder: String,
+    #[prop(optional)] id: Option<String>,
+) -> impl IntoView {
     let found: RwSignal<Vec<Who>> = RwSignal::new(Vec::new());
     let input: NodeRef<Input> = NodeRef::new();
     let form: NodeRef<Form> = NodeRef::new();
@@ -52,6 +61,9 @@ pub fn MemberPicker(guild: GuildId, csrf: String, back: String, locale: Locale) 
             pending.set_value(h);
         }
     };
+    // On the server only the browser's search uses the community.
+    #[cfg(not(feature = "hydrate"))]
+    let _ = guild;
     let pick = move |user: String| {
         if let Some(i) = input.get() {
             i.set_value(&user);
@@ -61,13 +73,10 @@ pub fn MemberPicker(guild: GuildId, csrf: String, back: String, locale: Locale) 
         }
     };
     view! {
-        <form method="post" action="/people/track" class="row picker" node_ref=form data-ready=move || ready.get().to_string()>
-            <input type="hidden" name="csrf" value=csrf/>
-            <input type="hidden" name="back" value=back/>
-            <input type="hidden" name="guild" value=guild.to_string()/>
-            <input name="user" required autocomplete="off" node_ref=input on:input=on_input
-                placeholder=text(locale, "ui-user-id-or-mention", &[])/>
-            <button class="button primary">{text(locale, "ui-track", &[])}</button>
+        <form method="post" action=action class="row picker" node_ref=form data-ready=move || ready.get().to_string()>
+            {hidden.into_iter().map(|(k, v)| view! { <input type="hidden" name=k value=v/> }).collect_view()}
+            <input id=id name=field required autocomplete="off" node_ref=input on:input=on_input placeholder=placeholder/>
+            <button class="button primary">{button}</button>
         </form>
         <Show when=move || !found.with(Vec::is_empty)>
             <ul class="suggest">
@@ -90,12 +99,15 @@ pub fn MemberPicker(guild: GuildId, csrf: String, back: String, locale: Locale) 
 }
 
 #[cfg(feature = "hydrate")]
-async fn search(guild: GuildId, q: &str) -> Option<Vec<Who>> {
+async fn search(guild: Option<GuildId>, q: &str) -> Option<Vec<Who>> {
     use wasm_bindgen::JsCast;
     use wasm_bindgen_futures::JsFuture;
     let window = web_sys::window()?;
     let q: String = js_sys::encode_uri_component(q).into();
-    let url = format!("/api/members?guild={guild}&q={q}");
+    let url = match guild {
+        Some(g) => format!("/api/members?guild={g}&q={q}"),
+        None => format!("/api/members?q={q}"),
+    };
     let res: web_sys::Response = JsFuture::from(window.fetch_with_str(&url))
         .await
         .ok()?

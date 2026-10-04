@@ -205,8 +205,6 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
     let value = match key.meta().kind {
         FieldKind::Escalation => escalation_json(&f),
         FieldKind::Voices | FieldKind::LineVoices => voices_json(&f),
-        // Picked from names (a box per entry) and typed: every `value` field together.
-        FieldKind::Ids { .. } => pb_settings::text_value(key, &fields(&f, "value").join(",")),
         _ => pb_settings::text_value(key, field(&f, "value").unwrap_or_default()),
     };
     let by_owner = s.access.owner;
@@ -264,6 +262,94 @@ pub async fn reset(State(st): State<WebState>, headers: HeaderMap, Form(f): Form
             text(loc, "ui-settings-reset", &[("count", changes.len().into())]),
         ),
         Err(e) => st.done(&s, &f, false, change_error(loc, &e)),
+    }
+}
+
+/// `POST /settings/list`: adds one entry to a list of communities, roles or people (`op=add`, `entry` = a name, id
+/// or mention), or removes one (`op=remove`, `entry` = its id; after a confirmation). The change is made on the
+/// current settings, so entries others added meanwhile stay.
+pub async fn list(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
+    use pb_web::pages::lists::{Found, Of, entry, ids_of, resolve};
+    let s = match st.sender(&headers, &f) {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    let loc = s.locale;
+    let (Some(scope), Some(key)) = (
+        field(&f, "scope").and_then(parse_scope),
+        field(&f, "key").and_then(|k| k.parse::<SettingKey>().ok()),
+    ) else {
+        return st.done(&s, &f, false, text(loc, "form-expired", &[]));
+    };
+    let Some(of) = Of::for_key(key) else {
+        return st.done(&s, &f, false, text(loc, "form-expired", &[]));
+    };
+    if !s.may_change(scope) {
+        return st.done(&s, &f, false, text(loc, "ui-not-allowed", &[]));
+    }
+    let typed = field(&f, "entry").unwrap_or_default().trim().to_owned();
+    let remove = field(&f, "op") == Some("remove");
+    let (id, known) = if remove {
+        match typed.parse::<u64>() {
+            Ok(id) => (id, true),
+            Err(_) => return st.done(&s, &f, false, text(loc, "form-expired", &[])),
+        }
+    } else {
+        if typed.is_empty() {
+            return st.done(&s, &f, false, text(loc, "ui-list-add-empty", &[]));
+        }
+        let may_see = |g: GuildId| s.may_see(g);
+        match resolve(&st.engine, of, scope, &typed, &may_see).await {
+            Found::One { id, known } => (id, known),
+            Found::Nothing => {
+                return st.done(&s, &f, false, text(loc, "ui-list-no-match", &[("name", typed.into())]));
+            }
+            Found::Several(names) => {
+                return st.done(
+                    &s,
+                    &f,
+                    false,
+                    text(
+                        loc,
+                        "ui-list-several",
+                        &[("name", typed.into()), ("matches", names.join(", ").into())],
+                    ),
+                );
+            }
+        }
+    };
+    if remove && !confirmed(&f) {
+        return ask_first("list-remove", &f, &["scope", "key", "entry"]);
+    }
+    let name = entry(&st.engine, of, scope, id).0;
+    let by_owner = s.access.owner;
+    // Read, change one entry, write: inside the settings change, so nothing anyone else changed is lost.
+    let result = st
+        .engine
+        .settings()
+        .change(s.actor(), move |t| {
+            let mut ids = ids_of(&pb_web::pages::settings::effective_value(t, scope, key).0);
+            let had = ids.contains(&id);
+            if had != remove {
+                return Ok(Vec::new());
+            }
+            if remove {
+                ids.retain(|x| *x != id);
+            } else {
+                ids.push(id);
+            }
+            let value = Value::Array(ids.into_iter().map(|x| Value::String(x.to_string())).collect());
+            Ok(t.set(scope, key, value, by_owner)?.into_iter().collect())
+        })
+        .await;
+    let args = [("name", name.into())];
+    match (result, remove) {
+        (Err(e), _) => st.done(&s, &f, false, change_error(loc, &e)),
+        (Ok(c), false) if c.is_empty() => st.done(&s, &f, false, text(loc, "ui-list-already", &args)),
+        (Ok(c), true) if c.is_empty() => st.done(&s, &f, false, text(loc, "ui-list-not-there", &args)),
+        (Ok(_), false) if !known => st.done(&s, &f, true, text(loc, "ui-list-added-unknown", &args)),
+        (Ok(_), false) => st.done(&s, &f, true, text(loc, "ui-list-added", &args)),
+        (Ok(_), true) => st.done(&s, &f, true, text(loc, "ui-list-removed", &args)),
     }
 }
 

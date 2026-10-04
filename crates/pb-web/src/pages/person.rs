@@ -105,6 +105,25 @@ pub fn PersonPage() -> impl IntoView {
             }
         })
     };
+    // Tracking in every community is the owner's (a list on the System page, changed here one person at a time).
+    let everywhere_form = v.owner.then(|| {
+        let (op, label) = if tracking.everywhere {
+            ("remove", "ui-untrack-everywhere")
+        } else {
+            ("add", "ui-track-everywhere")
+        };
+        view! {
+            <form method="post" action="/settings/list">
+                <input type="hidden" name="csrf" value=v.csrf.clone()/>
+                <input type="hidden" name="back" value=here.clone()/>
+                <input type="hidden" name="scope" value="global"/>
+                <input type="hidden" name="key" value="tracked_everywhere"/>
+                <input type="hidden" name="op" value=op/>
+                <input type="hidden" name="entry" value=u.to_string()/>
+                <button class="button">{text(loc, label, &[])}</button>
+            </form>
+        }
+    });
     view! {
         <header class="page-head person-head">
             <Avatar who=who.clone() size=48/>
@@ -116,6 +135,7 @@ pub fn PersonPage() -> impl IntoView {
             {(tracking.listed && !tracking.active).then(|| view! { <span class="chip warn">{text(loc, "ui-paused", &[])}</span> })}
             {(!tracking.listed).then(|| view! { <span class="chip">{text(loc, "ui-not-tracked", &[])}</span> })}
             {track_form}
+            {everywhere_form}
         </header>
         <Tabs items=tabs/>
         {body}

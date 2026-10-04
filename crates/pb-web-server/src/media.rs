@@ -122,31 +122,49 @@ pub async fn preview(State(st): State<WebState>, headers: HeaderMap, Query(q): Q
 
 #[derive(Debug, Deserialize)]
 pub struct MembersQuery {
-    guild: u64,
+    /// The community to search (none: every community this login sees).
+    guild: Option<u64>,
     #[serde(default)]
     q: String,
 }
 
-/// `GET /api/members?guild=…&q=…`: people in a community whose name starts with `q` (for the "track someone" box).
+/// `GET /api/members?[guild=…&]q=…`: people whose name starts with `q`, in a community or in every community this
+/// login sees (for the boxes that track someone or add them to a list).
 pub async fn members(State(st): State<WebState>, headers: HeaderMap, Query(q): Query<MembersQuery>) -> Response {
     let Some(login) = st.sessions.lookup(&headers) else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
     let access = st.sessions.access(login.record.user);
-    let g = pb_domain::GuildId(q.guild);
-    if !access.may_see(g) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
+    let guilds: Vec<pb_domain::GuildId> = match q.guild.map(pb_domain::GuildId) {
+        Some(g) if !access.may_see(g) => return StatusCode::FORBIDDEN.into_response(),
+        Some(g) => vec![g],
+        None => st
+            .engine
+            .guilds()
+            .available()
+            .into_iter()
+            .filter(|g| access.may_see(*g))
+            .collect(),
+    };
     let query = q.q.trim();
-    if query.is_empty() {
-        return axum::Json(Vec::<pb_live_proto::Who>::new()).into_response();
+    let mut found: Vec<pb_live_proto::Who> = Vec::new();
+    for g in guilds.into_iter().filter(|_| !query.is_empty()) {
+        match st.engine.search_members(g, query, 20).await {
+            Ok(people) => {
+                for w in people {
+                    if found.len() < 20 && !found.iter().any(|x| x.user == w.user) {
+                        found.push(w);
+                    }
+                }
+            }
+            Err(e) => {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    pb_web::fmt::engine_error(super::util::locale_of(&headers), &e),
+                )
+                    .into_response();
+            }
+        }
     }
-    match st.engine.search_members(g, query, 20).await {
-        Ok(found) => axum::Json(found).into_response(),
-        Err(e) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            pb_web::fmt::engine_error(super::util::locale_of(&headers), &e),
-        )
-            .into_response(),
-    }
+    axum::Json(found).into_response()
 }
