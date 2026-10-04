@@ -52,7 +52,7 @@ pb-import; only `pb` wires concrete implementations.
 | pb-store-api | `EventLog`, `Index`, `Blobs`, `SettingsRepo`, `SessionRepo`; `Event` enum (log schema v1); typed queries |
 | pb-audio | decode (symphonia + opus-decoder wrapper), WAV (hound), resample (rubato), loudness (ebur128), limiting, fades |
 | pb-vad-silero | Silero v6.2, a hand-written forward pass (weights from the official `silero_vad.onnx`, SIMD chosen at run time), batched across streams; energy-gate fallback |
-| pb-classifier-roblox | Roblox voice-safety-classifier v3 in Burn (burn-flex; feature `gpu` = burn-wgpu) |
+| pb-classifier-roblox | Roblox voice-safety-classifier v3 in Burn (burn-flex; feature `gpu` = burn-wgpu plus its own CubeCL kernels for linear layers, layer norm and attention) |
 | pb-tts-piper | Piper VITS on rten, espeak-ng phonemes, piper id mapping, resample to 48 kHz |
 | pb-infer | OS threads owning the models, priority queues, live thread-count changes, metrics, `Inference` handle |
 | pb-fluxer | discovery, gateway (hello, identify, heartbeat, resume, op 7/9, close codes), op 4/op 3 pacing, REST with header-driven rate-limit queues, OAuth2 PKCE |

@@ -6571,8 +6571,10 @@ name = "pb-classifier-roblox"
 version = "0.1.0"
 dependencies = [
  "burn",
+ "burn-cubecl",
  "burn-flex",
  "burn-store",
+ "cubecl",
  "pb-domain",
  "pb-models-api",
  "pb-testkit",

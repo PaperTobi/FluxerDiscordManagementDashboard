@@ -3,7 +3,6 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use burn::tensor::{Tensor, TensorData};
 use pb_classifier_roblox::{Cpu, load_runner};
 
 fn main() {
@@ -25,9 +24,8 @@ fn main() {
         .collect();
     let _ = NonZeroUsize::new(threads);
     pool.install(|| {
-        let wav = || Tensor::<Cpu, 2>::from_data(TensorData::new(pcm.clone(), [1, n]), &device);
-        let _ = runner.forward(wav());
-        let (_, stages) = runner.forward_profiled(wav());
+        let _ = runner.forward(&pcm);
+        let (_, stages) = runner.forward_profiled(&pcm);
         let total: f64 = stages.iter().map(|(_, d)| d.as_secs_f64()).sum();
         let layers: f64 = stages
             .iter()

@@ -5,21 +5,24 @@
 
 mod config;
 mod frontend;
+#[cfg(feature = "gpu")]
+mod gpu;
 mod mask;
 pub mod model;
+mod ops;
 
 use std::num::NonZeroUsize;
 use std::path::Path;
 
 use burn::module::Module;
+use burn::tensor::Tensor;
 use burn::tensor::activation::{sigmoid, softmax};
-use burn::tensor::backend::Backend;
-use burn::tensor::{Tensor, TensorData};
 use burn_store::{ModuleSnapshot, PyTorchToBurnAdapter, SafetensorsStore};
 use pb_models_api::{Classifier, ClassifierInfo, ModelError, RawScores};
 
 pub use config::{ConfigError, ModelConfig};
 pub use model::{Model, Runner, Trace};
+pub use ops::{Ops, Then};
 
 /// Burn's pure-Rust CPU backend.
 pub type Cpu = burn::backend::Flex;
@@ -32,15 +35,14 @@ pub const WEIGHTS_FILE: &str = "model.safetensors";
 pub const REVISION_FILE: &str = "REVISION";
 
 /// The classifier, bound to one device. CPU work runs on its own thread pool, sized by `set_threads`.
-pub struct RobloxClassifier<B: Backend> {
+pub struct RobloxClassifier<B: Ops> {
     runner: Runner<B>,
     cfg: ModelConfig,
     info: ClassifierInfo,
-    device: B::Device,
     pool: Option<rayon::ThreadPool>,
 }
 
-impl<B: Backend> std::fmt::Debug for RobloxClassifier<B> {
+impl<B: Ops> std::fmt::Debug for RobloxClassifier<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RobloxClassifier")
             .field("info", &self.info)
@@ -70,7 +72,7 @@ fn min_samples(cfg: &ModelConfig) -> usize {
 }
 
 /// Loads the model directory (`config.json`, `model.safetensors`, optional `REVISION`) onto `device`.
-pub fn load_runner<B: Backend>(dir: &Path, device: &B::Device) -> Result<(Runner<B>, ModelConfig), ModelError> {
+pub fn load_runner<B: Ops>(dir: &Path, device: &B::Device) -> Result<(Runner<B>, ModelConfig), ModelError> {
     let cfg = ModelConfig::load(&dir.join(CONFIG_FILE)).map_err(|e| ModelError::Load(e.to_string()))?;
     let mut model = Model::<B>::new(&cfg, device);
     let mut store = SafetensorsStore::from_file(dir.join(WEIGHTS_FILE))
@@ -99,7 +101,7 @@ pub fn load_runner<B: Backend>(dir: &Path, device: &B::Device) -> Result<(Runner
     Ok((Runner::new(model, &cfg), cfg))
 }
 
-impl<B: Backend> RobloxClassifier<B> {
+impl<B: Ops> RobloxClassifier<B> {
     fn build(
         dir: &Path,
         device: B::Device,
@@ -125,7 +127,6 @@ impl<B: Backend> RobloxClassifier<B> {
             runner,
             cfg,
             info,
-            device,
             pool: threads.map(pool).transpose()?,
         })
     }
@@ -145,10 +146,7 @@ impl<B: Backend> RobloxClassifier<B> {
                 max: self.info.max_samples,
             });
         }
-        let run = || {
-            let wav = Tensor::<B, 2>::from_data(TensorData::new(pcm16k.to_vec(), [1, n]), &self.device);
-            self.runner.forward(wav)
-        };
+        let run = || self.runner.forward(pcm16k);
         Ok(match &self.pool {
             Some(pool) => pool.install(run),
             None => run(),
@@ -182,28 +180,45 @@ impl RobloxClassifier<Gpu> {
     /// to it is never picked by accident).
     pub fn load_gpu(dir: &Path, device: GpuDevice) -> Result<Self, ModelError> {
         let name = format!("GPU (wgpu, {device:?})");
-        Self::build(dir, device, name, None)
+        let mut clf = Self::build(dir, device, name, None)?;
+        clf.warm_up()?;
+        Ok(clf)
+    }
+
+    /// Classifies a few silent clips, so that the GPU compiles its kernels now rather than during the first real
+    /// clips. Some kernels come in variants for lengths that are or are not multiples of 2 and 4; consecutive frame
+    /// counts cover them.
+    fn warm_up(&mut self) -> Result<(), ModelError> {
+        let hop = self.cfg.hop_length;
+        let base = (self.cfg.sample_rate as usize).max(self.info.min_samples);
+        for extra in 0..WARM_UP_LENGTHS {
+            self.classify(&vec![0.0; base + extra * hop])?;
+        }
+        Ok(())
     }
 }
 
-fn to_array<const N: usize, B: Backend>(t: Tensor<B, 1>) -> Result<[f32; N], ModelError> {
-    let v: Vec<f32> = t
-        .into_data()
-        .to_vec()
-        .map_err(|e| ModelError::Failed(format!("{e:?}")))?;
-    v.try_into()
-        .map_err(|v: Vec<f32>| ModelError::Failed(format!("expected {N} outputs, got {}", v.len())))
-}
+/// Clip lengths [`RobloxClassifier::warm_up`] runs (one frame apart).
+#[cfg(feature = "gpu")]
+const WARM_UP_LENGTHS: usize = 4;
 
-impl<B: Backend> Classifier for RobloxClassifier<B> {
+impl<B: Ops> Classifier for RobloxClassifier<B> {
     fn info(&self) -> &ClassifierInfo {
         &self.info
     }
 
     fn classify(&mut self, pcm16k: &[f32]) -> Result<RawScores, ModelError> {
         let trace = self.trace(pcm16k)?;
-        let labels = to_array::<8, B>(sigmoid(trace.logits))?;
-        let languages = to_array::<30, B>(softmax(trace.language_logits, 0))?;
+        // One read back for both outputs: each read waits for the device.
+        let scores = Tensor::cat(vec![sigmoid(trace.logits), softmax(trace.language_logits, 0)], 0);
+        let scores: [f32; 38] = scores
+            .into_data()
+            .to_vec::<f32>()
+            .map_err(|e| ModelError::Failed(format!("{e:?}")))?
+            .try_into()
+            .map_err(|v: Vec<f32>| ModelError::Failed(format!("expected 38 outputs, got {}", v.len())))?;
+        let labels: [f32; 8] = std::array::from_fn(|i| scores[i]);
+        let languages: [f32; 30] = std::array::from_fn(|i| scores[8 + i]);
         if labels.iter().chain(languages.iter()).any(|p| !p.is_finite()) {
             return Err(ModelError::Failed("the model produced a non-finite score".into()));
         }

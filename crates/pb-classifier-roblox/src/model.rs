@@ -3,16 +3,15 @@
 
 use burn::module::{Module, Param};
 use burn::nn::conv::{Conv1d, Conv1dConfig};
-use burn::nn::{LayerNorm, LayerNormConfig, Linear, LinearConfig, PaddingConfig1d};
+use burn::nn::{LayerNorm, Linear, LinearConfig, PaddingConfig1d};
 use burn::tensor::activation::{gelu, sigmoid, silu, softmax};
 use burn::tensor::backend::Backend;
-use burn::tensor::module::{attention, avg_pool1d};
-use burn::tensor::ops::AttentionModuleOptions;
-use burn::tensor::{Bool, Tensor, TensorData};
+use burn::tensor::{Tensor, TensorData};
 
 use crate::config::ModelConfig;
 use crate::frontend::{FeatureExtractor, Frontend};
 use crate::mask;
+use crate::ops::{Ops, Then, key_padding, layer_norm};
 
 /// `nn.MultiheadAttention` (batch first, fused input projection) with a key-padding mask.
 #[derive(Module, Debug)]
@@ -30,22 +29,14 @@ impl<B: Backend> Mha<B> {
             heads,
         }
     }
+}
 
-    /// `x`: `[1, L, d]`; `pad[i]` = key i is padding (ignored).
-    fn forward(&self, x: Tensor<B, 3>, pad: Option<&Tensor<B, 4, Bool>>) -> Tensor<B, 3> {
-        let [b, l, d] = x.dims();
-        let dh = d / self.heads;
-        let qkv = self.in_proj.forward(x);
-        let split = |i: usize| {
-            qkv.clone()
-                .narrow(2, i * d, d)
-                .reshape([b, l, self.heads, dh])
-                .swap_dims(1, 2)
-        };
-        let (q, k, v) = (split(0), split(1), split(2));
-        let mask = pad.map(|p| p.clone().expand([b, self.heads, l, l]));
-        let out = attention(q, k, v, mask, None, AttentionModuleOptions::default());
-        self.out_proj.forward(out.swap_dims(1, 2).reshape([b, l, d]))
+impl<B: Ops> Mha<B> {
+    /// `residual + attention(x)`. `x`: `[1, L, d]`; `keys` from [`Ops::keys`].
+    fn forward(&self, x: Tensor<B, 3>, keys: &B::Keys, residual: Tensor<B, 3>) -> Tensor<B, 3> {
+        let qkv = B::linear_layer(x, &self.in_proj, Then::Keep);
+        let out = B::self_attention(qkv, self.heads, keys);
+        B::linear_layer(out, &self.out_proj, Then::Add(residual))
     }
 }
 
@@ -65,17 +56,17 @@ impl<B: Backend> EncoderLayer<B> {
             self_attn: Mha::new(d, heads, device),
             linear1: LinearConfig::new(d, 4 * d).init(device),
             linear2: LinearConfig::new(4 * d, d).init(device),
-            norm1: LayerNormConfig::new(d).init(device),
-            norm2: LayerNormConfig::new(d).init(device),
+            norm1: layer_norm(d, device),
+            norm2: layer_norm(d, device),
         }
     }
+}
 
-    fn forward(&self, x: Tensor<B, 3>, pad: Option<&Tensor<B, 4, Bool>>) -> Tensor<B, 3> {
-        let x = x.clone() + self.self_attn.forward(self.norm1.forward(x), pad);
-        let ff = self
-            .linear2
-            .forward(gelu(self.linear1.forward(self.norm2.forward(x.clone()))));
-        x + ff
+impl<B: Ops> EncoderLayer<B> {
+    fn forward(&self, x: Tensor<B, 3>, keys: &B::Keys) -> Tensor<B, 3> {
+        let x = self.self_attn.forward(B::normalize(x.clone(), &self.norm1), keys, x);
+        let h = B::linear_layer(B::normalize(x.clone(), &self.norm2), &self.linear1, Then::Gelu);
+        B::linear_layer(h, &self.linear2, Then::Add(x))
     }
 }
 
@@ -98,17 +89,19 @@ impl<B: Backend> ConvReduction<B> {
                 .with_groups(proj)
                 .with_padding(PaddingConfig1d::Explicit((kernel - 1) / 2, (kernel - 1) / 2))
                 .init(device),
-            post_norm: LayerNormConfig::new(proj).init(device),
+            post_norm: layer_norm(proj, device),
             post_linear: LinearConfig::new(proj, proj).init(device),
             proj,
         }
     }
+}
 
+impl<B: Ops> ConvReduction<B> {
     fn forward(&self, x: Tensor<B, 3>) -> Tensor<B, 3> {
-        let x = self.pre_linear.forward(x);
+        let x = B::linear_layer(x, &self.pre_linear, Then::Keep);
         let glu = x.clone().narrow(2, 0, self.proj) * sigmoid(x.narrow(2, self.proj, self.proj));
         let conv = self.conv_module.forward(glu.swap_dims(1, 2)).swap_dims(1, 2);
-        self.post_linear.forward(silu(self.post_norm.forward(conv)))
+        B::linear_layer(silu(B::normalize(conv, &self.post_norm)), &self.post_linear, Then::Keep)
     }
 }
 
@@ -174,15 +167,15 @@ impl<B: Backend> Model<B> {
         let bins = cfg.n_fft / 2 + 1;
         let head = Head {
             conv_reduction1: ConvReduction::new(d, d, 7, device),
-            mid_layer_norm1: LayerNormConfig::new(d).init(device),
+            mid_layer_norm1: layer_norm(d, device),
             mid_attention1: Mha::new(d, 16, device),
-            pre_conv2_layer_norm: LayerNormConfig::new(d).init(device),
+            pre_conv2_layer_norm: layer_norm(d, device),
             conv_reduction2: ConvReduction::new(d, p, 7, device),
-            mid_layer_norm2: LayerNormConfig::new(p).init(device),
+            mid_layer_norm2: layer_norm(p, device),
             mid_attention2: Mha::new(p, 16, device),
-            pre_conv3_layer_norm: LayerNormConfig::new(p).init(device),
+            pre_conv3_layer_norm: layer_norm(p, device),
             conv_reduction3: ConvReduction::new(p, p, 5, device),
-            pre_pooling_layer_norm: LayerNormConfig::new(p).init(device),
+            pre_pooling_layer_norm: layer_norm(p, device),
             pooling_attention: Pooling {
                 w: LinearConfig::new(p, 1).init(device),
             },
@@ -212,7 +205,7 @@ impl<B: Backend> Model<B> {
             layers: (0..cfg.num_hidden_layers)
                 .map(|_| EncoderLayer::new(d, heads, device))
                 .collect(),
-            final_layer_norm: LayerNormConfig::new(d).init(device),
+            final_layer_norm: layer_norm(d, device),
             classifier: head,
         }
     }
@@ -235,6 +228,7 @@ pub struct Trace<B: Backend> {
 #[derive(Debug)]
 pub struct Runner<B: Backend> {
     pub model: Model<B>,
+    device: B::Device,
     frontend: Frontend<B>,
     mask_weight: [f32; 3],
     mask_bias: f32,
@@ -242,18 +236,10 @@ pub struct Runner<B: Backend> {
     reductions: Vec<(usize, usize)>,
 }
 
-fn key_padding<B: Backend>(valid: &[bool], device: &B::Device) -> Option<Tensor<B, 4, Bool>> {
-    if valid.iter().all(|v| *v) {
-        return None;
-    }
-    let pad: Vec<bool> = valid.iter().map(|v| !v).collect();
-    let n = pad.len();
-    Some(Tensor::<B, 1, Bool>::from_data(TensorData::new(pad, [n]), device).reshape([1, 1, 1, n]))
-}
-
-impl<B: Backend> Runner<B> {
+impl<B: Ops> Runner<B> {
     pub fn new(model: Model<B>, cfg: &ModelConfig) -> Self {
         let frontend = Frontend::new(&model.feature_extractor, cfg.n_fft, cfg.hop_length);
+        let device = model.feature_extractor.window.val().device();
         let w: Vec<f32> = model
             .attn_mask_conv
             .weight
@@ -264,6 +250,7 @@ impl<B: Backend> Runner<B> {
         let b: Vec<f32> = model.attn_mask_conv.bias.val().into_data().to_vec().unwrap_or_default();
         Runner {
             model,
+            device,
             frontend,
             mask_weight: [w[0], w[1], w[2]],
             mask_bias: b[0],
@@ -276,24 +263,24 @@ impl<B: Backend> Runner<B> {
         }
     }
 
-    /// One clip `[1, samples]` → logits and language logits (and the tensors along the way).
-    pub fn forward(&self, wav: Tensor<B, 2>) -> Trace<B> {
-        self.forward_inner(wav, &mut None)
+    /// One clip (16 kHz samples in [-1, 1]) → logits and language logits (and the tensors along the way).
+    pub fn forward(&self, pcm: &[f32]) -> Trace<B> {
+        self.forward_inner(pcm, &mut None)
     }
 
     /// Like [`Runner::forward`], also returning how long each stage took (the device is synchronised between stages).
-    pub fn forward_profiled(&self, wav: Tensor<B, 2>) -> (Trace<B>, Vec<(String, std::time::Duration)>) {
+    pub fn forward_profiled(&self, pcm: &[f32]) -> (Trace<B>, Vec<(String, std::time::Duration)>) {
         let mut stages = Some((Vec::new(), std::time::Instant::now()));
-        let trace = self.forward_inner(wav, &mut stages);
+        let trace = self.forward_inner(pcm, &mut stages);
         (trace, stages.map(|(s, _)| s).unwrap_or_default())
     }
 
     fn forward_inner(
         &self,
-        wav: Tensor<B, 2>,
+        pcm: &[f32],
         stages: &mut Option<(Vec<(String, std::time::Duration)>, std::time::Instant)>,
     ) -> Trace<B> {
-        let device = wav.device();
+        let device = self.device.clone();
         let mut mark = |name: &str| {
             if let Some((list, since)) = stages.as_mut() {
                 let _ = B::sync(&device);
@@ -301,45 +288,51 @@ impl<B: Backend> Runner<B> {
                 *since = std::time::Instant::now();
             }
         };
-        let [_, samples] = wav.dims();
         let m = &self.model;
 
-        let logmel = self.frontend.forward(wav);
+        // Frame by frame, then token by token: [1, steps, channels].
+        let mel = self.frontend.forward(pcm, &device);
         mark("front end");
-        let valid0 = mask::after_frontend(samples, self.hop);
-        debug_assert_eq!(valid0.len(), logmel.dims()[2]);
+        let valid0 = mask::after_frontend(pcm.len(), self.hop);
+        debug_assert_eq!(valid0.len(), mel.dims()[1]);
 
-        let h = gelu(m.conv1.forward(logmel.clone()));
-        let conv2 = m.conv2.forward(h);
-        let h = gelu(conv2.clone());
+        let h = B::conv_layer(mel.clone(), &m.conv1, Then::Gelu);
+        let conv2 = B::conv_layer(h, &m.conv2, Then::Keep);
         let mut valid = mask::after_stride_conv(&valid0, self.mask_weight, self.mask_bias);
-        let [_, d, l] = h.dims();
+        let [_, l, d] = conv2.dims();
         let positions = m.embed_positions.weight.val().narrow(0, 0, l).reshape([1, l, d]);
-        let mut h = h.swap_dims(1, 2) + positions;
+        let mut h = gelu(conv2.clone()) + positions;
+        let conv2 = conv2.swap_dims(1, 2);
         mark("conv1 + conv2");
 
         let mut pools = Vec::new();
-        let mut pad = key_padding::<B>(&valid, &device);
+        let mut keys = B::keys(&valid, &device);
         for (i, layer) in m.layers.iter().enumerate() {
-            h = layer.forward(h, pad.as_ref());
+            h = layer.forward(h, &keys);
             mark(&format!("layer {i}"));
             if let Some((_, ratio)) = self.reductions.iter().find(|(at, _)| *at == i) {
-                let pooled = avg_pool1d(h.swap_dims(1, 2), *ratio, *ratio, 0, true, false);
-                let len = pooled.dims()[2];
-                pools.push(pooled.clone());
-                h = pooled.swap_dims(1, 2);
+                // `avg_pool1d(kernel = stride = ratio)`: the mean of each group of `ratio` tokens, an incomplete
+                // last group dropped.
+                let [_, l, d] = h.dims();
+                let len = l / ratio;
+                h = h
+                    .narrow(1, 0, len * ratio)
+                    .reshape([1, len, *ratio, d])
+                    .mean_dim(2)
+                    .reshape([1, len, d]);
+                pools.push(h.clone().swap_dims(1, 2));
                 valid = mask::every(&valid, *ratio, len);
-                pad = key_padding::<B>(&valid, &device);
+                keys = B::keys(&valid, &device);
             }
         }
-        let h = m.final_layer_norm.forward(h);
+        let h = B::normalize(h, &m.final_layer_norm);
         let final_ln = h.clone();
         let len = h.dims()[1];
         valid.truncate(len);
         let (logits, language_logits) = self.head(h, &valid, &device);
         mark("head");
         Trace {
-            logmel,
+            logmel: mel.swap_dims(1, 2),
             conv2,
             pools,
             final_ln,
@@ -354,38 +347,40 @@ impl<B: Backend> Runner<B> {
 
         let h = c.conv_reduction1.forward(h);
         let valid1 = mask::every(valid, 2, usize::MAX);
-        let h = h.clone()
-            + c.mid_attention1
-                .forward(c.mid_layer_norm1.forward(h), key_padding::<B>(&valid1, device).as_ref());
-        let h = c.conv_reduction2.forward(c.pre_conv2_layer_norm.forward(h));
+        let h = c.mid_attention1.forward(
+            B::normalize(h.clone(), &c.mid_layer_norm1),
+            &B::keys(&valid1, device),
+            h,
+        );
+        let h = c.conv_reduction2.forward(B::normalize(h, &c.pre_conv2_layer_norm));
         let valid2 = mask::every(&valid1, 2, usize::MAX);
-        let h = h.clone()
-            + c.mid_attention2
-                .forward(c.mid_layer_norm2.forward(h), key_padding::<B>(&valid2, device).as_ref());
-        let h = c.conv_reduction3.forward(c.pre_conv3_layer_norm.forward(h));
+        let h = c.mid_attention2.forward(
+            B::normalize(h.clone(), &c.mid_layer_norm2),
+            &B::keys(&valid2, device),
+            h,
+        );
+        let h = c.conv_reduction3.forward(B::normalize(h, &c.pre_conv3_layer_norm));
         let valid3 = mask::every(&valid2, 2, usize::MAX);
-        let h = c.pre_pooling_layer_norm.forward(h);
+        let h = B::normalize(h, &c.pre_pooling_layer_norm);
 
         let l = h.dims()[1];
-        let weights = c.pooling_attention.w.forward(h.clone()).reshape([1, l]);
+        let weights = B::linear_layer(h.clone(), &c.pooling_attention.w, Then::Keep).reshape([1, l]);
         let weights = match key_padding::<B>(&valid3, device) {
             Some(pad) => weights.mask_fill(pad.reshape([1, l]), f32::NEG_INFINITY),
             None => weights,
         };
         let weights = softmax(weights, 1).reshape([1, l, 1]);
-        let pooled = (h * weights).sum_dim(1).reshape([1, c.classifier.weight.dims()[0]]);
-        let logits = c.classifier.forward(pooled).reshape([c.classifier.weight.dims()[1]]);
+        let pooled = (h * weights).sum_dim(1);
+        let logits = B::linear_layer(pooled, &c.classifier, Then::Keep).reshape([c.classifier.weight.dims()[1]]);
 
-        let proj = c.language_projector.forward(original);
-        let [_, l0, p] = proj.dims();
+        let proj = B::linear_layer(original, &c.language_projector, Then::Keep);
+        let l0 = proj.dims()[1];
         let ones: Vec<f32> = valid.iter().map(|v| if *v { 1.0 } else { 0.0 }).collect();
         let count: f32 = ones.iter().sum();
         let lang_mask = Tensor::<B, 1>::from_data(TensorData::new(ones, [l0]), device).reshape([1, l0, 1]);
-        let pooled_lang = (proj * lang_mask).sum_dim(1).reshape([1, p]) / count;
-        let language_logits = c
-            .language_heads
-            .forward(pooled_lang)
-            .reshape([c.language_heads.weight.dims()[1]]);
+        let pooled_lang = (proj * lang_mask).sum_dim(1) / count;
+        let language_logits =
+            B::linear_layer(pooled_lang, &c.language_heads, Then::Keep).reshape([c.language_heads.weight.dims()[1]]);
         (logits, language_logits)
     }
 }

@@ -46,6 +46,29 @@ fn diff(got: &[f32], want: &[f32]) -> (f32, f32) {
     (worst, worst / scale)
 }
 
+/// Compares the tensors along the way, where the golden file has them (relative to each one's largest magnitude).
+fn intermediates<B: Backend>(name: &str, st: &SafeTensors<'_>, trace: &pb_classifier_roblox::Trace<B>) -> String {
+    let mut line = String::new();
+    if !st.names().contains(&"logmel") {
+        return line;
+    }
+    for (key, got) in [
+        ("logmel", to_vec(trace.logmel.clone())),
+        ("conv2", to_vec(trace.conv2.clone())),
+        ("pool4", to_vec(trace.pools[0].clone())),
+        ("final_ln", to_vec(trace.final_ln.clone())),
+    ] {
+        let (want, shape) = floats(st, key);
+        let mut got_shape = got.1.clone();
+        got_shape.remove(0);
+        assert_eq!(got_shape, shape, "{name}: {key} shape");
+        let (abs, rel) = diff(&got.0, &want);
+        line += &format!("  {key} {abs:.1e}/{rel:.1e}");
+        assert!(rel <= 1e-3, "{name}: {key} differs (abs {abs}, relative {rel})");
+    }
+    line
+}
+
 #[derive(serde::Deserialize)]
 struct Index {
     cases: std::collections::BTreeMap<String, Case>,
@@ -104,22 +127,7 @@ fn matches_the_pytorch_reference_on_cpu() {
             "{name:<12} {:>5.2}s in {took:>9.2?}  |Δp| ≤ {dp:.2e}  |Δlang| ≤ {dl:.2e}",
             case.samples as f32 / 16000.0
         );
-        if st.names().contains(&"logmel") {
-            for (key, got) in [
-                ("logmel", to_vec(trace.logmel.clone())),
-                ("conv2", to_vec(trace.conv2.clone())),
-                ("pool4", to_vec(trace.pools[0].clone())),
-                ("final_ln", to_vec(trace.final_ln.clone())),
-            ] {
-                let (want, shape) = floats(&st, key);
-                let mut got_shape = got.1.clone();
-                got_shape.remove(0);
-                assert_eq!(got_shape, shape, "{name}: {key} shape");
-                let (abs, rel) = diff(&got.0, &want);
-                line += &format!("  {key} {abs:.1e}/{rel:.1e}");
-                assert!(rel <= 1e-3, "{name}: {key} differs (abs {abs}, relative {rel})");
-            }
-        }
+        line += &intermediates(name, &st, &trace);
         eprintln!("{line}");
         assert!(dp <= 1e-4, "{name}: label probabilities differ by {dp}");
         assert!(dl <= 1e-4, "{name}: language probabilities differ by {dl}");
@@ -165,14 +173,15 @@ fn matches_the_pytorch_reference_on_gpu() {
         let _ = clf.trace(&pcm).expect("warm-up");
         let t0 = std::time::Instant::now();
         let trace = clf.trace(&pcm).expect("scores the clip");
-        let (probs, _) = to_vec(sigmoid(trace.logits));
-        let (lang, _) = to_vec(softmax(trace.language_logits, 0));
+        let (probs, _) = to_vec(sigmoid(trace.logits.clone()));
+        let (lang, _) = to_vec(softmax(trace.language_logits.clone(), 0));
         let took = t0.elapsed();
         let (dp, _) = diff(&probs, &floats(&st, "probs").0);
         let (dl, _) = diff(&lang, &floats(&st, "language_probs").0);
         eprintln!(
-            "gpu {name:<12} {:>5.2}s in {took:>9.2?}  |Δp| ≤ {dp:.2e}  |Δlang| ≤ {dl:.2e}",
-            case.samples as f32 / 16000.0
+            "gpu {name:<12} {:>5.2}s in {took:>9.2?}  |Δp| ≤ {dp:.2e}  |Δlang| ≤ {dl:.2e}{}",
+            case.samples as f32 / 16000.0,
+            intermediates(name, &st, &trace)
         );
         assert!(
             dp <= 1e-3 && dl <= 1e-3,

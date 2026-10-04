@@ -9,7 +9,7 @@ publish.workspace = true
 
 [features]
 # Run on a GPU through wgpu (Vulkan on Linux).
-gpu = ["burn/wgpu", "burn/vulkan"]
+gpu = ["burn/wgpu", "burn/vulkan", "dep:burn-cubecl", "dep:cubecl"]
 
 [dependencies]
 # x86-v4: gemm adds AVX-512 kernels, chosen at run time by CPU detection (AVX2 otherwise).
@@ -17,7 +17,10 @@ burn = { version = "0.21.0", default-features = false, features = ["std", "flex"
 # Burn's CPU backend: multi-threaded (rayon) and vectorised (simd). Named here because burn's own default features are
 # off, and without these two the backend silently runs single-threaded and scalar.
 burn-flex = { version = "0.21.0", default-features = false, features = ["std", "rayon", "simd"] }
+# The GPU kernels of this model (`src/gpu.rs`): the same releases burn-wgpu runs on.
+burn-cubecl = { version = "0.21.0", default-features = false, features = ["std"], optional = true }
 burn-store = { version = "0.21.0", default-features = false, features = ["std", "safetensors", "memmap"] }
+cubecl = { version = "0.10.0", default-features = false, features = ["std"], optional = true }
 pb-domain.workspace = true
 pb-models-api.workspace = true
 rayon = "1.12"

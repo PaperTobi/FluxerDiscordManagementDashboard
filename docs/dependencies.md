@@ -35,6 +35,7 @@ database.
 | burn, burn-flex, onnx-ir, protobuf | 0.21 / 3.7 in pb-vad-silero | removed from pb-vad-silero | The VAD is now a hand-written forward pass (Burn spent most of each 0.2 ms step dispatching tiny operations; the loops take about 0.02 ms). Leaves the tree: onnx-ir, protobuf (with -support, -parse, -codegen) and strum. Burn stays for the classifier. |
 | (new in pb-vad-silero) rten-onnx, rten-simd | — | 0.27.0 (2026-10-02) | Both were already in the tree through rten (pb-tts-piper), so nothing new is compiled; see below. |
 | branches (through turso_core) | 0.4.6 from crates.io | 0.4.6 patched in `third_party/branches` | On nightly its build script picks code that calls `core::intrinsics::abort`, which nightly renamed: the bot did not build on nightly. 0.5.1 follows the rename but turso_core 0.8.1 asks for 0.4; the patch takes the stable code on every channel (third_party/branches/PATCHES.md). Drop it once turso_core moves to 0.5. |
+| (new) burn-cubecl, cubecl | — | 0.21.0, 0.10.0, in pb-classifier-roblox's `gpu` feature only | The classifier's own GPU kernels (`src/gpu.rs`: linear layers, layer normalisation, self-attention), which Burn's public tensor API cannot express. Same organisation (tracel-ai) and the same releases burn-wgpu already brings in (2026-09-22; burn 0.22 and cubecl 0.11 are still pre-releases), so the tree gains no crate. Confined to the classifier in `xtask/layers.toml`. |
 
 ### Kept, with low release activity
 
