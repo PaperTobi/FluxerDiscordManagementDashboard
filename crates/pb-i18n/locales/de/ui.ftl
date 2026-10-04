@@ -382,3 +382,24 @@ ui-reauthorize-help = Erneutes Autorisieren in Fluxer gibt der Rolle des Bots, w
 ui-reauthorize = Erneut autorisieren
 ui-copy = Kopieren
 ui-copied = Kopiert
+
+## Rückfragen
+ui-cancel = Abbrechen
+ui-back = Zurück
+ui-confirm-untrack = { $name } nicht mehr verfolgen?
+ui-confirm-untrack-what = Der Bot hört { $name } in { $community } nicht mehr zu und verlässt den Anruf, außer er folgt dort noch jemand anderem. Was er über die Person behalten hat (Verlauf, Aufnahmen, Fluchkasse), bleibt; wird sie wieder verfolgt, geht es dort weiter.
+ui-confirm-jar = Die Fluchkasse von { $name } leeren?
+ui-confirm-jar-what = { $count ->
+        [one] Sie enthält einen Verstoß in { $community }.
+       *[other] Sie enthält { $count } Verstöße in { $community }.
+    } Sie beginnt wieder bei 0; der Verlauf des Gesagten bleibt.
+ui-jar-reset-button = Fluchkasse leeren
+ui-confirm-recording = Diese Aufnahme löschen?
+ui-confirm-recording-what = Die Aufnahme von { $name } in { $community } vom { $when } wird endgültig gelöscht und lässt sich nicht zurückholen. Der Satz, seine Werte und die Entscheidung bleiben im Verlauf.
+ui-confirm-clip = Den Clip „{ $name }“ entfernen?
+ui-confirm-clip-what = Diese Sprachtexte nutzen ihn. Sie überspringen ihn ab jetzt; ein Sprachtext ohne weitere Clips oder Texte fällt auf die nächste Ebene zurück (Community, global, eingebaut).
+ui-confirm-clip-button = Clip entfernen
+ui-confirm-clip-elsewhere = { $count ->
+        [one] ein Sprachtext in einer Community, die du nicht verwaltest
+       *[other] { $count } Sprachtexte in Communitys, die du nicht verwaltest
+    }

@@ -122,6 +122,25 @@ impl WebState {
     }
 }
 
+/// Whether a form that destroys something was confirmed on the `/confirm` page.
+pub(crate) fn confirmed(f: &Fields) -> bool {
+    field(f, "confirm") == Some("1")
+}
+
+/// Before something that cannot be undone: sends the browser to `/confirm`, which says what `what` will do with the
+/// form's `keys` and sends the same form again, confirmed (no scripts needed). The form token stays out of the URL.
+pub(crate) fn ask_first(what: &str, f: &Fields, keys: &[&str]) -> Response {
+    let mut q = url::form_urlencoded::Serializer::new(String::new());
+    q.append_pair("what", what);
+    for k in keys {
+        if let Some(v) = field(f, k) {
+            q.append_pair(k, v);
+        }
+    }
+    q.append_pair("back", &safe_next(field(f, "back")));
+    redirect_with(&format!("/confirm?{}", q.finish()), vec![])
+}
+
 /// A refused settings change, in the reader's language.
 pub(crate) fn change_error(loc: Locale, e: &pb_engine::ChangeError) -> String {
     match e {
@@ -253,7 +272,7 @@ pub async fn track(State(st): State<WebState>, headers: HeaderMap, Form(f): Form
     }
 }
 
-/// `POST /people/untrack`
+/// `POST /people/untrack` (after a confirmation)
 pub async fn untrack(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
     let s = match st.sender(&headers, &f) {
         Ok(s) => s,
@@ -262,6 +281,9 @@ pub async fn untrack(State(st): State<WebState>, headers: HeaderMap, Form(f): Fo
     let Some((g, u)) = guild_user(&s, &f) else {
         return st.done(&s, &f, false, text(s.locale, "ui-not-a-user", &[]));
     };
+    if !confirmed(&f) {
+        return ask_first("untrack", &f, &["guild", "user"]);
+    }
     let name = st.engine.guilds().name(g, u);
     match st.engine.untrack(g, &[u], s.actor()).await {
         Ok(r) if !r.removed.is_empty() => st.done(
@@ -281,7 +303,7 @@ pub async fn untrack(State(st): State<WebState>, headers: HeaderMap, Form(f): Fo
     }
 }
 
-/// `POST /jar/reset`
+/// `POST /jar/reset` (after a confirmation)
 pub async fn jar_reset(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
     let s = match st.sender(&headers, &f) {
         Ok(s) => s,
@@ -290,6 +312,9 @@ pub async fn jar_reset(State(st): State<WebState>, headers: HeaderMap, Form(f): 
     let Some((g, u)) = guild_user(&s, &f) else {
         return st.done(&s, &f, false, text(s.locale, "ui-not-allowed", &[]));
     };
+    if !confirmed(&f) {
+        return ask_first("jar", &f, &["guild", "user"]);
+    }
     st.engine.reset_jar(g, u, s.actor()).await;
     st.done(&s, &f, true, text(s.locale, "ui-jar-emptied", &[]))
 }
@@ -354,7 +379,7 @@ pub async fn send_report(State(st): State<WebState>, headers: HeaderMap, Form(f)
     }
 }
 
-/// `POST /evidence/delete` (the owner, freshly logged in): deletes a sentence's recording.
+/// `POST /evidence/delete` (the owner, freshly logged in, after a confirmation): deletes a sentence's recording.
 pub async fn delete_recording(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
     let s = match st.fresh_owner(&headers, &f) {
         Ok(s) => s,
@@ -363,6 +388,9 @@ pub async fn delete_recording(State(st): State<WebState>, headers: HeaderMap, Fo
     let Some(id) = field(&f, "sentence").and_then(|x| x.parse::<pb_domain::SentenceId>().ok()) else {
         return st.done(&s, &f, false, text(s.locale, "form-expired", &[]));
     };
+    if !confirmed(&f) {
+        return ask_first("recording", &f, &["sentence"]);
+    }
     match st.engine.delete_recording(id, s.actor(), None).await {
         Ok(()) => st.done(&s, &f, true, text(s.locale, "ui-recording-deleted", &[])),
         Err(e) => st.done(&s, &f, false, engine_error(s.locale, &e)),

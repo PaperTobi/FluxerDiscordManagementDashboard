@@ -504,3 +504,10 @@ table.mini tr.flagged td { font-weight: 600; color: var(--bad); }
 .sidebar .invite.active { font-weight: 600; }
 .copy.row { flex-wrap: nowrap; align-items: stretch; margin-bottom: 12px; }
 .copy.row code { flex: 1; min-width: 0; }
+
+/* ---------------------------------------------------------------- confirmations */
+
+.confirm { max-width: 720px; }
+.confirm h1 { font-size: 1.25rem; }
+.confirm-list { margin: 0 0 12px; padding-left: 20px; }
+.confirm form.row { margin-top: 16px; }

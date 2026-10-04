@@ -216,6 +216,7 @@ pub fn App() -> impl IntoView {
                 <Route path=(StaticSegment("c"), ParamSegment("g"), StaticSegment("p"), ParamSegment("u")) view=|| view! { <Page><pages::person::PersonPage/></Page> }/>
                 <Route path=(StaticSegment("c"), ParamSegment("g"), StaticSegment("p"), ParamSegment("u"), ParamSegment("tab")) view=|| view! { <Page><pages::person::PersonPage/></Page> }/>
                 <Route path=StaticSegment("invite") view=|| view! { <Page><pages::invite::InvitePage/></Page> }/>
+                <Route path=StaticSegment("confirm") view=|| view! { <Page><pages::confirm::ConfirmPage/></Page> }/>
                 <Route path=StaticSegment("setup") view=pages::setup::SetupPage/>
             </FlatRoutes>
         </Router>

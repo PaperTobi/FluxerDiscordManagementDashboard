@@ -11,7 +11,7 @@ use pb_voicelines::{Line, LineKey, Sel, Slot};
 
 use tokio::io::AsyncWriteExt;
 
-use super::forms::{Fields, Sender, field, parse_scope};
+use super::forms::{Fields, Sender, ask_first, confirmed, field, parse_scope};
 use super::server::WebState;
 use super::util::{locale_of, same_origin};
 use pb_web::fmt::engine_error;
@@ -214,7 +214,7 @@ pub async fn update(State(st): State<WebState>, headers: HeaderMap, Form(f): For
     }
 }
 
-/// `POST /clips/remove`
+/// `POST /clips/remove`: asks first when a voice line uses the clip.
 pub async fn remove(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
     let s = match st.sender(&headers, &f) {
         Ok(s) => s,
@@ -225,6 +225,10 @@ pub async fn remove(State(st): State<WebState>, headers: HeaderMap, Form(f): For
     };
     if !st.may_edit_clip(&s, &clip) {
         return st.done(&s, &f, false, text(s.locale, "ui-clip-not-yours", &[]));
+    }
+    let used = !pb_web::pages::voicelines::clip_uses(&st.engine.settings().current(), &clip).is_empty();
+    if used && !confirmed(&f) {
+        return ask_first("clip", &f, &["clip"]);
     }
     match st.engine.remove_clip(clip, s.actor()).await {
         Ok(()) => st.done(&s, &f, true, text(s.locale, "ui-clip-removed-notice", &[])),

@@ -236,6 +236,27 @@ fn LineRow(key: LineKey, scope: Scope, v: Viewer, back: String, clips: Vec<ClipR
     }
 }
 
+/// Where a clip is used: every voice line (with the scope it is set at) that has it among its clips.
+pub fn clip_uses(tree: &pb_settings::SettingsTree, clip: &pb_domain::BlobHash) -> Vec<(Scope, LineKey)> {
+    let mut out = Vec::new();
+    let mut scan = |scope: Scope, slots: &pb_voicelines::Slots| {
+        out.extend(
+            slots
+                .iter()
+                .filter(|(_, slot)| slot.clips.contains(clip))
+                .map(|(k, _)| (scope, k.clone())),
+        );
+    };
+    scan(Scope::Global, &tree.global.voice_lines);
+    for (g, server) in &tree.servers {
+        scan(Scope::Server { guild: *g }, &server.voice_lines);
+        for (u, person) in &server.people {
+            scan(Scope::Person { guild: *g, user: *u }, &person.voice_lines);
+        }
+    }
+    out
+}
+
 /// Every voice line at `scope`.
 #[component]
 pub fn VoiceLinesEditor(scope: Scope, back: String) -> impl IntoView {

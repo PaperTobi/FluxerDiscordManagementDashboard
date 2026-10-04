@@ -333,18 +333,31 @@ async fn tracking_people_from_the_web() {
     )
     .await;
     assert!(w.engine.settings().current().is_tracked(g, pb_domain::UserId(OWNER)));
-    w.post(
-        "/people/untrack",
-        Some(&ada),
-        &[
-            ("csrf", &csrf),
-            ("guild", &G.to_string()),
-            ("user", &OWNER.to_string()),
-            ("back", "/"),
-        ],
-    )
-    .await;
+    // Stopping asks first: the form goes to a page that says what happens, and only that page's form untracks.
+    let untrack = [
+        ("csrf", csrf.as_str()),
+        ("guild", &G.to_string()),
+        ("user", &OWNER.to_string()),
+        ("back", &format!("/c/{G}")),
+    ];
+    let r = w.post("/people/untrack", Some(&ada), &untrack).await;
+    let to = r.location.clone().unwrap();
+    assert!(
+        to.starts_with("/confirm?what=untrack&guild=111111&user=1002&back=%2Fc%2F111111"),
+        "{to}"
+    );
+    assert!(!to.contains("csrf"), "the form token stays out of the address");
+    assert!(w.engine.settings().current().is_tracked(g, pb_domain::UserId(OWNER)));
+    let page = w.get(&to, Some(&ada)).await;
+    assert_eq!(page.status, 200);
+    assert!(page.body.contains("Stop tracking") && page.body.contains("name=\"confirm\" value=\"1\""));
+    assert!(page.body.contains(&format!("href=\"/c/{G}\"")), "Cancel goes back");
+    let confirmed: Vec<(&str, &str)> = untrack.iter().copied().chain([("confirm", "1")]).collect();
+    let r = w.post("/people/untrack", Some(&ada), &confirmed).await;
+    assert_eq!(r.location.as_deref(), Some(format!("/c/{G}").as_str()));
     assert!(!w.engine.settings().current().is_tracked(g, pb_domain::UserId(OWNER)));
+    // Bea cannot get a confirmation page for Alpha either.
+    assert_eq!(w.get(&to, Some(&bea)).await.status, 404);
     w.stop().await;
 }
 
@@ -1071,5 +1084,132 @@ async fn the_owner_pauses_the_whole_bot() {
     send(&owner, switch("off")).await;
     assert!(!w.engine.settings().current().paused_everywhere());
     assert!(w.engine.settings().current().is_tracked(g, UserId(MAX)));
+    w.stop().await;
+}
+
+/// The notice a response left, as the next page shows it.
+async fn notice(w: &Web, cookie: &str, r: &common::Got) -> String {
+    let n = r.cookie("pb_notice").expect("a notice");
+    let page = w.get("/", Some(&format!("{cookie}; pb_notice={n}"))).await.body;
+    let at = page.find("class=\"notice").expect("the notice on the page");
+    page[at..].split("</div>").next().unwrap().to_owned()
+}
+
+/// Uploads a clip as `cookie`; returns its hash.
+async fn upload_clip(w: &Web, cookie: &str, csrf: &str, name: &str) -> String {
+    let wav = std::fs::read(pb_testkit::fixture("benign_1.wav")).unwrap();
+    let form = reqwest::multipart::Form::new()
+        .text("csrf", csrf.to_owned())
+        .text("back", "/voice-lines")
+        .text("name", name.to_owned())
+        .text("lang", "en")
+        .part("file", reqwest::multipart::Part::bytes(wav).file_name("clip.wav"));
+    let r = w.send(w.http.post(w.url("/clips")).multipart(form), Some(cookie)).await;
+    assert_eq!(r.status, 303, "{r:?}");
+    let page = w.get("/voice-lines", Some(cookie)).await.body;
+    let row = page.find(&format!("value=\"{name}\"")).expect("the clip is listed");
+    let at = page[row..].find("/media/clip/").unwrap() + row + 12;
+    page[at..].chars().take_while(|c| *c != '"').collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn what_cannot_be_undone_is_confirmed_first() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let back = format!("/c/{G}/reports");
+    let confirmed = |form: &[(&'static str, String)]| {
+        let mut f = form.to_vec();
+        f.push(("confirm", "1".into()));
+        f
+    };
+    let post = async |path: &str, form: &[(&'static str, String)]| {
+        let f: Vec<(&str, &str)> = form.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        w.post(path, Some(&owner), &f).await
+    };
+
+    // Emptying a swear jar.
+    let jar = vec![
+        ("csrf", csrf.clone()),
+        ("guild", G.to_string()),
+        ("user", MAX.to_string()),
+        ("back", back.clone()),
+    ];
+    let r = post("/jar/reset", &jar).await;
+    let to = r.location.clone().unwrap();
+    assert!(to.starts_with("/confirm?what=jar&"), "{to}");
+    let page = w.get(&to, Some(&owner)).await.body;
+    assert!(page.contains("swear jar?"), "{page}");
+    assert!(page.contains("It holds 0 violations in Alpha"), "{page}");
+    let r = post("/jar/reset", &confirmed(&jar)).await;
+    assert_eq!(r.location.as_deref(), Some(back.as_str()));
+    assert!(notice(&w, &owner, &r).await.contains("The swear jar was emptied."));
+
+    // Deleting a recording (this sentence has none: the page says so).
+    let sentence = pb_domain::SentenceId::new().to_string();
+    let rec = vec![
+        ("csrf", csrf.clone()),
+        ("sentence", sentence.clone()),
+        ("back", back.clone()),
+    ];
+    let r = post("/evidence/delete", &rec).await;
+    let to = r.location.clone().unwrap();
+    assert!(
+        to.starts_with(&format!("/confirm?what=recording&sentence={sentence}&")),
+        "{to}"
+    );
+    let page = w.get(&to, Some(&owner)).await;
+    assert_eq!(page.status, 200);
+    assert!(page.body.contains("That sentence has no recording."), "{}", page.body);
+    let ada = w.login(ADA).await.unwrap();
+    assert_eq!(
+        w.get(&to, Some(&ada)).await.status,
+        404,
+        "only the owner deletes recordings"
+    );
+
+    // Removing a clip: at once while no voice line uses it …
+    let unused = upload_clip(&w, &owner, &csrf, "Unused").await;
+    let r = post(
+        "/clips/remove",
+        &[
+            ("csrf", csrf.clone()),
+            ("clip", unused.clone()),
+            ("back", "/voice-lines".into()),
+        ],
+    )
+    .await;
+    assert_eq!(r.location.as_deref(), Some("/voice-lines"));
+    assert!(w.engine.clip(&unused.parse().unwrap()).is_none());
+    // … and after a confirmation that names the lines using it.
+    let used = upload_clip(&w, &owner, &csrf, "Hello there").await;
+    w.post(
+        "/voice-lines",
+        Some(&owner),
+        &[
+            ("csrf", &csrf),
+            ("scope", &format!("server:{G}")),
+            ("line", "greeting"),
+            ("op", "add_clip"),
+            ("clip", &used),
+            ("back", "/"),
+        ],
+    )
+    .await;
+    let remove = vec![
+        ("csrf", csrf.clone()),
+        ("clip", used.clone()),
+        ("back", "/voice-lines".into()),
+    ];
+    let r = post("/clips/remove", &remove).await;
+    let to = r.location.clone().unwrap();
+    assert!(to.starts_with("/confirm?what=clip&"), "{to}");
+    assert!(w.engine.clip(&used.parse().unwrap()).is_some());
+    let page = w.get(&to, Some(&owner)).await.body;
+    assert!(page.contains("Remove the clip “Hello there”?"), "{page}");
+    assert!(page.contains("<li>Greeting (in Alpha)</li>"), "{page}");
+    post("/clips/remove", &confirmed(&remove)).await;
+    assert!(w.engine.clip(&used.parse().unwrap()).is_none());
+
     w.stop().await;
 }

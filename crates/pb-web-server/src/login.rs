@@ -38,19 +38,9 @@ pub(crate) struct PendingLogin {
     started: Instant,
 }
 
-/// A local path to go back to (never another site). Browsers drop tabs and line breaks from `Location` and read `\`
-/// as `/`, so a path with any of those (or other control characters or spaces) is refused as a whole.
+/// A local path to go back to (never another site; see [`pb_web::fmt::local_path`]).
 pub(crate) fn safe_next(next: Option<&str>) -> String {
-    match next {
-        Some(n)
-            if n.starts_with('/')
-                && !n.starts_with("//")
-                && !n.chars().any(|c| c == '\\' || c.is_whitespace() || c.is_control()) =>
-        {
-            n.to_owned()
-        }
-        _ => "/".to_owned(),
-    }
+    pb_web::fmt::local_path(next)
 }
 
 /// `scheme://host[:port]` as the browser used it.

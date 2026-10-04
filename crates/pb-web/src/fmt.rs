@@ -172,6 +172,21 @@ pub fn bytes(n: u64) -> String {
 }
 
 /// The names (as Fluxer shows them) of the permissions in `need` that `have` lacks.
+/// A local path to go back to (never another site). Browsers drop tabs and line breaks from `Location` and read `\`
+/// as `/`, so a path with any of those (or other control characters or spaces) is refused as a whole: `/` instead.
+pub fn local_path(next: Option<&str>) -> String {
+    match next {
+        Some(n)
+            if n.starts_with('/')
+                && !n.starts_with("//")
+                && !n.chars().any(|c| c == '\\' || c.is_whitespace() || c.is_control()) =>
+        {
+            n.to_owned()
+        }
+        _ => "/".to_owned(),
+    }
+}
+
 #[cfg(feature = "ssr")]
 pub fn missing_permissions(loc: Locale, have: u64, need: u64) -> Vec<String> {
     pb_fluxer_api::perms::missing(have, need)

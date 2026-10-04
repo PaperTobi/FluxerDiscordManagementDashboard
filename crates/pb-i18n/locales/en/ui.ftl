@@ -382,3 +382,24 @@ ui-reauthorize-help = Authorising again in Fluxer gives the bot's role what is m
 ui-reauthorize = Authorise again
 ui-copy = Copy
 ui-copied = Copied
+
+## Confirmations
+ui-cancel = Cancel
+ui-back = Back
+ui-confirm-untrack = Stop tracking { $name }?
+ui-confirm-untrack-what = The bot stops listening to { $name } in { $community } and leaves their call unless it follows someone else there. What it kept about them (history, recordings, swear jar) stays; tracking them again carries on from there.
+ui-confirm-jar = Empty { $name }'s swear jar?
+ui-confirm-jar-what = { $count ->
+        [one] It holds one violation in { $community }.
+       *[other] It holds { $count } violations in { $community }.
+    } It starts again at 0; the history of what was said stays.
+ui-jar-reset-button = Empty the jar
+ui-confirm-recording = Delete this recording?
+ui-confirm-recording-what = The recording of { $name } in { $community } from { $when } is deleted for good and cannot be brought back. The sentence, its scores and the decision stay in the history.
+ui-confirm-clip = Remove the clip “{ $name }”?
+ui-confirm-clip-what = These voice lines use it. They skip it from now on; a line left without clips or texts falls back to the next place up (community, global, built in).
+ui-confirm-clip-button = Remove the clip
+ui-confirm-clip-elsewhere = { $count ->
+        [one] one voice line in a community you do not manage
+       *[other] { $count } voice lines in communities you do not manage
+    }
