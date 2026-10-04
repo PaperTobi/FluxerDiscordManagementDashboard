@@ -5,12 +5,11 @@
 
 section-tracking = Verfolgen
 section-detection = Erkennung
-section-warning = Warnung
+section-warning = Warnungen
 section-escalation = Eskalation
-section-greeting = Begrüßung
-section-reporting = Berichte
+section-reporting = Mod-Log und Berichte
 section-recording = Aufnahmen
-section-commands = Chat-Befehle
+section-commands = Admins und Chat-Befehle
 section-system = System
 
 ## Woher ein Wert kommt

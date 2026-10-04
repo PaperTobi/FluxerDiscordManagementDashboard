@@ -522,3 +522,10 @@ ui-settings-moved = Die Einstellungen für jede Community haben eigene Seiten:
 ui-save-changes = Änderungen speichern
 ui-section-refused = Nicht gespeichert: { $what } (siehe unten).
 ui-back-to-inherited = Wieder der übernommene Wert.
+
+## Einstellungen, die gerade nichts bewirken
+ui-nr-strikes = Nur bei mehr als einem Strike (Erkennung).
+ui-nr-digest = Nur, solange der zusammenfassende Bericht an ist.
+ui-nr-digest-weekly = Nur bei einem wöchentlichen Bericht.
+ui-nr-actions = Nur, solange Moderationsmaßnahmen an sind (Eskalation).
+ui-nr-modlog = Erst, wenn ein Mod-Log-Kanal gewählt ist.

@@ -2184,3 +2184,27 @@ async fn a_section_form_saves_what_was_changed_and_only_that() {
     assert_eq!(setting(&w, server, "modlog_audio"), None);
     w.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sections_are_grouped_and_say_what_does_nothing_now() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    // The greeting is a warning-section switch now; there is no greeting section.
+    let warnings = w.get(&format!("/c/{G}/settings/warning"), Some(&owner)).await.body;
+    assert!(
+        warnings.contains("id=\"set-greet_enabled\"") && warnings.contains("Warnings"),
+        "{warnings}"
+    );
+    assert_eq!(
+        w.get(&format!("/c/{G}/settings/greeting"), Some(&owner)).await.status,
+        404
+    );
+    let home = w.get("/settings", Some(&owner)).await.body;
+    assert!(home.contains("Mod log and reports") && home.contains("Admins and chat commands"));
+    // With one strike the strike window does nothing: said under it.
+    let detection = w.get(&format!("/c/{G}/settings/detection"), Some(&owner)).await.body;
+    let at = detection.find("id=\"set-strike_window\"").unwrap();
+    let row = &detection[at..at + detection[at + 10..].find("id=\"set-").unwrap() + 10];
+    assert!(row.contains("Only used with more than one strike"), "{row}");
+    w.stop().await;
+}

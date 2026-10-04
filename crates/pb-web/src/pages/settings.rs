@@ -453,6 +453,26 @@ pub fn advanced(key: SettingKey) -> bool {
     )
 }
 
+/// Why a setting does nothing at the moment (a text id), from the settings in effect at its scope: it is still shown,
+/// with the reason, so the switch that brings it to life is easy to find.
+fn not_relevant(key: SettingKey, scope: Scope) -> Option<&'static str> {
+    use SettingKey as K;
+    let (g, u) = match scope {
+        Scope::Global => (None, None),
+        Scope::Server { guild } => (Some(guild), None),
+        Scope::Person { guild, user } => (Some(guild), Some(user)),
+    };
+    let eff = app().engine.settings().current().effective(g, u);
+    match key {
+        K::StrikeWindow | K::StrikeNotice if eff.strikes.value.get() <= 1 => Some("ui-nr-strikes"),
+        K::DigestTime if eff.digest.value == pb_settings::Digest::Off => Some("ui-nr-digest"),
+        K::DigestWeekday if eff.digest.value != pb_settings::Digest::Weekly => Some("ui-nr-digest-weekly"),
+        K::AnnounceActions if !eff.actions_enabled.value => Some("ui-nr-actions"),
+        K::ModlogAudio if g.is_some() && eff.modlog_channel.value.is_none() => Some("ui-nr-modlog"),
+        _ => None,
+    }
+}
+
 /// Settings that only work together with another one: (this one, the other one). Where the other one cannot be set
 /// at the scope shown, the row says where it lives, with its value there and a link to it.
 const WORKS_WITH: &[(SettingKey, SettingKey)] = &[
@@ -611,6 +631,7 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
             {note.map(|n| view! {
                 <p class=if n.ok { "field-note ok" } else { "field-note error" } role=if n.ok { "status" } else { "alert" }>{n.text}</p>
             })}
+            {not_relevant(key, scope).map(|id| view! { <p class="muted small not-relevant">{text(loc, id, &[])}</p> })}
             {partner}
         </div>
     }

@@ -57,7 +57,6 @@ pub enum Section {
     Detection,
     Warning,
     Escalation,
-    Greeting,
     Reporting,
     Recording,
     Commands,
@@ -65,12 +64,11 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Section; 9] = [
+    pub const ALL: [Section; 8] = [
         Section::Tracking,
         Section::Detection,
         Section::Warning,
         Section::Escalation,
-        Section::Greeting,
         Section::Reporting,
         Section::Recording,
         Section::Commands,
@@ -84,7 +82,6 @@ impl Section {
             Section::Detection => "detection",
             Section::Warning => "warning",
             Section::Escalation => "escalation",
-            Section::Greeting => "greeting",
             Section::Reporting => "reporting",
             Section::Recording => "recording",
             Section::Commands => "commands",
@@ -510,14 +507,12 @@ settings! {
         no_speak_policy(NoSpeakPolicy): NoSpeakPolicy = NoSpeakPolicy::Text; ALL_SCOPES, Admins, Live;
         strike_notice(StrikeNotice): bool = false; ALL_SCOPES, Admins, Live;
         announce_actions(AnnounceActions): bool = false; ALL_SCOPES, Admins, Live;
+        greet_enabled(GreetEnabled): bool = false; ALL_SCOPES, Admins, Live;
     }
     Escalation {
         violation_window(ViolationWindow): Limit<PosDur> = Limit::Value(PosDur::from_millis(3_600_000)); ALL_SCOPES, Admins, Live;
         escalation(Escalation): Escalation = Escalation::default_steps(); ALL_SCOPES, Admins, Live;
         actions_enabled(ActionsEnabled): bool = false; ALL_SCOPES, Admins, Live;
-    }
-    Greeting {
-        greet_enabled(GreetEnabled): bool = false; ALL_SCOPES, Admins, Live;
     }
     Reporting {
         modlog_channel(ModlogChannel): Option<ChannelId> = None; S, Admins, Live;
