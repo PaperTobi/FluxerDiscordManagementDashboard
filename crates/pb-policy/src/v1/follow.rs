@@ -53,7 +53,8 @@ pub enum NoticeKind {
     ConnectFailed,
     ConfirmFailed,
     Involuntary,
-    FightPause,
+    /// Removed again and again: still rejoining, but slower (a moderator, or another instance of the bot?).
+    RepeatedRemovals,
     StaleLeave,
     LateGrant,
     E2eeKey,
@@ -98,11 +99,13 @@ pub struct FollowCfg {
     /// Waits before retrying after the second failure, the third … (the last one repeats); the first failure only
     /// waits `settle_s`.
     pub backoff_s: Vec<f64>,
-    /// Removals by someone else within `fight_window_s` that pause joining in that community for `fight_pause_s`
-    /// (a moderator keeps disconnecting the bot, or another instance of it runs).
-    pub fight_limit: usize,
-    pub fight_window_s: f64,
-    pub fight_pause_s: f64,
+    /// After being removed from voice by someone else the bot always joins again: at once the first time, then after
+    /// these waits for each further removal within `removal_window_s` (the last one repeats), so a moderator who keeps
+    /// removing it, or another instance of it, does not make it flap.
+    pub rejoin_s: Vec<f64>,
+    pub removal_window_s: f64,
+    /// From this many removals within the window the log warns (to keep the bot out: pause the community).
+    pub removal_warn: usize,
 }
 
 impl Default for FollowCfg {
@@ -116,9 +119,9 @@ impl Default for FollowCfg {
             confirm_abort_s: 8.0,
             leaving_wait_s: 3.0,
             backoff_s: vec![15.0, 30.0, 60.0, 120.0, 300.0],
-            fight_limit: 3,
-            fight_window_s: 600.0,
-            fight_pause_s: 900.0,
+            rejoin_s: vec![5.0, 15.0, 30.0, 60.0],
+            removal_window_s: 600.0,
+            removal_warn: 3,
         }
     }
 }
@@ -691,7 +694,7 @@ impl FollowMachine {
         if self
             .paused_until
             .get(&chan.guild)
-            .is_some_and(|until| (*until - (since + self.cfg.fight_pause_s)).abs() < EPS)
+            .is_some_and(|until| *until > since - EPS)
         {
             self.paused_until.remove(&chan.guild);
         }
@@ -724,20 +727,26 @@ impl FollowMachine {
         }
         let hist = self.involuntary.entry(chan.guild).or_default();
         hist.push_back(now);
-        while hist.front().is_some_and(|t| now - t > self.cfg.fight_window_s) {
+        while hist.front().is_some_and(|t| now - t > self.cfg.removal_window_s) {
             hist.pop_front();
         }
-        if hist.len() >= self.cfg.fight_limit {
-            self.paused_until.insert(chan.guild, now + self.cfg.fight_pause_s);
-            hist.clear();
+        let n = hist.len();
+        // The first removal: back at once (after the usual settle); every further one waits a little longer.
+        let Some(wait) = n
+            .checked_sub(2)
+            .and_then(|i| self.cfg.rejoin_s.get(i.min(self.cfg.rejoin_s.len().saturating_sub(1))))
+            .copied()
+        else {
+            return acts;
+        };
+        self.paused_until.insert(chan.guild, now + wait);
+        if n == self.cfg.removal_warn {
             acts.push(notice(
-                NoticeKind::FightPause,
+                NoticeKind::RepeatedRemovals,
                 format!(
-                    "removed {}x within {:.0} min in community {} (a moderator, or another instance of this bot?); not joining there for {:.0} min",
-                    self.cfg.fight_limit,
-                    self.cfg.fight_window_s / 60.0,
+                    "removed {n}x within {:.0} min in community {} (a moderator, or another instance of this bot?); it keeps joining again, waiting longer each time (now {wait:.0} s). To keep it out, pause it there",
+                    self.cfg.removal_window_s / 60.0,
                     chan.guild,
-                    self.cfg.fight_pause_s / 60.0
                 ),
                 Some(chan),
             ));

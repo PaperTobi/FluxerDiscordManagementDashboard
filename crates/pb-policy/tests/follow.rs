@@ -257,26 +257,32 @@ fn two_channels_two_connections_across_communities() {
 }
 
 #[test]
-fn involuntary_removal_rejoins_and_repeated_removals_pause() {
+fn repeated_removals_slow_the_rejoin_down_but_never_stop_it() {
     let mut m = new(FollowCfg {
-        fight_limit: 3,
+        rejoin_s: vec![5.0, 15.0],
+        removal_warn: 3,
         ..FollowCfg::default()
     });
     let mut t = 0.0;
-    let mut acts = Vec::new();
-    for i in 0..3 {
+    for i in 0..5 {
         t = drive_to_active(&mut m, A, t, &format!("c{i}")) + 1.0;
-        acts = reconcile(&mut m, t, &[A], &BTreeMap::new());
+        let acts = reconcile(&mut m, t, &[A], &BTreeMap::new());
         assert!(kinds(&acts).contains(&"Notice:involuntary".to_owned()));
-        t += 1.0;
+        assert_eq!(
+            kinds(&acts).contains(&"Notice:repeated_removals".to_owned()),
+            i == 2,
+            "warned once, at 3"
+        );
+        let wait = [0.0, 5.0, 15.0, 15.0, 15.0][i];
+        if wait > 0.0 {
+            reconcile(&mut m, t + wait - 1.0, &[A], &BTreeMap::new());
+            assert!(m.conn(A).is_none(), "removal {}: still waiting", i + 1);
+        }
+        m.on_tick(t + wait);
+        reconcile(&mut m, t + wait, &[A], &BTreeMap::new());
+        assert!(m.conn(A).is_some(), "removal {}: joining again", i + 1);
+        t += wait;
     }
-    assert!(kinds(&acts).contains(&"Notice:fight_pause".to_owned()));
-    assert!(m.conn(A).is_none());
-    reconcile(&mut m, t + 1.0, &[A], &BTreeMap::new());
-    assert!(m.conn(A).is_none(), "paused");
-    m.on_tick(t + 1000.0);
-    reconcile(&mut m, t + 1000.0, &[A], &BTreeMap::new());
-    assert!(m.conn(A).is_some());
 }
 
 #[test]
@@ -396,18 +402,16 @@ fn a_down_gateway_defers_the_join() {
 
 #[test]
 fn removals_during_network_trouble_never_pause() {
-    let mut m = new(FollowCfg {
-        fight_limit: 3,
-        ..FollowCfg::default()
-    });
+    let mut m = new(FollowCfg::default());
     let mut t = 0.0;
     for i in 0..5 {
         t = drive_to_active(&mut m, A, t, &format!("c{i}")) + 1.0;
         let acts = m.reconcile(t, &[A], &BTreeMap::new(), &[], false, &none());
         assert!(
             kinds(&acts).contains(&"Notice:involuntary".to_owned())
-                && !kinds(&acts).contains(&"Notice:fight_pause".to_owned())
+                && !kinds(&acts).contains(&"Notice:repeated_removals".to_owned())
         );
+        assert!(m.paused().is_empty(), "no waiting either");
         t += 1.0;
     }
     assert!(m.conn(A).is_some() && m.paused().is_empty());
@@ -533,10 +537,7 @@ fn fuzz_invariants() {
 
 #[test]
 fn moved_where_the_person_is_it_stays_and_that_is_no_removal() {
-    let mut m = new(FollowCfg {
-        fight_limit: 1,
-        ..FollowCfg::default()
-    });
+    let mut m = new(FollowCfg::default());
     let t = drive_to_active(&mut m, A, 0.0, "c0") + 1.0;
     // A moderator moved the person and the bot to B: the bot's connection in A is gone, a new one is granted in B.
     let acts = reconcile(&mut m, t, &[B], &BTreeMap::new());
@@ -573,14 +574,15 @@ fn a_grant_long_after_a_removal_is_not_a_move() {
 }
 
 #[test]
-fn an_admin_can_end_the_pause_after_repeated_removals() {
-    let mut m = new(FollowCfg {
-        fight_limit: 1,
-        ..FollowCfg::default()
-    });
-    let t = drive_to_active(&mut m, A, 0.0, "c0") + 1.0;
-    reconcile(&mut m, t, &[A], &BTreeMap::new());
-    assert!(m.paused().contains_key(&A.guild));
+fn an_admin_can_end_the_wait_after_repeated_removals() {
+    let mut m = new(FollowCfg::default());
+    let mut t = 0.0;
+    for i in 0..2 {
+        t = drive_to_active(&mut m, A, t, &format!("c{i}")) + 1.0;
+        reconcile(&mut m, t, &[A], &BTreeMap::new());
+        t += 1.0;
+    }
+    assert!(m.paused().contains_key(&A.guild), "waiting after the second removal");
     m.resume(A.guild);
     reconcile(&mut m, t + 1.0, &[A], &BTreeMap::new());
     assert_eq!(m.conn(A).map(|x| x.state), Some(ConnState::Settling));
