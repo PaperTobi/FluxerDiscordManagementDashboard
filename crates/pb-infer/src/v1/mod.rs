@@ -437,8 +437,10 @@ fn tts_thread(factory: TtsFactory, threads: usize, queue: Arc<Queue<TtsJob>>, vo
                         .map_err(InferError::Panicked)
                         .and_then(|r| r.map_err(InferError::from))
                         .and_then(|s| {
-                            let at48 = pb_audio::resample(&s.samples, s.sample_rate, pb_audio::PLAY_RATE)
+                            let mut at48 = pb_audio::resample(&s.samples, s.sample_rate, pb_audio::PLAY_RATE)
                                 .map_err(|e| InferError::Tts(TtsError::Failed(e.to_string())))?;
+                            // Piper normalises to full scale; 1 dB of headroom keeps the resampled peaks unclipped.
+                            pb_audio::limit_peak(&mut at48, -1.0);
                             Ok(Speech48 {
                                 samples: pb_audio::to_i16(&at48),
                                 unknown_phonemes: s.unknown_phonemes,

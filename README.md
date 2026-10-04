@@ -106,7 +106,8 @@ instructions) or **3** (another bot uses the same volume) is not restarted until
 
 ### Without a container
 
-You need the build tools from *Development* below. Then:
+You need the build tools from *Development* below. Then, one line at a time (each needs the one before it to have
+worked):
 
 ```bash
 cargo xtask espeak-ng                                         # the pinned espeak-ng (Piper's phonemizer)
