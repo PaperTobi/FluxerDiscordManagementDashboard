@@ -14,6 +14,15 @@ use pb_voicelines::{ClipInfo, ClipLang, Field, Fields, Line, Part, Resolution, R
 use super::core::{Core, lock};
 use super::error::RenderError;
 
+/// What is said exactly as given instead of resolving a voice line ("Say now", a preview in one language).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Exact {
+    /// A text, spoken in this language (placeholders filled in).
+    Text(Lang, String),
+    /// A clip, played as it is.
+    Clip(BlobHash),
+}
+
 /// Audio ready to play, and what it says.
 #[derive(Debug, Clone, Default)]
 pub struct Rendered {
@@ -240,7 +249,7 @@ pub async fn render(
     channel: Option<pb_domain::ChannelId>,
     person: Option<UserId>,
     line: &Line,
-    exact: Option<&(Lang, String)>,
+    exact: Option<&Exact>,
     heard: Option<ClfLang>,
     label: Option<pb_domain::Label>,
     base: &Fields,
@@ -251,11 +260,17 @@ pub async fn render(
     let eff = tree.effective(Some(guild), person);
     let langs = languages(&tree, guild, person, heard);
     let res = match exact {
-        Some((lang, text)) => Resolution::Text {
+        Some(Exact::Text(lang, text)) => Resolution::Text {
             source: pb_voicelines::Source::Person,
             key: pb_voicelines::LineKey(line.clone()),
             lang: lang.clone(),
             text: text.clone(),
+        },
+        Some(Exact::Clip(h)) => Resolution::Clips {
+            source: pb_voicelines::Source::Person,
+            key: pb_voicelines::LineKey(line.clone()),
+            lang: core.clip(h).and_then(|c| c.lang),
+            clips: vec![*h],
         },
         None => resolve_line(core, guild, person, line, &langs),
     };

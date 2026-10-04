@@ -371,8 +371,8 @@ impl Engine {
         self.core.rooms().into_iter().map(|r| r.chan).collect()
     }
 
-    /// Says something now in a call ("Say now"). `person`: who it is for (their voice and name); `text` in `lang`, or
-    /// the voice line `line`. `Err` unless it reached them.
+    /// Says something now in a call ("Say now"). `person`: who it is for (their voice and name); `text` exactly (a
+    /// text in a language, or a clip), or the voice line `line`. `Err` unless it reached them.
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn say(
         &self,
@@ -380,7 +380,7 @@ impl Engine {
         channel: ChannelId,
         person: Option<UserId>,
         line: Line,
-        text: Option<(Lang, String)>,
+        text: Option<super::speak::Exact>,
         audience: Audience,
         by: Actor,
     ) -> Result<PlayRecord, EngineError> {
@@ -424,21 +424,39 @@ impl Engine {
         super::reports::digest_once(&self.core, true).await
     }
 
-    /// Renders a line for a preview (48 kHz samples and what it says).
+    /// Renders a line for a preview (48 kHz samples and what it says): as the bot would say it there now, or with
+    /// `lang` as the language it is said in (what the line has in `lang`; without anything in `lang`, the usual
+    /// fallbacks).
     pub async fn preview(
         &self,
         guild: GuildId,
         person: Option<UserId>,
         line: Line,
-        text: Option<(Lang, String)>,
+        lang: Option<Lang>,
     ) -> Result<super::speak::Rendered, EngineError> {
+        use super::speak::Exact;
+        let exact = lang.and_then(|lang| {
+            let mut langs = vec![lang];
+            for l in super::speak::languages(&self.core.settings.current(), guild, person, None) {
+                if !langs.contains(&l) {
+                    langs.push(l);
+                }
+            }
+            match super::speak::resolve_line(&self.core, guild, person, &line, &langs) {
+                pb_voicelines::Resolution::Text { lang, text, .. } => Some(Exact::Text(lang, text)),
+                pb_voicelines::Resolution::Clips { clips, .. } => clips
+                    .get(fastrand::usize(..clips.len().max(1)))
+                    .map(|h| Exact::Clip(*h)),
+                pb_voicelines::Resolution::Silent => None,
+            }
+        });
         super::speak::render(
             &self.core,
             guild,
             None,
             person,
             &line,
-            text.as_ref(),
+            exact.as_ref(),
             None,
             None,
             &Fields::new(),

@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 
 use pb_domain::PlayPurpose;
-use pb_domain::{Audience, BlobHash, ChannelId, GuildId, Lang, SentenceId, UserId};
+use pb_domain::{Audience, BlobHash, ChannelId, GuildId, SentenceId, UserId};
 use pb_fluxer_api::FluxerCtl;
 use pb_infer::SpeakPriority;
 use pb_policy::Chan;
@@ -34,8 +34,8 @@ pub struct PlayItem {
     /// Not voiced after this (monotonic seconds): a warning that waited too long is recorded, not played.
     pub deadline: Option<f64>,
     pub by: Option<Actor>,
-    /// Say exactly this (the "Say now" box) instead of resolving `line`.
-    pub text: Option<(Lang, String)>,
+    /// Say exactly this ("Say now": a text in a language, or a clip) instead of resolving `line`.
+    pub text: Option<super::speak::Exact>,
     /// The language the person was heard speaking (for `voice_language = auto`).
     pub heard: Option<pb_domain::ClfLang>,
     /// The detection type `{label}` speaks (in the utterance's language).

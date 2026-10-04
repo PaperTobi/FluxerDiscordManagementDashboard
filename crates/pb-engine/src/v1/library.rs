@@ -9,6 +9,7 @@ use pb_store_api::{Actor, BlobAdded, BlobDeleted, BlobRole, ClipRecord, ClipRemo
 
 use super::engine::Engine;
 use super::error::EngineError;
+use super::speak::Exact;
 
 /// What "Say now" says.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +18,8 @@ pub enum SayWhat {
     Text { text: String, lang: Option<Lang> },
     /// One of the "say" voice lines (`say.<preset>`): its clips or texts, like any voice line.
     Preset(String),
+    /// A clip from the library, played as it is.
+    Clip(BlobHash),
 }
 
 /// Decodes an upload off the async threads and hands the audio to `then` (there too), with the file's size; a file
@@ -242,8 +245,15 @@ impl Engine {
             .ok_or(EngineError::NotInCall)?;
         let eff = self.core.settings.current().effective(Some(guild), Some(user));
         let audience = pb_domain::Audience::from(eff.audience.value);
+        let now = || pb_voicelines::Line::Say { preset: "now".into() };
         let (line, text) = match what {
             SayWhat::Preset(preset) => (pb_voicelines::Line::Say { preset }, None),
+            SayWhat::Clip(h) => {
+                if self.core.clip(&h).is_none() {
+                    return Err(EngineError::NoSuchClip);
+                }
+                (now(), Some(Exact::Clip(h)))
+            }
             SayWhat::Text { text, lang } => {
                 let lang = match lang {
                     Some(l) => l,
@@ -257,7 +267,7 @@ impl Engine {
                             .ok_or(EngineError::NoLanguage)?,
                     },
                 };
-                (pb_voicelines::Line::Say { preset: "now".into() }, Some((lang, text)))
+                (now(), Some(Exact::Text(lang, text)))
             }
         };
         self.say(guild, channel, Some(user), line, text, audience, by).await
