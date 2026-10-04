@@ -5,7 +5,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use rten::{Model, RunOptions};
-use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, Tensor};
 use serde::Deserialize;
 
@@ -194,6 +193,6 @@ impl Voice {
             .run_n(inputs, [id("output")?], Some(opts))
             .map_err(|e| e.to_string())?;
         let out: Tensor<f32> = out.try_into().map_err(|e| format!("{e:?}"))?;
-        Ok(out.to_vec())
+        Ok(out.into_data())
     }
 }

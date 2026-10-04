@@ -8230,8 +8230,6 @@ checksum = "2d03e46486326bd528b70e87095b920ab09b6b8d25064d4b3e80cddc18052686"
 [[package]]
 name = "rten-gemm"
 version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "648ac7ea5e2a7937630eb5e36e64ae46398871b9761e5312e5e856950fca5af8"
 dependencies = [
  "rayon",
  "rten-base",

@@ -77,6 +77,14 @@ upstream = "to be proposed to tracel-ai/burn (burn-flex)"
 review = "2027-01-01"
 
 [[patched]]
+crate = "rten-gemm"
+version = "0.27.0"
+path = "third_party/rten-gemm"
+reason = "rten packed the input of every convolution through a scalar gather, also where a unit-stride convolution reads consecutive samples; that packing took about a third of the Piper voices' time. The patch copies such rows instead (bit for bit the same results, voice golden tests unchanged); the voices synthesise about a third faster. See third_party/rten-gemm/PATCHES.md."
+upstream = "candidate pull request for robertknight/rten (first item of rten#1444); rten's AI policy needs a person to submit it"
+review = "2027-01-01"
+
+[[patched]]
 crate = "turso"
 version = "0.8.1"
 path = "third_party/turso"

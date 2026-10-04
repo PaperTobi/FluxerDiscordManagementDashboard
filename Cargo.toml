@@ -115,6 +115,7 @@ unic-langid = "0.9.6"
 [patch.crates-io]
 branches = { path = "third_party/branches" }
 burn-flex = { path = "third_party/burn-flex" }
+rten-gemm = { path = "third_party/rten-gemm" }
 turso = { path = "third_party/turso" }
 turso_sdk_kit = { path = "third_party/turso_sdk_kit" }
 
