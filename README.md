@@ -147,12 +147,15 @@ podman run … --secret profanity-watch-token,type=env,target=PB_BOT_TOKEN \
 Open **`http://<the machine's IP>:8790`** from your network. The setup asks, one step at a time:
 
 1. **Setup code**: from the log, or `podman exec profanity-watch pb setup-code`.
-2. **Fluxer instance**: keep `https://api.fluxer.app`, or your own instance's API address.
+2. **Fluxer instance**: keep `https://api.fluxer.app`, or your instance's address (`https://example.com`, its API
+   address `https://example.com/api`, or just `example.com`).
 3. **Bot token** (skipped when it comes from the environment). The bot logs in at once and says whether Fluxer took it.
 4. **Client secret**. The page shows the **redirect address** (for example `http://192.168.1.50:8790/auth/callback`):
    add it in Fluxer under your application's **Redirect URIs**. Give the machine a fixed IP so it keeps matching (if it
    does not, the login says which address to register).
 5. **Log in with Fluxer**. Whoever logs in now becomes the bot's owner. That finishes the setup.
+
+Until then every finished step can be opened again (click it in the step list, or *Back*) and changed or kept as it is.
 
 Then:
 

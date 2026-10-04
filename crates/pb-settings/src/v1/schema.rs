@@ -180,6 +180,7 @@ kind!(ChannelId => FieldKind::Channel);
 kind!(TimeOfDay => FieldKind::TimeOfDay);
 kind!(Tz => FieldKind::Tz);
 kind!(Origin => FieldKind::Origin);
+kind!(InstanceUrl => FieldKind::Origin);
 kind!(Vec<HostName> => FieldKind::Hosts);
 kind!(Prefix => FieldKind::Prefix);
 kind!(Lang => FieldKind::Lang);
@@ -527,7 +528,7 @@ settings! {
         admin_role_ids(AdminRoleIds): Vec<RoleId> = Vec::new(); GS, Admins, Live;
     }
     System {
-        instance(Instance): Origin = "https://api.fluxer.app".parse().unwrap_or_else(|_| unreachable!()); G, Owner, Reconnect;
+        instance(Instance): InstanceUrl = "https://api.fluxer.app".parse().unwrap_or_else(|_| unreachable!()); G, Owner, Reconnect;
         ui_url(UiUrl): Option<Origin> = None; G, Owner, Live;
         allowed_hosts(AllowedHosts): Vec<HostName> = Vec::new(); G, Owner, Live;
         cpu_threads(CpuThreads): Count = Count::new(4).unwrap_or_else(|_| unreachable!()); G, Owner, Live;

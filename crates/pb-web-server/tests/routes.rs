@@ -725,6 +725,27 @@ async fn the_setup_wizard_from_code_to_owner() {
         )
         .await;
     assert!(r.cookie("pb_notice").is_none(), "{r:?}");
+    // A done step can be opened again: the client secret, kept as it is …
+    let step = |name: &'static str, value: &'static str| [("step", name), ("csrf", csrf.as_str()), ("value", value)];
+    w.post("/setup", Some(&setup), &step("goto", "secret")).await;
+    let page = w.get("/setup", Some(&setup)).await.body;
+    assert!(page.contains("A client secret is saved"), "{page}");
+    w.post("/setup", Some(&setup), &step("keep", "")).await;
+    assert!(w.get("/setup", Some(&setup)).await.body.contains("becomes the owner"));
+    // … and the instance, given as an API address with a path (its discovery document is at the server's root).
+    w.post("/setup", Some(&setup), &step("goto", "instance")).await;
+    assert!(w.get("/setup", Some(&setup)).await.body.contains("Instance address"));
+    let with_path = format!("{}/api", w.fake.url());
+    let r = w
+        .post(
+            "/setup",
+            Some(&setup),
+            &[("step", "instance"), ("csrf", &csrf), ("value", &with_path)],
+        )
+        .await;
+    assert!(r.cookie("pb_notice").is_none(), "{r:?}");
+    let page = w.get("/setup", Some(&setup)).await.body;
+    assert!(page.contains("becomes the owner"), "{page}");
     // Setup is finished and the code is gone.
     let owner = w.login_with(OWNER, Some(&setup)).await.unwrap();
     assert!(w.get("/", Some(&owner)).await.body.contains("class=\"sidebar\""));

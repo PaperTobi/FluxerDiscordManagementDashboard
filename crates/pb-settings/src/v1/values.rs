@@ -603,7 +603,47 @@ impl fmt::Display for Tz {
 via_str!(Tz);
 text_from_json!(Tz);
 
-/// An http(s) address with nothing after the host (origin), e.g. the Fluxer instance or the web UI address.
+/// A Fluxer instance's address: its API address or its web address, with or without a path
+/// (`https://api.fluxer.app`, `https://example.com/api`, `example.com`; https is assumed when no scheme is given).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct InstanceUrl(url::Url);
+
+impl InstanceUrl {
+    pub fn url(&self) -> &url::Url {
+        &self.0
+    }
+}
+
+impl FromStr for InstanceUrl {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let t = s.trim();
+        let with_scheme = if t.contains("://") {
+            t.to_owned()
+        } else {
+            format!("https://{t}")
+        };
+        let u = url::Url::parse(&with_scheme).map_err(|_| ValueError::NotOrigin(t.to_owned()))?;
+        if !matches!(u.scheme(), "http" | "https")
+            || u.host_str().is_none_or(str::is_empty)
+            || u.query().is_some()
+            || u.fragment().is_some()
+        {
+            return Err(ValueError::NotOrigin(t.to_owned()));
+        }
+        Ok(InstanceUrl(u))
+    }
+}
+
+impl fmt::Display for InstanceUrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0.as_str().trim_end_matches('/'))
+    }
+}
+via_str!(InstanceUrl);
+text_from_json!(InstanceUrl);
+
+/// An http(s) address with nothing after the host (origin), e.g. the web UI address.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Origin(url::Url);
 
@@ -1033,5 +1073,24 @@ mod tests {
         assert_eq!(e.step_for(0), None);
         let bad = serde_json::json!([{"from": 2}, {"from": 2}]);
         assert!(serde_json::from_value::<Escalation>(bad).is_err());
+    }
+
+    #[test]
+    fn instance_addresses_may_have_a_path_and_leave_out_https() {
+        for (given, want) in [
+            ("https://api.fluxer.app", "https://api.fluxer.app"),
+            ("https://fivius.com/api/", "https://fivius.com/api"),
+            ("fivius.com/api", "https://fivius.com/api"),
+            ("http://192.168.1.50:8080", "http://192.168.1.50:8080"),
+        ] {
+            assert_eq!(
+                given.parse::<InstanceUrl>().map(|u| u.to_string()),
+                Ok(want.to_owned()),
+                "{given}"
+            );
+        }
+        for bad in ["ftp://x.example", "https://x.example/?a=1", "https://", ""] {
+            assert!(bad.parse::<InstanceUrl>().is_err(), "{bad}");
+        }
     }
 }

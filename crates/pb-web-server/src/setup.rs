@@ -13,7 +13,7 @@ use http::{HeaderMap, HeaderValue};
 use pb_domain::Scope;
 use pb_engine::Connection;
 use pb_i18n::{Locale, text};
-use pb_settings::{Origin, SettingKey};
+use pb_settings::{InstanceUrl, SettingKey};
 use pb_store_api::{Actor, Via};
 use pb_web::app::{SetupStep, SetupView};
 use secrecy::SecretString;
@@ -31,6 +31,8 @@ const LOGIN_WAIT: Duration = Duration::from_secs(20);
 struct WizardSession {
     started: Instant,
     instance_ok: bool,
+    /// A done step opened again (shown until it is saved again or kept as it is).
+    revisit: Option<SetupStep>,
 }
 
 struct Guess {
@@ -84,16 +86,16 @@ impl WebState {
     pub(crate) fn setup_view(&self, headers: &HeaderMap, ip: Option<IpAddr>) -> SetupView {
         let secrets = self.secrets.get();
         let key = self.wizard_session(headers);
-        let (instance_ok, wait) = {
+        let (instance_ok, revisit, wait) = {
             let w = self.wizard();
+            let session = key.as_ref().and_then(|k| w.sessions.get(k));
             (
-                key.as_ref()
-                    .and_then(|k| w.sessions.get(k))
-                    .is_some_and(|s| s.instance_ok),
+                session.is_some_and(|s| s.instance_ok),
+                session.and_then(|s| s.revisit),
                 w.wait(ip),
             )
         };
-        let step = if secrets.setup.done {
+        let reached = if secrets.setup.done {
             SetupStep::Done
         } else if key.is_none() {
             SetupStep::Code
@@ -111,9 +113,11 @@ impl WebState {
         } else {
             SetupStep::Owner
         };
+        let step = revisit.filter(|r| *r < reached).unwrap_or(reached);
         let eff = self.engine.settings().current().effective(None, None);
         SetupView {
             step,
+            reached,
             csrf: key
                 .map(|k| self.sessions.signer().tag("setup-csrf", &k))
                 .unwrap_or_default(),
@@ -126,6 +130,8 @@ impl WebState {
             wait_secs: wait.as_secs() + u64::from(wait.subsec_nanos() > 0),
             code_file: self.cfg.setup_code_file.clone(),
             secret_from_env: self.cfg.client_secret_from_env,
+            has_token: secrets.bot_token.is_some(),
+            has_secret: secrets.client_secret.is_some(),
         }
     }
 }
@@ -193,6 +199,7 @@ pub async fn submit(
             WizardSession {
                 started: Instant::now(),
                 instance_ok: false,
+                revisit: None,
             },
         );
         let c = set_cookie(
@@ -210,9 +217,29 @@ pub async fn submit(
         return back(Some((false, text(loc, "form-expired", &[]))), None);
     }
     let value = f.value.trim().to_owned();
+    let revisit = |step: Option<SetupStep>| {
+        if let Some(s) = st.wizard().sessions.get_mut(&key) {
+            s.revisit = step;
+        }
+    };
     match f.step.as_str() {
+        // Open a done step again; "keep" goes on without changing it.
+        "goto" => {
+            let target = match value.as_str() {
+                "instance" => Some(SetupStep::Instance),
+                "token" => Some(SetupStep::Token),
+                "secret" => Some(SetupStep::ClientSecret),
+                _ => None,
+            };
+            revisit(target);
+            back(None, None)
+        }
+        "keep" => {
+            revisit(None);
+            back(None, None)
+        }
         "instance" => {
-            let origin: Origin = match value.parse() {
+            let origin: InstanceUrl = match value.parse() {
                 Ok(o) => o,
                 Err(e) => return back(Some((false, pb_i18n::value_error(loc, &e))), None),
             };
@@ -238,11 +265,15 @@ pub async fn submit(
             }
             if let Some(s) = st.wizard().sessions.get_mut(&key) {
                 s.instance_ok = true;
+                s.revisit = None;
             }
             back(None, None)
         }
         "token" => match use_token(&st, value, loc).await {
-            Ok(()) => back(None, None),
+            Ok(()) => {
+                revisit(None);
+                back(None, None)
+            }
             Err(e) => back(Some((false, e)), None),
         },
         "secret" => {
@@ -285,6 +316,7 @@ pub async fn submit(
                     return back(Some((false, super::forms::change_error(loc, &e))), None);
                 }
             }
+            revisit(None);
             back(None, None)
         }
         _ => back(None, None),

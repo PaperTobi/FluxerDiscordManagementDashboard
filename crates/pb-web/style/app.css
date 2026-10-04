@@ -360,6 +360,9 @@ body.auth-expired .offline-banner { display: none; }
 .steps li::before { content: counter(step) ". "; }
 .steps li.done { color: var(--ok); }
 .steps li.current { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.steps li.done button.link { color: inherit; margin: 0; padding: 0; }
+.setup .actions { display: flex; gap: 8px; margin-top: 12px; }
+.setup .actions form.inline button { margin-left: 0; }
 
 /* ---------------------------------------------------------------- page parts */
 

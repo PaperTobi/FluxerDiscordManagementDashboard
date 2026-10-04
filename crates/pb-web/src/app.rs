@@ -75,7 +75,10 @@ pub enum SetupStep {
 /// The setup wizard for one browser.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetupView {
+    /// The step shown.
     pub step: SetupStep,
+    /// The furthest step reached (the steps before it are done and can be opened again).
+    pub reached: SetupStep,
     /// The token the wizard's forms carry.
     pub csrf: String,
     /// The Fluxer instance (API address).
@@ -90,6 +93,10 @@ pub struct SetupView {
     pub code_file: String,
     /// The client secret comes from the environment (it cannot be changed here).
     pub secret_from_env: bool,
+    /// A bot token is saved.
+    pub has_token: bool,
+    /// A client secret is saved.
+    pub has_secret: bool,
 }
 
 /// The person looking at the page.

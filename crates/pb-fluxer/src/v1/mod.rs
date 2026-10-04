@@ -23,7 +23,20 @@ pub use gateway::GatewayConfig;
 use rest::Rest;
 
 /// Reads `/.well-known/fluxer`.
+/// Looks up an instance's endpoints at `{instance}/.well-known/fluxer`, and for an address with a path (an API address
+/// like `https://example.com/api`) at the server's root when it is not there.
 async fn discover(instance: &Url) -> Result<Endpoints, LoginError> {
+    match discover_at(instance).await {
+        Err(LoginError::BadInstance(why)) if instance.path() != "/" => {
+            let mut root = instance.clone();
+            root.set_path("/");
+            discover_at(&root).await.map_err(|_| LoginError::BadInstance(why))
+        }
+        found => found,
+    }
+}
+
+async fn discover_at(instance: &Url) -> Result<Endpoints, LoginError> {
     let url = format!("{}/.well-known/fluxer", instance.as_str().trim_end_matches('/'));
     let http = rest::http().map_err(|e| LoginError::Unreachable(e.to_string()))?;
     let resp = http
