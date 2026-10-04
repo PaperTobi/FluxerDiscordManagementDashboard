@@ -215,6 +215,7 @@ pub fn App() -> impl IntoView {
                 <Route path=(StaticSegment("c"), ParamSegment("g"), ParamSegment("tab")) view=|| view! { <Page><pages::community::CommunityPage/></Page> }/>
                 <Route path=(StaticSegment("c"), ParamSegment("g"), StaticSegment("p"), ParamSegment("u")) view=|| view! { <Page><pages::person::PersonPage/></Page> }/>
                 <Route path=(StaticSegment("c"), ParamSegment("g"), StaticSegment("p"), ParamSegment("u"), ParamSegment("tab")) view=|| view! { <Page><pages::person::PersonPage/></Page> }/>
+                <Route path=StaticSegment("invite") view=|| view! { <Page><pages::invite::InvitePage/></Page> }/>
                 <Route path=StaticSegment("setup") view=pages::setup::SetupPage/>
             </FlatRoutes>
         </Router>
@@ -238,14 +239,6 @@ fn Page(children: Children) -> impl IntoView {
     if !v.owner {
         sidebar.communities.retain(|c| v.guilds.contains(&c.id));
     }
-    let actions = app()
-        .engine
-        .settings()
-        .current()
-        .effective(None, None)
-        .actions_enabled
-        .value;
-    let invite = app().host.invite_url(invite_permissions(actions));
     let paused_everywhere = app().engine.settings().current().paused_everywhere();
     let nav = |href: &'static str, id: &str| {
         let active = if href == "/" {
@@ -268,11 +261,7 @@ fn Page(children: Children) -> impl IntoView {
                 </nav>
                 <h3 class="section">{text(loc, "ui-nav-communities", &[])}</h3>
                 <SidebarLive initial=sidebar locale=loc current=path.clone()/>
-                {invite.map(|url| view! {
-                    <a class="invite" href=url target="_blank" rel="noopener" title=text(loc, "ui-invite-help", &[])>
-                        {text(loc, "ui-invite", &[])}
-                    </a>
-                })}
+                <a class="invite" href="/invite" class:active=path == "/invite">{text(loc, "ui-invite", &[])}</a>
                 <div class="me">
                     <span class="name">{v.name.clone()}</span>
                     <form method="post" action="/auth/logout" class="row">
@@ -316,7 +305,6 @@ pub fn SourceLink() -> impl IntoView {
 }
 
 /// What the bot asks for when it is invited: what it needs, and the members' actions when they are on.
-#[cfg(feature = "ssr")]
 pub fn invite_permissions(actions: bool) -> u64 {
     use pb_fluxer_api::perms as p;
     p::BOT
@@ -325,6 +313,23 @@ pub fn invite_permissions(actions: bool) -> u64 {
         } else {
             0
         }
+}
+
+/// Whether moderation actions are on in a community: for it, or for anyone in it.
+pub fn actions_in(g: GuildId) -> bool {
+    let tree = app().engine.settings().current();
+    tree.effective(Some(g), None).actions_enabled.value
+        || tree.servers.get(&g).is_some_and(|s| {
+            s.people
+                .keys()
+                .any(|u| tree.effective(Some(g), Some(*u)).actions_enabled.value)
+        })
+}
+
+/// Whether moderation actions are on anywhere (globally, or in any community or for anyone in one).
+pub fn actions_anywhere() -> bool {
+    let tree = app().engine.settings().current();
+    tree.effective(None, None).actions_enabled.value || tree.known_guilds().into_iter().any(actions_in)
 }
 
 fn url_encode(s: &str) -> String {

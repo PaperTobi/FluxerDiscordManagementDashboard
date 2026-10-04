@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 use pb_domain::{GuildId, Scope};
-use pb_i18n::text;
+use pb_i18n::{Locale, text};
 use pb_live::CellSource;
 use pb_live_proto::{Topic, TopicState};
 
@@ -113,14 +113,10 @@ pub fn CommunityPage() -> impl IntoView {
     .into_any()
 }
 
-/// What the bot may do in each voice channel, in the mod-log channel and (when actions are on) to members.
-#[component]
-fn PermissionCheck(guild: GuildId) -> impl IntoView {
+/// What the bot needs in a community and what it lacks: each voice channel, the mod-log channel and (when actions
+/// are on there) the members' actions, with the names of the missing permissions.
+pub(crate) fn permission_rows(loc: Locale, guild: GuildId) -> Vec<(String, Vec<String>)> {
     use pb_fluxer_api::perms as p;
-    let Some(v) = viewer() else {
-        return ().into_any();
-    };
-    let loc = v.locale;
     let engine = app().engine;
     let eff = engine.settings().current().effective(Some(guild), None);
     let info = engine.guilds().get(guild).cloned();
@@ -146,12 +142,26 @@ fn PermissionCheck(guild: GuildId) -> impl IntoView {
             check(Some(c), p::VIEW_CHANNEL | p::SEND_MESSAGES | p::ATTACH_FILES),
         ));
     }
-    if eff.actions_enabled.value {
+    if crate::app::actions_in(guild) {
         rows.push((
             text(loc, "ui-perm-actions", &[]),
             check(None, p::MUTE_MEMBERS | p::MOVE_MEMBERS | p::MODERATE_MEMBERS),
         ));
     }
+    rows
+}
+
+/// What the bot may do in each voice channel, in the mod-log channel and (when actions are on) to members, with a link
+/// that asks for what is missing.
+#[component]
+fn PermissionCheck(guild: GuildId) -> impl IntoView {
+    let Some(v) = viewer() else {
+        return ().into_any();
+    };
+    let loc = v.locale;
+    let rows = permission_rows(loc, guild);
+    let missing = rows.iter().any(|(_, m)| !m.is_empty());
+    let again = missing.then(|| super::invite::reauthorize_url(guild)).flatten();
     view! {
         <section class="card">
             <h2>{text(loc, "ui-permissions", &[])}</h2>
@@ -174,6 +184,9 @@ fn PermissionCheck(guild: GuildId) -> impl IntoView {
                 </tbody>
             </table>
             <p class="muted small">{text(loc, "ui-permissions-help", &[])}</p>
+            {again.map(|url| view! {
+                <p><a class="button" href=url target="_blank" rel="noopener">{text(loc, "ui-reauthorize", &[])}</a></p>
+            })}
         </section>
     }
     .into_any()

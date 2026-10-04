@@ -1,6 +1,7 @@
 //! The interactive parts of pages (hydrated in the browser).
 
 mod community;
+mod copy;
 mod person;
 mod picker;
 mod recorder;
@@ -10,6 +11,7 @@ mod wall;
 mod widgets;
 
 pub use community::GuildLive;
+pub use copy::CopyText;
 pub use person::PersonLive;
 pub use picker::MemberPicker;
 pub use recorder::ClipRecorder;

@@ -38,7 +38,7 @@ web-sys = { workspace = true, optional = true, features = [
   "Window", "Document", "console", "Location", "WebSocket", "MessageEvent", "CloseEvent", "Event", "EventTarget",
   "VisibilityState", "Element", "HtmlElement", "Navigator", "MediaDevices", "MediaStream", "MediaStreamConstraints",
   "MediaRecorder", "BlobEvent", "Blob", "FormData", "Request", "RequestInit", "Response", "HtmlInputElement",
-  "HtmlFormElement", "MediaStreamTrack", "BlobPropertyBag",
+  "HtmlFormElement", "MediaStreamTrack", "BlobPropertyBag", "Clipboard",
 ] }
 
 

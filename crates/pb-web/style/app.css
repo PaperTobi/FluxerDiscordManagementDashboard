@@ -498,3 +498,9 @@ table.mini tr.flagged td { font-weight: 600; color: var(--bad); }
 .pause-everywhere h2 { margin-bottom: 4px; }
 .pause-everywhere p { margin: 0; }
 .pause-everywhere.paused { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+
+/* ---------------------------------------------------------------- inviting */
+
+.sidebar .invite.active { font-weight: 600; }
+.copy.row { flex-wrap: nowrap; align-items: stretch; margin-bottom: 12px; }
+.copy.row code { flex: 1; min-width: 0; }

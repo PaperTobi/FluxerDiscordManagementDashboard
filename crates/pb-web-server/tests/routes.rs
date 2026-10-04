@@ -771,7 +771,7 @@ async fn the_setup_wizard_from_code_to_owner() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn the_overview_checks_permissions_and_the_sidebar_links_the_invite() {
+async fn the_overview_checks_permissions_and_the_invite_page_asks_for_them() {
     let w = Web::start(true).await;
     let ada = w.login(ADA).await.unwrap();
     let page = w.get(&format!("/c/{G}"), Some(&ada)).await.body;
@@ -779,15 +779,20 @@ async fn the_overview_checks_permissions_and_the_sidebar_links_the_invite() {
         page.contains("🔊 Lounge") && page.contains("all it needs"),
         "voice channel checked"
     );
-    let bot = pb_fluxer_api::perms::BOT;
     assert!(
-        page.contains(&format!(
-            "/oauth2/authorize?client_id=1000&amp;scope=bot&amp;permissions={bot}"
-        )),
-        "invite link"
+        page.contains("href=\"/invite\""),
+        "the sidebar leads to the invite page"
     );
-    // With moderation actions on, the missing member permissions show, and the invite asks for them.
-    // (On everywhere, so the invite asks for them too.)
+    assert!(!page.contains("guild_id="), "nothing to authorise again");
+    let bot = pb_fluxer_api::perms::BOT;
+    let link = |perms: u64| format!("/oauth2/authorize?client_id=1000&amp;scope=bot&amp;permissions={perms}");
+    let invite = w.get("/invite", Some(&ada)).await;
+    assert_eq!(invite.status, 200);
+    assert!(invite.body.contains(&link(bot)), "invite link: {}", invite.body);
+    assert!(invite.body.contains("What inviting does") && invite.body.contains("Copy"));
+    assert!(!invite.body.contains("not connected"), "the bot is connected");
+    // With moderation actions on in Alpha only, its missing member permissions show, the invite asks for them, and
+    // Alpha gets a link that authorises the bot there again.
     let owner = w.login(OWNER).await.unwrap();
     let csrf = w.page_csrf(&owner).await;
     let r = w
@@ -796,7 +801,7 @@ async fn the_overview_checks_permissions_and_the_sidebar_links_the_invite() {
             Some(&owner),
             &[
                 ("csrf", &csrf),
-                ("scope", "global"),
+                ("scope", &format!("server:{G}")),
                 ("key", "actions_enabled"),
                 ("value", "on"),
                 ("action", "set"),
@@ -814,7 +819,19 @@ async fn the_overview_checks_permissions_and_the_sidebar_links_the_invite() {
         | pb_fluxer_api::perms::MUTE_MEMBERS
         | pb_fluxer_api::perms::MOVE_MEMBERS
         | pb_fluxer_api::perms::MODERATE_MEMBERS;
-    assert!(page.contains(&format!("permissions={all}")), "invite with actions");
+    let again = format!("{}&amp;guild_id={G}", link(all));
+    assert!(page.contains(&again), "authorise again from the overview");
+    let invite = w.get("/invite", Some(&ada)).await.body;
+    assert!(invite.contains(&format!("{}\"", link(all))), "invite with actions");
+    assert!(
+        invite.contains(&again) && invite.contains("Authorise again"),
+        "{invite}"
+    );
+    // Beta has actions off and lacks nothing: no link for it (its owner sees no Alpha either).
+    let bea = w.login(BEA).await.unwrap();
+    let invite = w.get("/invite", Some(&bea)).await.body;
+    assert!(!invite.contains("guild_id="), "{invite}");
+    assert!(invite.contains(&link(all)), "actions are on somewhere");
     w.stop().await;
 }
 

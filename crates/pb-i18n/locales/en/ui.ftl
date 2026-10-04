@@ -296,7 +296,7 @@ ui-perm-missing = missing: { $missing }
 ui-perm-modlog = mod log #{ $channel }
 ui-perm-actions = moderation actions (they are on)
 ui-invite = + Invite the bot
-ui-invite-help = Opens Fluxer; whoever has Manage community there can add the bot with the permissions it needs.
+ui-invite-help = Inviting adds the bot to a community on Fluxer. Whoever opens the link needs Manage community there: Fluxer asks which community and shows the permissions the bot asks for. The bot then appears in the sidebar; it joins a call only when someone tracked there is in one.
 ui-clip-not-yours = Only who added this clip, or the bot's owner, can change or remove it.
 ui-clip-added-by = added by { $name }
 ui-track-the-bot = The bot does not track itself.
@@ -369,3 +369,16 @@ ui-pause-everywhere-help = Pausing stops it everywhere at once: it leaves every 
 ui-pause-everywhere = Pause everywhere
 ui-resume-everywhere-help = The bot listens to nobody and says nothing. Pauses of single communities and people stay in place for when it runs again.
 ui-resume-everywhere = Resume everywhere
+
+## Inviting
+ui-invite-title = Invite the bot
+ui-invite-what = What inviting does
+ui-invite-not-connected = The bot is not connected to Fluxer yet, so it cannot make the invite link or see its communities (the bot owner sees why on the System page).
+ui-invite-permissions = The link asks for what the bot needs: see channels and write in them (for the mod log), join voice channels and speak. While moderation actions are on in any community, it also asks to mute, move and time out members.
+ui-invite-open = Open in Fluxer
+ui-invite-no-link = The link appears once the bot has its token and has reached its Fluxer instance.
+ui-reauthorize-title = Communities where the bot lacks permissions
+ui-reauthorize-help = Authorising again in Fluxer gives the bot's role what is missing (whoever does it needs Manage community there). Permissions taken away in one channel are given back in that channel's settings.
+ui-reauthorize = Authorise again
+ui-copy = Copy
+ui-copied = Copied

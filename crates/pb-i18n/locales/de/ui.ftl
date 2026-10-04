@@ -296,7 +296,7 @@ ui-perm-missing = fehlt: { $missing }
 ui-perm-modlog = Mod-Log #{ $channel }
 ui-perm-actions = Moderationsmaßnahmen (sie sind an)
 ui-invite = + Bot einladen
-ui-invite-help = Öffnet Fluxer; wer dort „Community verwalten“ darf, kann den Bot mit den nötigen Berechtigungen hinzufügen.
+ui-invite-help = Einladen fügt den Bot einer Community auf Fluxer hinzu. Wer den Link öffnet, braucht dort „Community verwalten“: Fluxer fragt nach der Community und zeigt die Berechtigungen, um die der Bot bittet. Danach erscheint der Bot in der Seitenleiste; einem Anruf tritt er erst bei, wenn jemand Verfolgtes darin ist.
 ui-clip-not-yours = Nur wer diesen Clip hinzugefügt hat oder der Besitzer des Bots kann ihn ändern oder entfernen.
 ui-clip-added-by = hinzugefügt von { $name }
 ui-track-the-bot = Der Bot verfolgt sich nicht selbst.
@@ -369,3 +369,16 @@ ui-pause-everywhere-help = Pausieren hält ihn überall auf einmal an: Er verlä
 ui-pause-everywhere = Überall pausieren
 ui-resume-everywhere-help = Der Bot hört niemandem zu und sagt nichts. Pausen einzelner Communitys und Personen bleiben bestehen, wenn er wieder läuft.
 ui-resume-everywhere = Überall fortsetzen
+
+## Einladen
+ui-invite-title = Bot einladen
+ui-invite-what = Was Einladen bewirkt
+ui-invite-not-connected = Der Bot ist noch nicht mit Fluxer verbunden, deshalb kann er weder den Einladungslink erstellen noch seine Communitys sehen (warum, sieht der Besitzer des Bots auf der Systemseite).
+ui-invite-permissions = Der Link bittet um das, was der Bot braucht: Kanäle sehen und darin schreiben (für das Mod-Log), Sprachkanälen beitreten und sprechen. Solange Moderationsmaßnahmen in irgendeiner Community an sind, bittet er auch darum, Mitglieder stummzuschalten, zu verschieben und ihnen eine Auszeit zu geben.
+ui-invite-open = In Fluxer öffnen
+ui-invite-no-link = Der Link erscheint, sobald der Bot sein Token hat und seine Fluxer-Instanz erreicht.
+ui-reauthorize-title = Communitys, in denen dem Bot Berechtigungen fehlen
+ui-reauthorize-help = Erneutes Autorisieren in Fluxer gibt der Rolle des Bots, was fehlt (wer das tut, braucht dort „Community verwalten“). Berechtigungen, die in einem einzelnen Kanal entzogen wurden, gibt man in den Einstellungen dieses Kanals zurück.
+ui-reauthorize = Erneut autorisieren
+ui-copy = Kopieren
+ui-copied = Kopiert

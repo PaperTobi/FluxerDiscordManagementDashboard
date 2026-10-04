@@ -2,6 +2,7 @@
 
 pub mod audit;
 pub mod community;
+pub mod invite;
 pub mod person;
 pub mod reports;
 pub mod sentences;
