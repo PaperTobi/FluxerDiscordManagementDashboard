@@ -225,7 +225,7 @@ bind = "0.0.0.0:8790"
 # tls = { cert = "/data/tls/cert.pem", key = "/data/tls/key.pem" }   # serve HTTPS (see below)
 
 [inference]
-device = "cpu"            # "gpu": the first discrete GPU through Vulkan (pass the GPU into the container)
+device = "auto"           # the GPU (Vulkan) when one can be used, else the CPU; "cpu" or "gpu" to choose
 # weights = "/opt/pb/weights"   espeak_data = "/opt/pb/espeak"   clips = "/opt/pb/clips"
 
 [logging]

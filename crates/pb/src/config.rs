@@ -65,9 +65,11 @@ impl Tls {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Device {
+    /// The GPU when one can be used, else the CPU (the start log says which).
     #[default]
+    Auto,
     Cpu,
-    /// The first discrete GPU (Vulkan through wgpu).
+    /// The first discrete GPU (Vulkan through wgpu); the bot does not start without it.
     Gpu,
 }
 
@@ -90,7 +92,7 @@ impl Default for Inference {
             weights: PathBuf::from("/opt/pb/weights"),
             espeak_data: PathBuf::from("/opt/pb/espeak"),
             clips: PathBuf::from("/opt/pb/clips"),
-            device: Device::Cpu,
+            device: Device::Auto,
         }
     }
 }

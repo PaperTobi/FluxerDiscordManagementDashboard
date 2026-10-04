@@ -180,9 +180,20 @@ impl RobloxClassifier<Gpu> {
     /// to it is never picked by accident).
     pub fn load_gpu(dir: &Path, device: GpuDevice) -> Result<Self, ModelError> {
         let name = format!("GPU (wgpu, {device:?})");
-        let mut clf = Self::build(dir, device, name, None)?;
-        clf.warm_up()?;
-        Ok(clf)
+        // Without a usable GPU (no Vulkan driver, no device) wgpu panics while setting up: an error, not a crash.
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut clf = Self::build(dir, device, name, None)?;
+            clf.warm_up()?;
+            Ok(clf)
+        }))
+        .unwrap_or_else(|panic| {
+            let why = panic
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_owned())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
+                .unwrap_or_default();
+            Err(ModelError::Load(format!("no usable GPU (Vulkan): {why}")))
+        })
     }
 
     /// Classifies a few silent clips, so that the GPU compiles its kernels now rather than during the first real

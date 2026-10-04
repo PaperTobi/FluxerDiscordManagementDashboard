@@ -315,22 +315,28 @@ fn models(data: &Path, cfg: &Config, tree: &SettingsTree) -> Result<Inference, F
     let eff = tree.effective(None, None);
     let threads = NonZeroUsize::new(eff.cpu_threads.value.get() as usize).unwrap_or(NonZeroUsize::MIN);
     let dir = w.join("roblox-voice-safety-v3");
+    let cpu = || pb_classifier_roblox::RobloxClassifier::load_cpu(&dir, threads).map(|c| Box::new(c) as _);
+    #[cfg(feature = "gpu")]
+    let gpu = || {
+        pb_classifier_roblox::RobloxClassifier::load_gpu(&dir, pb_classifier_roblox::GpuDevice::DiscreteGpu(0))
+            .map(|c| Box::new(c) as _)
+    };
+    #[cfg(not(feature = "gpu"))]
+    let gpu = || {
+        Err(pb_models_api::ModelError::Load(
+            "this build has no GPU support (the `gpu` feature)".to_owned(),
+        ))
+    };
     let classifier: Box<dyn pb_models_api::Classifier> = match cfg.inference.device {
-        Device::Cpu => pb_classifier_roblox::RobloxClassifier::load_cpu(&dir, threads).map(|c| Box::new(c) as _),
-        #[cfg(feature = "gpu")]
-        Device::Gpu => {
-            pb_classifier_roblox::RobloxClassifier::load_gpu(&dir, pb_classifier_roblox::GpuDevice::DiscreteGpu(0))
-                .map(|c| Box::new(c) as _)
-        }
-        #[cfg(not(feature = "gpu"))]
-        Device::Gpu => {
-            return Err(Fail(
-                Exit::Config,
-                "this build has no GPU support (the `gpu` feature)".to_owned(),
-            ));
-        }
+        Device::Cpu => cpu(),
+        Device::Gpu => gpu(),
+        Device::Auto => gpu().or_else(|e| {
+            tracing::info!(reason = %e, "the classifier runs on the CPU (no usable GPU)");
+            cpu()
+        }),
     }
     .map_err(|e| Fail(Exit::Config, format!("classifier in {}: {e} ({hint})", dir.display())))?;
+    tracing::info!(device = %classifier.info().device, "classifier loaded");
     let espeak = cfg.inference.espeak_data.clone();
     if !espeak.is_dir() {
         return Err(Fail(

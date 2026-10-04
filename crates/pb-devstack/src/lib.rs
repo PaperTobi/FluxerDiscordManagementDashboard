@@ -123,7 +123,7 @@ async fn prepare(opts: &Opts, fake: &FakeFluxer) -> Result<()> {
     let d = &opts.data;
     std::fs::create_dir_all(d)?;
     let config = format!(
-        "[web]\nbind = \"{}\"\nsite = \"{}\"\n\n[inference]\nweights = \"{}\"\nespeak_data = \"{}\"\nclips = \"{}\"\n",
+        "[web]\nbind = \"{}\"\nsite = \"{}\"\n\n[inference]\ndevice = \"cpu\"\nweights = \"{}\"\nespeak_data = \"{}\"\nclips = \"{}\"\n",
         opts.web,
         root.join("target/site").display(),
         opts.weights.display(),
