@@ -437,7 +437,7 @@ fn clip_row(c: ClipRow, v: &Viewer, loc: Locale) -> AnyView {
                     <input type="hidden" name="csrf" value=v.csrf.clone()/>
                     <input type="hidden" name="back" value="/voice-lines"/>
                     <input type="hidden" name="clip" value=hash.clone()/>
-                    <input name="name" value=r.name.clone()/>
+                    <input name="name" value=r.name.clone() required/>
                     <select name="lang">
                         <option value="" selected=lang.is_empty()>{text(loc, "ui-clip-no-speech", &[])}</option>
                         {language_list().into_iter().map(|l| {

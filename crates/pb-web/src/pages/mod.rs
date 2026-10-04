@@ -49,7 +49,7 @@ pub fn LoginNeeded() -> impl IntoView {
         <main class="center login">
             <h1>"Profanity Watch"</h1>
             <NoticeBar/>
-            <a class="button primary" href="/login">{t("ui-log-in")}</a>
+            <a class="button primary" href=crate::app::login_href()>{t("ui-log-in")}</a>
             <crate::app::SourceLink/>
         </main>
     }

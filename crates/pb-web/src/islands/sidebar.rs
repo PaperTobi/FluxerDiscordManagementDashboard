@@ -17,6 +17,9 @@ pub fn SidebarLive(initial: SidebarState, locale: Locale, current: String) -> im
     on_cleanup(move || w.stop());
     let current = StoredValue::new(current);
     view! {
+        <Show when=move || state.with(|s| s.communities.is_empty())>
+            <p class="muted small sidebar-hint">{text(locale, "ui-no-communities", &[])}</p>
+        </Show>
         <nav class="communities" aria-label=text(locale, "ui-nav-communities", &[])>
             <For each=move || state.get().communities key=content_key let:c>
                 {

@@ -206,6 +206,9 @@ pub async fn update(State(st): State<WebState>, headers: HeaderMap, Form(f): For
         return st.done(&s, &f, false, text(s.locale, "ui-clip-not-yours", &[]));
     }
     let name = field(&f, "name").map(str::trim).unwrap_or_default().to_owned();
+    if name.is_empty() {
+        return st.done(&s, &f, false, text(s.locale, "ui-clip-name-empty", &[]));
+    }
     let lang = field(&f, "lang").and_then(|l| l.parse::<Lang>().ok());
     let transcript = field(&f, "transcript").map(str::to_owned);
     match st.engine.update_clip(clip, name, lang, transcript, s.actor()).await {

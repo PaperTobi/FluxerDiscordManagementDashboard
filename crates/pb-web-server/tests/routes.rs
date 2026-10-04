@@ -22,9 +22,17 @@ async fn anonymous_visitors_get_the_login_page() {
     for path in PAGES.iter().copied().chain([community.as_str()]) {
         let p = w.get(path, None).await;
         assert_eq!(p.status, 200, "{path}");
-        assert!(p.body.contains("href=\"/login\""), "{path}: {}", p.body);
+        assert!(p.body.contains("href=\"/login"), "{path}: {}", p.body);
         assert!(!p.body.contains("class=\"sidebar\""), "{path} shows the app to nobody");
     }
+    // Logging in comes back to the page asked for.
+    let p = w.get(&format!("{community}?before=5"), None).await;
+    assert!(
+        p.body
+            .contains(&format!("href=\"/login?next=%2Fc%2F{G}%3Fbefore%3D5\"")),
+        "{}",
+        p.body
+    );
     assert_eq!(w.get("/no/such/page", None).await.status, 404);
     let h = w.get("/healthz", None).await;
     assert_eq!(h.status, 200);
@@ -1470,5 +1478,74 @@ async fn say_now_needs_a_call_and_plays_clips() {
     let preview = |lang: &str| format!("/media/preview?scope={scope}&line=greeting&lang={lang}");
     assert_eq!(w.get(&preview("de"), Some(&owner)).await.status, 200);
     assert_eq!(w.get(&preview("no%20language"), Some(&owner)).await.status, 404);
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn logging_in_returns_to_the_page_asked_for() {
+    let w = Web::start(true).await;
+    w.fake.log_in_browser(Some(OWNER));
+    let start = w.get(&format!("/login?next=%2Fc%2F{G}%2Fsettings"), None).await;
+    let oauth = start.cookie("pb_oauth").unwrap();
+    let at_fluxer = w.get(start.location.as_deref().unwrap(), None).await;
+    let back = w
+        .get(
+            at_fluxer.location.as_deref().unwrap(),
+            Some(&format!("pb_oauth={oauth}")),
+        )
+        .await;
+    assert_eq!(back.location.as_deref(), Some(format!("/c/{G}/settings").as_str()));
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn empty_pages_say_what_to_do_first() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let wall = w.get("/", Some(&owner)).await.body;
+    assert!(!wall.contains("first-step"), "Max is tracked: nothing to explain");
+    w.engine
+        .untrack(GuildId(G), &[UserId(MAX)], pb_store_api::Actor::system())
+        .await
+        .unwrap();
+    // The pages read the live state, which follows the change a moment later.
+    let shows = async |path: String, what: &str| {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let body = w.get(&path, Some(&owner)).await.body;
+            if body.contains(what) {
+                return;
+            }
+            assert!(std::time::Instant::now() < end, "{path} never showed {what:?}: {body}");
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    };
+    shows("/".into(), "Nobody is tracked yet.").await;
+    shows(format!("/c/{G}"), "!pb add @name").await;
+    let evidence = w.get(&format!("/c/{G}/p/{MAX}/evidence"), Some(&owner)).await.body;
+    assert!(evidence.contains("Settings → Recording"), "{evidence}");
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_clip_keeps_a_name() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let clip = upload_clip(&w, &owner, &csrf, "Calm down").await;
+    let r = w
+        .post(
+            "/clips/update",
+            Some(&owner),
+            &[
+                ("csrf", &csrf),
+                ("clip", &clip),
+                ("name", "  "),
+                ("back", "/voice-lines"),
+            ],
+        )
+        .await;
+    assert!(notice(&w, &owner, &r).await.contains("A clip needs a name."));
+    assert_eq!(w.engine.clip(&clip.parse().unwrap()).unwrap().name, "Calm down");
     w.stop().await;
 }

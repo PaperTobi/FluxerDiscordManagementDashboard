@@ -1,6 +1,8 @@
-//! Recording a clip in the browser (MediaRecorder): record, stop, and it is uploaded like a file. The browser only
-//! allows the microphone on https (or localhost); elsewhere this says so and the upload form remains.
+//! Recording a clip in the browser (MediaRecorder): name it, record, stop, and it is uploaded like a file (without a
+//! name it is called after the time it was made). The browser only allows the microphone on https (or localhost);
+//! elsewhere this says so and the upload form remains.
 
+use leptos::html::Input;
 use leptos::prelude::*;
 use pb_i18n::{Locale, text};
 
@@ -18,6 +20,7 @@ enum State {
 pub fn ClipRecorder(csrf: String, locale: Locale) -> impl IntoView {
     let state = RwSignal::new(State::Idle);
     let csrf = StoredValue::new(csrf);
+    let name: NodeRef<Input> = NodeRef::new();
     let t = move |id: &str| text(locale, id, &[]);
     // `data-ready` turns true once the recorder works in the browser (effects never run on the server). Browsers
     // only give the microphone to secure pages (https, or localhost).
@@ -37,7 +40,13 @@ pub fn ClipRecorder(csrf: String, locale: Locale) -> impl IntoView {
                 State::Recording => {
                     if let Some(s) = session.try_update_value(Option::take).flatten() {
                         state.set(State::Uploading);
-                        s.stop();
+                        let typed = name.get().map(|i| i.value()).unwrap_or_default();
+                        let named = if typed.trim().is_empty() {
+                            text(locale, "ui-record-default-name", &[("when", rec::now_local().into())])
+                        } else {
+                            typed.trim().to_owned()
+                        };
+                        s.stop(named);
                     }
                 }
                 State::Uploading => {}
@@ -66,10 +75,12 @@ pub fn ClipRecorder(csrf: String, locale: Locale) -> impl IntoView {
             }
         }
         #[cfg(not(feature = "hydrate"))]
-        let _ = (csrf, state);
+        let _ = (csrf, state, name);
     };
     view! {
         <div class="recorder row" data-ready=move || ready.get().to_string()>
+            <input node_ref=name placeholder=t("ui-clip-name") aria-label=t("ui-clip-name")
+                disabled=move || insecure.get() || state.get() == State::Uploading/>
             <button class="button" class:recording=move || state.get() == State::Recording on:click=toggle
                 disabled=move || insecure.get() || state.get() == State::Uploading>
                 {move || match state.get() {
@@ -118,6 +129,21 @@ mod rec {
     /// A recording in progress.
     pub struct Session {
         recorder: MediaRecorder,
+        /// The clip's name, given when it stops.
+        name: Rc<RefCell<String>>,
+    }
+
+    /// The local date and time (`2026-10-04 21:40`), for naming a recording.
+    pub fn now_local() -> String {
+        let d = js_sys::Date::new_0();
+        format!(
+            "{:04}-{:02}-{:02} {:02}:{:02}",
+            d.get_full_year(),
+            d.get_month() + 1,
+            d.get_date(),
+            d.get_hours(),
+            d.get_minutes()
+        )
     }
 
     impl Session {
@@ -154,6 +180,8 @@ mod rec {
             let on_data = Rc::new(RefCell::new(Some(on_data)));
             let rec = recorder.clone();
             let upload_words = words.clone();
+            let name: Rc<RefCell<String>> = Rc::default();
+            let named = name.clone();
             let on_stop = Closure::once_into_js(move || {
                 rec.set_ondataavailable(None);
                 drop(on_data.borrow_mut().take());
@@ -168,21 +196,30 @@ mod rec {
                     parts.push(b);
                 }
                 let kind = rec.mime_type();
+                let name = named.borrow().clone();
                 wasm_bindgen_futures::spawn_local(async move {
-                    done(upload(parts, kind, csrf, &upload_words).await);
+                    done(upload(parts, kind, csrf, name, &upload_words).await);
                 });
             });
             recorder.set_onstop(Some(on_stop.unchecked_ref()));
             recorder.start().map_err(js)?;
-            Ok(Session { recorder })
+            Ok(Session { recorder, name })
         }
 
-        pub fn stop(self) {
+        /// Stops recording; the clip is uploaded as `name`.
+        pub fn stop(self, name: String) {
+            *self.name.borrow_mut() = name;
             let _ = self.recorder.stop();
         }
     }
 
-    async fn upload(parts: js_sys::Array, kind: String, csrf: String, words: &Words) -> Result<(), String> {
+    async fn upload(
+        parts: js_sys::Array,
+        kind: String,
+        csrf: String,
+        name: String,
+        words: &Words,
+    ) -> Result<(), String> {
         let js = |e: wasm_bindgen::JsValue| js(&e).unwrap_or_else(|| words.refused.clone());
         let bag = web_sys::BlobPropertyBag::new();
         bag.set_type(&kind);
@@ -197,7 +234,7 @@ mod rec {
         let form = FormData::new().map_err(js)?;
         form.append_with_str("csrf", &csrf).map_err(js)?;
         form.append_with_str("back", "/voice-lines").map_err(js)?;
-        form.append_with_str("name", "").map_err(js)?;
+        form.append_with_str("name", &name).map_err(js)?;
         form.append_with_str("lang", "").map_err(js)?;
         form.append_with_blob_and_filename("file", &blob, &format!("recording.{ext}"))
             .map_err(js)?;

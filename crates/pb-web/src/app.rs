@@ -288,7 +288,7 @@ fn Page(children: Children) -> impl IntoView {
             <div class="banner offline-banner" role="status">{text(loc, "ui-offline", &[])}</div>
             <div class="overlay auth-overlay" role="alertdialog">
                 <p>{text(loc, "ui-auth-expired", &[])}</p>
-                <a class="button primary" href="/login">{text(loc, "ui-log-in-again", &[])}</a>
+                <a class="button primary" href=login_href()>{text(loc, "ui-log-in-again", &[])}</a>
             </div>
         </div>
     }
@@ -333,8 +333,23 @@ pub fn actions_anywhere() -> bool {
     tree.effective(None, None).actions_enabled.value || tree.known_guilds().into_iter().any(actions_in)
 }
 
-fn url_encode(s: &str) -> String {
+pub fn url_encode(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
+}
+
+/// The page being rendered, with its query (`/c/1?before=5`).
+pub fn here_with_query() -> String {
+    use_context::<http::request::Parts>()
+        .and_then(|p| p.uri.path_and_query().map(|pq| pq.as_str().to_owned()))
+        .unwrap_or_else(|| "/".into())
+}
+
+/// "Log in", coming back to this page afterwards.
+pub fn login_href() -> String {
+    match here_with_query().as_str() {
+        "/" => "/login".into(),
+        here => format!("/login?next={}", url_encode(here)),
+    }
 }
 
 /// The message the last form left, if any.
