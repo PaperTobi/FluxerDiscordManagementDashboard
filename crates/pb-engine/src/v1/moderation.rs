@@ -15,7 +15,7 @@ use pb_store_api::{CutCause, DecisionRecord, SentenceRecord, SentenceSource};
 use pb_voicelines::{Field, Fields, Line, Sel};
 
 use super::core::{Core, PlayItem, RoomHandle};
-use super::enforcer::Followup;
+use super::enforcer::{EnforcerMsg, Followup};
 use super::mailbox::Mailbox;
 use super::supervise::{ActorError, Life, Policy, Supervised};
 
@@ -44,6 +44,8 @@ pub enum ModMsg {
     Heard(Box<Heard>),
     /// The swear jar was emptied.
     JarReset(GuildId, UserId),
+    /// Answered once every sentence handed over before is decided.
+    Barrier(tokio::sync::oneshot::Sender<()>),
     /// A person's counts now (for their page).
     Counts(GuildId, UserId, tokio::sync::oneshot::Sender<pb_live_proto::Counts>),
 }
@@ -139,6 +141,9 @@ impl Supervised for Moderation {
                 ModMsg::Heard(h) => decide(&core, &mut self.decider, &mut self.violations, *h).await,
                 ModMsg::Counts(g, u, reply) => {
                     let _ = reply.send(counts(&core, &self.violations, g, u));
+                }
+                ModMsg::Barrier(done) => {
+                    let _ = done.send(());
                 }
             }
         }
@@ -409,7 +414,7 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
             heard: language,
             wav,
         };
-        if core.enforcer.send(followup).is_err() {
+        if core.enforcer.send(EnforcerMsg::Follow(Box::new(followup))).is_err() {
             tracing::error!("the action and reports for a flagged sentence were dropped: the enforcer has stopped");
         }
     }

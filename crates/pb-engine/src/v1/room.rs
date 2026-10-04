@@ -12,7 +12,7 @@ use pb_i18n::{Locale, text};
 use pb_infer::SpeakPriority;
 use pb_live_proto::{Activity, PersonDelta};
 use pb_policy::Chan;
-use pb_segment::EchoGuard;
+use pb_segment::{EchoGuard, FlushReason};
 use pb_settings::NoSpeakPolicy;
 use pb_store_api::{Event, PlayOutcome, PlayRecord};
 use pb_voice_api::{
@@ -20,7 +20,7 @@ use pb_voice_api::{
     VoiceRoom,
 };
 use pb_voicelines::{Fields, Line};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 
 use super::control::ControlMsg;
 use super::core::{Core, PlayItem, RoomCmd, RoomHandle};
@@ -33,8 +33,16 @@ const NARROW_PAD_MS: usize = 350;
 
 struct TrackRun {
     user: UserId,
-    stop: watch::Sender<bool>,
+    stop: watch::Sender<Option<FlushReason>>,
     muted: watch::Sender<bool>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+/// What the playback task gets.
+enum PlaybackMsg {
+    Play(Box<PlayItem>),
+    /// Answered once everything queued before is done.
+    Drained(oneshot::Sender<()>),
 }
 
 /// A microphone subscription that finished (subscribing waits for the server and runs beside the room's loop).
@@ -56,7 +64,9 @@ struct Room {
     subscribed: mpsc::UnboundedSender<Subscribed>,
     echo: Arc<Mutex<EchoGuard>>,
     greeted: BTreeSet<UserId>,
-    play: mpsc::UnboundedSender<PlayItem>,
+    play: mpsc::UnboundedSender<PlaybackMsg>,
+    /// The bot stops: nobody new is listened to.
+    stopping: bool,
 }
 
 /// Starts a room task.
@@ -123,7 +133,7 @@ async fn run(
             .map(|p| (p.identity.clone(), p))
             .collect(),
     ));
-    let (play_tx, play_rx) = mpsc::unbounded_channel::<PlayItem>();
+    let (play_tx, play_rx) = mpsc::unbounded_channel::<PlaybackMsg>();
     let playback = tokio::spawn(playback(
         core.clone(),
         chan,
@@ -145,13 +155,14 @@ async fn run(
         echo: echo.clone(),
         greeted: BTreeSet::new(),
         play: play_tx.clone(),
+        stopping: false,
     };
     let mut settings = core.settings.watch();
     r.reconcile().await;
-    let reason = loop {
+    let (reason, closed) = loop {
         tokio::select! {
             ev = events.recv() => {
-                let Some(ev) = ev else { break "the room closed".to_owned() };
+                let Some(ev) = ev else { break ("the room closed".to_owned(), None) };
                 match ev {
                     RoomEvent::ParticipantJoined(p) => {
                         if let Ok(mut ps) = participants.lock() {
@@ -176,7 +187,7 @@ async fn run(
                                 p.audio.retain(|a| a.key != key);
                             }
                         if let Some(t) = r.tracks.remove(&key) {
-                            let _ = t.stop.send(true);
+                            let _ = t.stop.send(Some(FlushReason::Close));
                             core.set_listening(chan.guild, t.user, false);
                         }
                     }
@@ -195,22 +206,41 @@ async fn run(
                         continue;
                     }
                     RoomEvent::Reconnected => continue,
-                    RoomEvent::Disconnected { reason } => break reason,
+                    RoomEvent::Disconnected { reason } => break (reason, None),
                 }
                 r.reconcile().await;
             }
             Some(s) = subscribed.recv() => r.on_subscribed(s),
             cmd = rx.recv() => match cmd {
-                None | Some(RoomCmd::Close) => break String::new(),
+                None => break (String::new(), None),
+                Some(RoomCmd::Close(done)) => break (String::new(), done),
                 Some(RoomCmd::Play(item)) => {
-                    let _ = play_tx.send(*item);
+                    let _ = play_tx.send(PlaybackMsg::Play(item));
+                }
+                Some(RoomCmd::Flush(done)) => {
+                    r.stopping = true;
+                    let tracks: Vec<TrackRun> = r.tracks.drain().map(|(_, t)| t).collect();
+                    for t in &tracks {
+                        let _ = t.stop.send(Some(FlushReason::End));
+                        core.set_listening(chan.guild, t.user, false);
+                    }
+                    // Awaited beside the loop (the room keeps playing meanwhile).
+                    tokio::spawn(async move {
+                        for t in tracks {
+                            let _ = t.task.await;
+                        }
+                        let _ = done.send(());
+                    });
+                }
+                Some(RoomCmd::Drain(done)) => {
+                    let _ = play_tx.send(PlaybackMsg::Drained(done));
                 }
             },
             _ = settings.changed() => r.reconcile().await,
         }
     };
     for (_, t) in r.tracks.drain() {
-        let _ = t.stop.send(true);
+        let _ = t.stop.send(Some(FlushReason::Close));
         core.set_listening(chan.guild, t.user, false);
     }
     if let Ok(mut sp) = core.speaking.lock() {
@@ -224,6 +254,9 @@ async fn run(
     if !reason.is_empty() {
         tracing::info!(?chan, reason, "left the voice room");
         let _ = control.send(ControlMsg::RoomDown { chan, reason });
+    }
+    if let Some(done) = closed {
+        let _ = done.send(());
     }
 }
 
@@ -263,7 +296,7 @@ impl Room {
         let gone: Vec<TrackKey> = self.tracks.keys().filter(|k| !want.contains_key(*k)).cloned().collect();
         for k in gone {
             if let Some(t) = self.tracks.remove(&k) {
-                let _ = t.stop.send(true);
+                let _ = t.stop.send(Some(FlushReason::Close));
                 self.core.set_listening(chan.guild, t.user, false);
                 let room = self.room.clone();
                 tokio::spawn(async move {
@@ -273,7 +306,7 @@ impl Room {
             }
         }
         for (key, (user, _)) in want {
-            if self.tracks.contains_key(&key) || !self.subscribing.insert(key.clone()) {
+            if self.stopping || self.tracks.contains_key(&key) || !self.subscribing.insert(key.clone()) {
                 continue;
             }
             let (room, done) = (self.room.clone(), self.subscribed.clone());
@@ -301,7 +334,7 @@ impl Room {
         };
         let (want, _) = self.wanted();
         let muted = want.get(&s.key).map(|(_, m)| *m);
-        let Some(muted) = muted.filter(|_| !self.tracks.contains_key(&s.key)) else {
+        let Some(muted) = muted.filter(|_| !self.stopping && !self.tracks.contains_key(&s.key)) else {
             // No longer wanted while subscribing.
             let room = self.room.clone();
             tokio::spawn(async move {
@@ -310,7 +343,7 @@ impl Room {
             return;
         };
         let user = s.user;
-        let (stop_tx, stop_rx) = watch::channel(false);
+        let (stop_tx, stop_rx) = watch::channel(None);
         let (muted_tx, muted_rx) = watch::channel(muted);
         let spec = TrackSpec {
             chan,
@@ -321,7 +354,7 @@ impl Room {
             muted: muted_rx,
             stop: stop_rx,
         };
-        tokio::spawn(track::run(core.clone(), spec));
+        let task = tokio::spawn(track::run(core.clone(), spec));
         core.set_listening(chan.guild, user, true);
         tracing::info!(?chan, %user, "listening");
         let eff = core.settings.current().effective(Some(chan.guild), Some(user));
@@ -337,7 +370,7 @@ impl Room {
         core.live.ensure_person(chan.guild, who, super::live::summary(&eff));
         tokio::spawn(super::speak::prerender(core.clone(), chan.guild, user));
         if self.greeted.insert(user) && eff.greet_enabled.value {
-            let _ = self.play.send(PlayItem {
+            let _ = self.play.send(PlaybackMsg::Play(Box::new(PlayItem {
                 line: Line::Greeting,
                 person: Some(user),
                 audience: Audience::Offender,
@@ -350,7 +383,7 @@ impl Room {
                 heard: None,
                 label: None,
                 done: None,
-            });
+            })));
         }
         self.tracks.insert(
             s.key,
@@ -358,6 +391,7 @@ impl Room {
                 user,
                 stop: stop_tx,
                 muted: muted_tx,
+                task,
             },
         );
     }
@@ -379,9 +413,16 @@ async fn playback(
     mut out: Option<Box<dyn AudioOut>>,
     echo: Arc<Mutex<EchoGuard>>,
     participants: Arc<Mutex<BTreeMap<Identity, Participant>>>,
-    mut rx: mpsc::UnboundedReceiver<PlayItem>,
+    mut rx: mpsc::UnboundedReceiver<PlaybackMsg>,
 ) {
-    while let Some(mut item) = rx.recv().await {
+    while let Some(msg) = rx.recv().await {
+        let mut item = match msg {
+            PlaybackMsg::Play(item) => *item,
+            PlaybackMsg::Drained(done) => {
+                let _ = done.send(());
+                continue;
+            }
+        };
         let started = core.deps.clock.now();
         let id = pb_domain::SentenceId::new();
         let mut record = PlayRecord {

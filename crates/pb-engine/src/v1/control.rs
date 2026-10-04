@@ -12,7 +12,7 @@ use pb_policy::{Action, Burst, Chan, FollowCfg, FollowMachine, GrantInfo, desire
 use pb_store_api::{CommunitySeen, Event, PersonSeen};
 use tokio::sync::mpsc;
 
-use super::core::{Core, RoomCmd};
+use super::core::{Core, Phase, RoomCmd};
 
 /// After the gateway was down or resumed, a vanished own voice state is not counted as a moderator's removal.
 const UNSTABLE_S: f64 = 90.0;
@@ -82,6 +82,8 @@ pub async fn run(
         blocked: BTreeSet::new(),
     };
     let mut settings = core.settings.watch();
+    let mut phase = core.phase.subscribe();
+    let mut leaving = false;
     let end = loop {
         let now = core.deps.clock.mono();
         let wake = s.machine.next_deadline().map_or(TICK, |d| {
@@ -112,16 +114,34 @@ pub async fn run(
                 s.machine.cfg = follow_cfg(&core);
                 core.mark_all();
             }
+            Ok(()) = async { phase.wait_for(|p| *p == Phase::Leaving).await.map(drop) }, if !leaving => {
+                leaving = true;
+                break SessionEnd::Closed;
+            }
             () = tokio::time::sleep(wake) => {}
         }
         s.step();
     };
-    // Leave every room (voice connections end with the session anyway).
+    // Leave every room. At shutdown the gateway is still open: the leaves are sent and the rooms closed before the
+    // session ends (otherwise voice connections end with the session anyway).
     let acts = s.machine.shutdown(core.deps.clock.mono());
-    s.exec(acts);
+    if leaving {
+        s.leave(acts).await;
+    } else {
+        s.exec(acts);
+    }
+    let mut closed = Vec::new();
     for r in core.rooms() {
-        let _ = r.tx.send(RoomCmd::Close);
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        if r.tx.send(RoomCmd::Close(Some(tx))).is_ok() {
+            closed.push(rx);
+        }
         core.set_room(r.chan, None);
+    }
+    if leaving {
+        for rx in closed {
+            let _ = rx.await;
+        }
     }
     end
 }
@@ -253,7 +273,7 @@ impl Session {
                 let acts = self.machine.on_grant(now, &info);
                 self.exec(acts);
             }
-            GatewayEvent::Message(m) => {
+            GatewayEvent::Message(m) if core.running() => {
                 let core2 = core.clone();
                 let m = m.clone();
                 tokio::spawn(async move { super::commands::on_message(&core2, &m).await });
@@ -296,9 +316,13 @@ impl Session {
             }
         }
         self.blocked.retain(|c| blocked.contains(c));
-        let mut acts = self
-            .machine
-            .reconcile(now, &desired, &own, &stale, now >= self.unstable_until, &unavailable);
+        // While the bot stops it joins nothing new (and leaves at the end).
+        let mut acts = if core.running() {
+            self.machine
+                .reconcile(now, &desired, &own, &stale, now >= self.unstable_until, &unavailable)
+        } else {
+            Vec::new()
+        };
         acts.extend(self.machine.on_tick(now));
         self.exec(acts);
         let conns: std::collections::BTreeMap<Chan, pb_live_proto::BotJoin> =
@@ -316,6 +340,29 @@ impl Session {
             if self.presence.as_ref() != Some(&text) {
                 self.ctl.presence(Some(text.clone()));
                 self.presence = Some(text);
+            }
+        }
+    }
+
+    /// At shutdown: sends the leaves and waits for Fluxer to take them (a few tries; the caller bounds the time).
+    async fn leave(&mut self, acts: Vec<Action>) {
+        for a in acts {
+            if let Action::VoiceState {
+                guild,
+                channel: None,
+                connection: Some(connection),
+            } = a
+            {
+                let op = VoiceStateOp::Leave { guild, connection };
+                for i in 0..3 {
+                    match self.ctl.voice_state(op.clone()).await {
+                        Ok(()) => break,
+                        Err(e) if i == 2 => tracing::warn!(error = %e, ?op, "could not leave a voice channel"),
+                        Err(_) => tokio::time::sleep(Duration::from_millis(500)).await,
+                    }
+                }
+            } else {
+                self.exec(vec![a]);
             }
         }
     }
@@ -369,7 +416,7 @@ impl Session {
                 }
                 Action::Close { chan } => {
                     if let Some(r) = self.core.room(chan) {
-                        let _ = r.tx.send(RoomCmd::Close);
+                        let _ = r.tx.send(RoomCmd::Close(None));
                     }
                     self.core.set_room(chan, None);
                 }

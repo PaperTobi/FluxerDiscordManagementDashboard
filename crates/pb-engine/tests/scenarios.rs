@@ -642,7 +642,6 @@ async fn shutdown_records_stopped_last() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "fixed by step 21 of proposal 0004"]
 async fn shutdown_finishes_speech_leaves_voice_then_records_stopped() {
     let rig = Rig::start(Setup::default()).await;
     let mic = rig.alice_joins().await;

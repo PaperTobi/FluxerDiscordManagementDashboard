@@ -32,6 +32,25 @@ pub enum Priority {
     Live = 2,
 }
 
+/// How a classification is scheduled: its priority, when its answer stops being useful (it is still done after that,
+/// behind the jobs that can still be on time), and its flow (one person's jobs are done in the order they came).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Job {
+    pub priority: Priority,
+    pub deadline: Option<Instant>,
+    pub flow: Option<u64>,
+}
+
+impl From<Priority> for Job {
+    fn from(priority: Priority) -> Job {
+        Job {
+            priority,
+            deadline: None,
+            flow: None,
+        }
+    }
+}
+
 /// Who waits for speech.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SpeakPriority {
@@ -543,9 +562,15 @@ impl Inference {
 
     /// Scores 16 kHz speech (longer than 30 s in 30 s windows: the highest score of each type, languages weighted by
     /// window length).
-    pub async fn classify(&self, pcm: Arc<[f32]>, prio: Priority) -> Result<Scored, InferError> {
+    pub async fn classify(&self, pcm: Arc<[f32]>, job: impl Into<Job>) -> Result<Scored, InferError> {
+        let job = job.into();
         let (reply, rx) = oneshot::channel();
-        if !self.inner.clf.push(prio as u8, ClfJob::Classify { pcm, reply }) {
+        if !self.inner.clf.push_job(
+            job.priority as u8,
+            job.deadline,
+            job.flow,
+            ClfJob::Classify { pcm, reply },
+        ) {
             return Err(InferError::Stopped);
         }
         rx.await.map_err(|_| InferError::Stopped)?

@@ -9,6 +9,7 @@ use bytes::Bytes;
 use pb_domain::{ClfLang, GuildId, UserId};
 use pb_settings::EscalationStep;
 use pb_store_api::SentenceRecord;
+use tokio::sync::oneshot;
 use tokio::task::{Id, JoinSet};
 
 use super::core::{Core, RoomHandle};
@@ -28,17 +29,24 @@ pub(crate) struct Followup {
 
 type Person = (GuildId, UserId);
 
+pub(crate) enum EnforcerMsg {
+    Follow(Box<Followup>),
+    /// Answered once nothing waits or runs any more.
+    Drain(oneshot::Sender<()>),
+}
+
 pub(crate) struct Enforcer {
     /// Waiting per person (not counting the one being done).
     waiting: HashMap<Person, VecDeque<Followup>>,
     /// Who each running job is for.
     running: HashMap<Id, Person>,
     jobs: JoinSet<Person>,
+    drains: Vec<oneshot::Sender<()>>,
 }
 
 impl Supervised for Enforcer {
     type Ctx = Arc<Core>;
-    type Msg = Followup;
+    type Msg = EnforcerMsg;
     const NAME: &'static str = "enforcer";
     const POLICY: Policy = Policy::Restart;
 
@@ -47,18 +55,25 @@ impl Supervised for Enforcer {
             waiting: HashMap::new(),
             running: HashMap::new(),
             jobs: JoinSet::new(),
+            drains: Vec::new(),
         })
     }
 
-    async fn run(mut self, core: Arc<Core>, mb: &mut Mailbox<Followup>, life: Life) -> Result<(), ActorError> {
+    async fn run(mut self, core: Arc<Core>, mb: &mut Mailbox<EnforcerMsg>, life: Life) -> Result<(), ActorError> {
         loop {
             tokio::select! {
                 m = mb.recv() => match m {
-                    Some(f) => self.add(&core, f),
+                    Some(EnforcerMsg::Follow(f)) => self.add(&core, *f),
+                    Some(EnforcerMsg::Drain(done)) => self.drains.push(done),
                     None => break,
                 },
                 Some(done) = self.jobs.join_next_with_id() => self.done(&core, done),
                 () = life.cancel.cancelled() => break,
+            }
+            if self.running.is_empty() {
+                for d in self.drains.drain(..) {
+                    let _ = d.send(());
+                }
             }
         }
         // What runs is finished (an action half done helps nobody); what waits is not started any more.

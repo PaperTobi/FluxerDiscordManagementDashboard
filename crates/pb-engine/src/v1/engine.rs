@@ -19,15 +19,15 @@ use tokio::sync::{oneshot, watch};
 use super::actions::Undo;
 use super::cells::Views;
 use super::control::{self, SessionEnd};
-use super::core::{Connection, Core, Login, PlayItem, Snapshot};
+use super::core::{Connection, Core, Login, Phase, PlayItem, RoomCmd, Snapshot};
 use super::deps::Deps;
-use super::enforcer::Enforcer;
+use super::enforcer::{Enforcer, EnforcerMsg};
 use super::error::EngineError;
 use super::guilds::Guilds;
 use super::health::{ActorHealth, ActorState, EngineHealth, FatalError};
 use super::live::Live;
 use super::mailbox::{Mailbox, mailbox};
-use super::moderation::Moderation;
+use super::moderation::{ModMsg, Moderation};
 use super::recorder::{Recorder, Storage, Writer};
 use super::reports::DigestTimer;
 use super::settings::SettingsService;
@@ -85,7 +85,7 @@ impl Engine {
             recorder: Recorder::new(rec_tx),
             sup: Supervisor::default(),
             restart: watch::Sender::new(0),
-            stop: watch::Sender::new(false),
+            phase: watch::Sender::new(Phase::Running),
             started: deps.clock.now(),
             deps,
         });
@@ -524,21 +524,56 @@ impl Engine {
         self.core.record_durably(events).await
     }
 
-    /// Stops: leaves voice, closes the gateway, records the stop, ends the actors.
+    /// Stops in order: no new calls, microphones or commands; open speech is cut and every sentence scored and
+    /// decided; what was queued is said (or recorded as not said) and actions and reports finish; the bot leaves
+    /// voice while the gateway is still open, closes the rooms and the gateway; `Stopped` is recorded last and the log
+    /// is written out. Each step has a deadline (about 17 s together); a step that runs out makes the stop unclean.
     pub async fn shutdown(&self) {
-        self.core.stop.send_replace(true);
-        let clean = tokio::time::timeout(Duration::from_secs(10), self.core.sup.ended(Gateway::NAME))
-            .await
-            .is_ok();
-        self.core.record_durably(vec![Event::Stopped(Stopped { clean })]).await;
-        self.core.sup.stop(Duration::from_secs(5)).await;
+        use futures::future::join_all;
+        let core = &self.core;
+        if !core
+            .phase
+            .send_if_modified(|p| std::mem::replace(p, Phase::Stopping) == Phase::Running)
+        {
+            return;
+        }
+        let ask = |cmd: fn(oneshot::Sender<()>) -> RoomCmd| {
+            let asked: Vec<_> = core
+                .rooms()
+                .iter()
+                .filter_map(|r| {
+                    let (tx, rx) = oneshot::channel();
+                    r.tx.send(cmd(tx)).ok().map(|()| rx)
+                })
+                .collect();
+            join_all(asked)
+        };
+        let mut clean = within(4, ask(RoomCmd::Flush)).await;
+        let (tx, rx) = oneshot::channel();
+        let _ = core.moderation.send(ModMsg::Barrier(tx));
+        clean &= within(1, rx).await;
+        let (tx, rx) = oneshot::channel();
+        let _ = core.enforcer.send(EnforcerMsg::Drain(tx));
+        clean &= within(5, futures::future::join(ask(RoomCmd::Drain), rx)).await;
+        core.phase.send_replace(Phase::Leaving);
+        clean &= within(5, core.sup.ended(Gateway::NAME)).await;
+        if !clean {
+            tracing::warn!("some of the work in hand did not finish before its deadline");
+        }
+        core.record_durably(vec![Event::Stopped(Stopped { clean })]).await;
+        core.sup.stop(Duration::from_secs(2)).await;
     }
+}
+
+/// Whether `f` finished within `secs` seconds.
+async fn within(secs: u64, f: impl std::future::Future) -> bool {
+    tokio::time::timeout(Duration::from_secs(secs), f).await.is_ok()
 }
 
 /// Keeps one Fluxer session running (see [`keep_session`]).
 struct Gateway {
     restart: watch::Receiver<u64>,
-    stop: watch::Receiver<bool>,
+    phase: watch::Receiver<Phase>,
 }
 
 impl Supervised for Gateway {
@@ -552,12 +587,12 @@ impl Supervised for Gateway {
         core.set_ctl(None);
         Ok(Gateway {
             restart: core.restart.subscribe(),
-            stop: core.stop.subscribe(),
+            phase: core.phase.subscribe(),
         })
     }
 
     async fn run(self, core: Arc<Core>, _: &mut Mailbox<Infallible>, _: Life) -> Result<(), ActorError> {
-        keep_session(core, self.restart, self.stop).await;
+        keep_session(core, self.restart, self.phase).await;
         Ok(())
     }
 }
@@ -722,10 +757,10 @@ fn set(core: &Core, c: Connection) {
 }
 
 /// Keeps one Fluxer session running: no token → wait; bad token → wait for a new one; unreachable → try again.
-async fn keep_session(core: Arc<Core>, mut restart: watch::Receiver<u64>, mut stop: watch::Receiver<bool>) {
+async fn keep_session(core: Arc<Core>, mut restart: watch::Receiver<u64>, mut stop: watch::Receiver<Phase>) {
     let mut failures = 0u32;
     loop {
-        if *stop.borrow() {
+        if *stop.borrow() == Phase::Leaving {
             return;
         }
         // Every state set from here on answers the restart requests seen so far.
@@ -735,7 +770,7 @@ async fn keep_session(core: Arc<Core>, mut restart: watch::Receiver<u64>, mut st
             l.attempt = answering;
         });
         // Waits for a restart request or the stop (`true` = stop).
-        let wait = |restart: &mut watch::Receiver<u64>, stop: &mut watch::Receiver<bool>, d: Option<Duration>| {
+        let wait = |restart: &mut watch::Receiver<u64>, stop: &mut watch::Receiver<Phase>, d: Option<Duration>| {
             let (mut r, mut s) = (restart.clone(), stop.clone());
             async move {
                 let sleep = async {
@@ -746,7 +781,7 @@ async fn keep_session(core: Arc<Core>, mut restart: watch::Receiver<u64>, mut st
                 };
                 tokio::select! {
                     _ = r.changed() => false,
-                    _ = s.changed() => true,
+                    Ok(()) = async { s.wait_for(|p| *p == Phase::Leaving).await.map(drop) } => true,
                     () = sleep => false,
                 }
             }
@@ -836,9 +871,10 @@ async fn keep_session(core: Arc<Core>, mut restart: watch::Receiver<u64>, mut st
                     ctl.close().await;
                     break None;
                 }
-                _ = stop.changed() => {
+                Ok(()) = async { stop.wait_for(|p| *p == Phase::Leaving).await.map(drop) } => {
+                    // The session leaves voice and closes its rooms while the gateway is still open.
+                    let _ = (&mut session).await;
                     ctl.close().await;
-                    let _ = tokio::time::timeout(Duration::from_secs(5), &mut session).await;
                     core.set_ctl(None);
                     return;
                 }

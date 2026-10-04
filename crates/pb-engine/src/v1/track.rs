@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use jiff::Timestamp;
-use pb_domain::{SentenceId, UserId};
-use pb_infer::Priority;
+use pb_domain::{GuildId, SentenceId, UserId};
+use pb_infer::{InferError, Job, Priority, Scored};
 use pb_live_proto::{CutWhy, DropWhy, LevelFrame, LevelRun, SentenceCard, Stamps};
 use pb_models_api::FRAME;
 use pb_policy::Chan;
@@ -16,7 +16,7 @@ use pb_segment::{
 };
 use pb_store_api::CutCause;
 use pb_voice_api::{AudioIn, LISTEN_RATE};
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 
 use super::core::{Core, RoomHandle};
 use super::moderation::{Heard, ModMsg};
@@ -58,7 +58,8 @@ pub struct TrackSpec {
     pub audio: AudioIn,
     pub echo: Arc<Mutex<EchoGuard>>,
     pub muted: watch::Receiver<bool>,
-    pub stop: watch::Receiver<bool>,
+    /// Set when listening ends, with why (`Close`: the person left or is no longer tracked; `End`: the bot stops).
+    pub stop: watch::Receiver<Option<FlushReason>>,
 }
 
 struct Open {
@@ -98,13 +99,15 @@ pub async fn run(core: Arc<Core>, mut spec: TrackSpec) {
     let mut reconfigure = false;
     let mut tick = tokio::time::interval(Duration::from_millis(250));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let (jobs, queued) = mpsc::unbounded_channel();
+    let scorer = tokio::spawn(score(core.clone(), g, u, queued));
     loop {
         let mut events: Vec<SegEvent> = Vec::new();
         tokio::select! {
             chunk = spec.audio.recv() => {
                 let Some(chunk) = chunk else {
                     events.extend(seg.flush(i64::try_from(ring.end()).unwrap_or(i64::MAX), FlushReason::Disconnect));
-                    handle(&core, &spec, &mut ring, &mut open, events, last_mono).await;
+                    handle(&core, &spec, &jobs, &mut ring, &mut open, events, last_mono);
                     break;
                 };
                 last_mono = core.deps.clock.mono();
@@ -157,12 +160,13 @@ pub async fn run(core: Arc<Core>, mut spec: TrackSpec) {
                 }
             }
             _ = spec.stop.changed() => {
-                events.extend(seg.flush(i64::try_from(ring.end()).unwrap_or(i64::MAX), FlushReason::Close));
-                handle(&core, &spec, &mut ring, &mut open, events, last_mono).await;
+                let why = (*spec.stop.borrow()).unwrap_or(FlushReason::Close);
+                events.extend(seg.flush(i64::try_from(ring.end()).unwrap_or(i64::MAX), why));
+                handle(&core, &spec, &jobs, &mut ring, &mut open, events, last_mono);
                 break;
             }
         }
-        handle(&core, &spec, &mut ring, &mut open, events, last_mono).await;
+        handle(&core, &spec, &jobs, &mut ring, &mut open, events, last_mono);
         // New timing settings apply at the next pause (a sentence is never cut by a settings change).
         if reconfigure && seg.state() == pb_segment::SegState::Idle {
             seg.reconfigure(cfg.clone());
@@ -171,11 +175,41 @@ pub async fn run(core: Arc<Core>, mut spec: TrackSpec) {
         let keep = u64::try_from(seg.earliest_needed().max(0)).unwrap_or(0);
         ring.forget_before(keep.saturating_sub(u64::from(LISTEN_RATE)));
     }
+    // The sentences cut so far are still scored and decided.
+    drop(jobs);
+    let _ = scorer.await;
 }
 
-async fn handle(
+/// A cut sentence on its way to the classifier.
+struct ScoreJob {
+    pcm: Arc<[f32]>,
+    /// The conveyor card so far.
+    card: SentenceCard,
+    /// When a verdict stops being useful for a warning (it is still scored and recorded after that).
+    deadline: Option<std::time::Instant>,
+    heard: Box<dyn FnOnce(Result<Scored, InferError>, Stamps) -> Heard + Send>,
+}
+
+/// Scores a track's sentences one after another and hands each to moderation, in the order they were said.
+async fn score(core: Arc<Core>, g: GuildId, u: UserId, mut jobs: mpsc::UnboundedReceiver<ScoreJob>) {
+    while let Some(j) = jobs.recv().await {
+        let mut stamps = j.card.stamps;
+        stamps.scoring = Some(ms(core.deps.clock.now()));
+        core.live.sentence(g, u, &SentenceCard { stamps, ..j.card });
+        let job = Job {
+            priority: Priority::Live,
+            deadline: j.deadline,
+            flow: Some(u.get()),
+        };
+        let scored = core.deps.inference.classify(j.pcm, job).await;
+        let _ = core.moderation.send(ModMsg::Heard(Box::new((j.heard)(scored, stamps))));
+    }
+}
+
+fn handle(
     core: &Arc<Core>,
     spec: &TrackSpec,
+    jobs: &mpsc::UnboundedSender<ScoreJob>,
     ring: &mut PcmRing,
     open: &mut std::collections::HashMap<u64, Open>,
     events: Vec<SegEvent>,
@@ -268,25 +302,27 @@ async fn handle(
                 core.live.sentence(g, u, &partial);
                 let started = Timestamp::from_millisecond(card.stamps.opened).unwrap_or(now);
                 let cut_mono = core.deps.clock.mono();
-                let core2 = core.clone();
                 let room = spec.room.clone();
                 let chan = spec.chan;
-                // Scored in its own task, so listening goes on; the classifier queue keeps the order.
-                tokio::spawn(async move {
-                    let mut stamps = card.stamps;
-                    stamps.scoring = Some(ms(core2.deps.clock.now()));
-                    core2.live.sentence(
-                        g,
-                        u,
-                        &SentenceCard {
-                            stamps,
-                            ..partial.clone()
-                        },
-                    );
-                    let scored = core2.deps.inference.classify(x.clone(), Priority::Live).await;
-                    let heard = Heard {
-                        id: card.id,
-                        no: card.no,
+                let deadline = core
+                    .settings
+                    .current()
+                    .effective(Some(g), Some(u))
+                    .max_reaction_delay
+                    .value
+                    .value()
+                    .map(|d| std::time::Instant::now() + Duration::from_secs_f64(d.get().secs()));
+                let (id, no, pcm) = (card.id, card.no, x.clone());
+                let _ = jobs.send(ScoreJob {
+                    pcm: x,
+                    card: SentenceCard {
+                        stamps: card.stamps,
+                        ..partial
+                    },
+                    deadline,
+                    heard: Box::new(move |scored, stamps| Heard {
+                        id,
+                        no,
                         chan,
                         user: u,
                         room,
@@ -295,12 +331,11 @@ async fn handle(
                         level_db,
                         cut: cause,
                         cut_why: why,
-                        pcm: x,
+                        pcm,
                         scored,
                         cut_mono,
                         stamps,
-                    };
-                    let _ = core2.moderation.send(ModMsg::Heard(Box::new(heard)));
+                    }),
                 });
             }
         }

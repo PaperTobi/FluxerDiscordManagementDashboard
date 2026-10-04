@@ -87,7 +87,7 @@ pub enum FlushReason {
     Mute,
     /// The track ended (the bot left the call or stops).
     Close,
-    /// The input ended (a recording played through).
+    /// The input ended (a recording played through, or the bot stops).
     End,
 }
 

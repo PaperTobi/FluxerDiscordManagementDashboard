@@ -42,11 +42,32 @@ pub struct PlayItem {
     pub done: Option<oneshot::Sender<PlayRecord>>,
 }
 
+/// How far the engine is in shutting down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Phase {
+    Running,
+    /// No new calls, microphones or chat commands; what was heard is still decided, said and reported.
+    Stopping,
+    /// Leave voice while the gateway is still open, close the rooms, then the gateway.
+    Leaving,
+}
+
+impl Core {
+    pub(super) fn running(&self) -> bool {
+        *self.phase.borrow() == Phase::Running
+    }
+}
+
 /// Commands to a room.
 #[derive(Debug)]
 pub enum RoomCmd {
     Play(Box<PlayItem>),
-    Close,
+    /// Shutdown: stop listening, cut open speech and wait until every sentence is scored and handed on.
+    Flush(oneshot::Sender<()>),
+    /// Shutdown: wait until everything queued was said (or recorded as not said).
+    Drain(oneshot::Sender<()>),
+    /// Leave the room (answered once it is closed).
+    Close(Option<oneshot::Sender<()>>),
 }
 
 /// The way to a room.
@@ -115,7 +136,7 @@ pub struct Core {
     /// Timed mutes to lift (to the undo scheduler).
     pub undo: Addr<pb_store_api::ActionRecord>,
     /// Actions and reports for flagged sentences.
-    pub(super) enforcer: Addr<super::enforcer::Followup>,
+    pub(super) enforcer: Addr<super::enforcer::EnforcerMsg>,
     /// The clip played last per person and line (not repeated next time).
     pub no_repeat: Mutex<pb_voicelines::NoRepeat>,
     /// People whose microphone the bot listens to now.
@@ -138,8 +159,8 @@ pub struct Core {
     pub(super) sup: Supervisor,
     /// Asks the gateway actor to log in again (the attempt number).
     pub(super) restart: watch::Sender<u64>,
-    /// Tells the gateway actor to stop.
-    pub(super) stop: watch::Sender<bool>,
+    /// Running, or how far shutting down got.
+    pub(super) phase: watch::Sender<Phase>,
     pub(super) started: jiff::Timestamp,
 }
 
