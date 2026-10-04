@@ -71,6 +71,7 @@ bot*).
 - [Cheat Sheet](#cheat-sheet)
 - [Wellness Checklist](#wellness-checklist)
 - [Countdown To Release](#countdown-to-release)
+- [The Diss Track](#the-diss-track)
 - [Rants, Hot Takes And Holy Wars](#rants-hot-takes-and-holy-wars)
 - [More Real Numbers](#more-real-numbers)
 - [Mailing List Mode](#mailing-list-mode)
@@ -86,7 +87,7 @@ bot*).
 ## Requirements
 
 > 🧠 **Repo fact:** the build wants 8 GB of RAM and 25 GB of disk because LiveKit's libwebrtc is built against Chromium's libc++. Your 32 crates barely register. Chromium is out there somewhere, laughing, in 400 MB chunks. 🧊
-> Requirement #0, unlisted: Linux. Windows users may press `Alt+F4` now. 🪟🔫
+> Requirement #0, unlisted: Linux. Windows users may press `Alt+F4` now. 🪟🔫 macOS users may continue, after buying one (1) adapter.
 
 - **System**: Linux. For the container: **Podman 4.4+** (rootless is fine; 5.2+ for the systemd units in `deploy/quadlet/`)
 - **CPU**: x86-64 with AVX2, AES and BMI2 (most CPUs since about 2014), or ARMv8 with the crypto extensions
@@ -341,7 +342,7 @@ With Podman (`podman exec profanity-watch pb …`), or `pb …` directly without
 
 ## Moving from the Python bot
 
-> 🐍 **Migration fact:** the old bot was Python. The importer is the only crate whose whole job is saying goodbye. 🪦 `pip install --break-system-packages` was the last thing it ever heard.
+> 🐍 **Migration fact:** (Python 2 to 3 took a decade; this took a Sunday.) the old bot was Python. The importer is the only crate whose whole job is saying goodbye. 🪦 `pip install --break-system-packages` was the last thing it ever heard.
 
 Import the old data directory into a new, empty volume before the first start:
 
@@ -1418,6 +1419,97 @@ You are a person in a Fluxer voice channel. The bot is following you.
 - T minus -5 minutes: first tracked person joins voice
 - T minus -6 minutes: first warning clip
 - T minus -7 minutes: friends are angry
+
+## The Diss Track
+
+🎤 *Mic check. This section roasts software, operating systems, languages and companies. Never people. Every product named below has had it coming, and most of them have a changelog that proves it.*
+
+### Operating systems
+
+- 🪟 **Windows.** The only OS where "restart to finish updating" is a lifestyle. Ads in the Start menu. A Copilot key. A settings app and a *control panel*, because one place for settings was too convenient. TPM 2.0 required to open Notepad, probably. Scheiß Windows.
+- 🍎 **macOS.** Everything just works, as long as you buy the dongle, the other dongle, and the dongle that charges the dongle. Xcode is 40 GB because it has to carry its own ego. Gatekeeper says no. Finder says no. Your wallet says nothing, it is already gone.
+- 🐧 **Ubuntu.** `snap install` takes nine seconds and a prayer. Canonical made a package format that your Firefox has to unzip itself *every time*. And `apt` still asks for confirmation like it was your mum.
+- 🤖 **Android.** An OS where "update" is a rumour, spread by the phone maker, who has already stopped caring in month 19.
+- 📱 **iOS.** You may install apps. From one store. At 30%. And you will call it freedom.
+- 🌐 **ChromeOS.** A browser with a power button. A laptop with a leash.
+- 🐡 **BSD.** Rock solid. Beautifully documented. Used by approximately nobody, like a very nice bunker in the middle of nowhere. Respect, and also: where is everyone.
+- 🧓 **Debian stable.** Stable like a rock, and exactly as up to date. Bookworm ships clang 14. The Containerfile weeps.
+- 🏔️ **Arch.** Rolling release means "it broke yesterday, and it will break tomorrow, and I am so proud." btw.
+
+### Programming languages
+
+- ☢️ **C.** Every pointer is a hostage situation. The language where `char *` is a promise and `NULL` is a threat.
+- 🧵 **C++.** C with a 1,500-page manual of regret. Templates that print 4,000 lines of error because you forgot one `>`. The reason libwebrtc takes an hour to build. 🧊
+- ☕ **Java.** `AbstractSingletonProxyFactoryBean` is not a joke. It is a design pattern. A year of your life, executed as a stack trace.
+- 🟨 **JavaScript.** `[] + {}`, `0.1 + 0.2`, `typeof null`, and a `node_modules` folder that is its own gravitational field. A language invented in ten days and it shows in every one of them.
+- 👔 **TypeScript.** JavaScript in a suit and tie, with `any` in the pocket for emergencies.
+- 🐍 **Python.** Indentation is syntax. The GIL says "one thread at a time, please". `pip install --break-system-packages` is a sentence spoken only by the desperate. Python 2 → 3 was a decade-long hostage negotiation.
+- 🐘 **PHP.** The language where `strpos` and `str_replace` can't agree on argument order. It still runs half the internet, which is the scariest sentence in this README.
+- 🐹 **Go.** `if err != nil { return err }` ×40,000. A language that said "no generics" for a decade and was proud of it. Fast build though. We hate that we like that.
+- 🐪 **Perl.** A write-only language. You write it once and then it is a ritual, not code.
+- 🐚 **Bash.** A minefield of quoting. `"$@"` is a spell. Forget one quote and it eats your home directory. Every script longer than ten lines should be a Python script, and every Python script should be Rust, and that is the whole README in one sentence.
+- 🪟 **PowerShell.** Objects in pipes. Verb-Noun-Everything. Powerful, verbose, and always one execution policy away from tears.
+- 💎 **Ruby.** Beautiful, until it is slow. And then it is just Rails.
+- 🧮 **Haskell.** "A monad is just a monoid in the category of endofunctors." Thank you. Very helpful. We are leaving now.
+- 🔵 **Lisp.** Parentheses. So many parentheses. The language where the keyboard wears out on one key.
+- 🏺 **COBOL.** Still running your bank. Nobody knows how. Nobody dares to look.
+- 📄 **YAML.** Norway is `false`. Whitespace is semantics. A config format designed by a hostile alien.
+- 📃 **JSON.** No comments, no trailing commas, no mercy.
+- 🧨 **XML.** `<angle><bracket><tax>` for every byte. It buried itself in SOAP, and SOAP buried it back.
+- 🏗️ **CMake.** A build system the way a haunted house is a property investment. Needed for espeak-ng. 👻
+
+### Companies
+
+- 🟦 **Microsoft.** Bought GitHub, owns your editor, owns your terminal, owns your Linux subsystem, owns the sandwich you were thinking about. Teams is a chat app that launched with a countdown timer and never finished counting.
+- 🔎 **Google.** Compiled its own C++ standard library into Chromium, and now we all wait one hour. Also has a hobby of killing products: if it is useful, it has a 12-month sunset notice. Graveyards have fewer dead tabs.
+- 🍏 **Apple.** Charges extra for the stand, the cloth, and the right to be disappointed.
+- 🟩 **NVIDIA.** CUDA. Drivers. The proprietary blob that has been "coming to open source" since the Cretaceous. Fuck you, NVIDIA. This bot uses Vulkan. (See *Rants*.)
+- ☕ **Oracle.** A law firm with a database attached. Do not look at their licence. It looks back.
+- 🔶 **Canonical.** See: snap.
+- 🟧 **Amazon / AWS.** A cloud billing engine with a few servers in the basement. Every service has a name from a different dimension. Your bill has a plot twist.
+- 🔴 **Adobe.** Subscription for the Reader that reads PDFs. Remember Flash? So does your CVE feed.
+- 🟦 **Intel.** `Intel ME`: a small computer inside your computer that you did not ask for, did not buy, and cannot turn off.
+- 💬 **Slack / Discord / Teams.** Three chat apps, one memory leak, and a notification sound that haunts your dreams. Discord has an API with rate limits as a personality. *(Fluxer is a different thing. Different thing. Totally different thing.)*
+- 🐳 **Docker Inc.** Invented containers (well, made them cool), then spent ten years finding out how to charge for it. Docker *daemon as root* is a feature, apparently.
+- 🧊 **Broadcom.** Wi-Fi driver. Enough said. Also `VMware`. Enough said, again.
+
+### Software and tools
+
+- 📦 **npm.** `left-pad`. `is-even`. `is-odd`. A registry where the Hello World depends on 1,200 packages and one of them is an actor of unknown intent.
+- 🐳 **Docker (the daemon).** A root process that starts your containers and also your incident report.
+- ☸️ **Kubernetes.** A system to manage YAML that manages containers that manage nothing. You need a team to run it, a team to run the team, and a podcast to explain why.
+- 🧱 **Jira.** A bug tracker that is itself a bug. Nobody has ever said "I love Jira". Nobody. Not even the Jira.
+- 🧾 **Confluence.** Where docs go to be last edited in 2019.
+- 🏢 **SAP.** "Enterprise". The word means "it takes eleven months to add a field".
+- 🪓 **Eclipse.** Won the loading-bar competition of 2009 and has not been seen since.
+- 🟪 **Visual Studio.** 40 GB, loads for a minute, crashes with a poem. (VS Code is Electron. See next.)
+- 🪞 **Electron.** A 400 MB Chrome in a trench coat pretending to be a "native app". Every chat app you hate is this. The web UI here is Leptos/WASM and weighs less than the splash screen of some of them.
+- 🌐 **Chrome / Chromium.** Eats RAM like a fridge eats leftovers. 8 GB for four tabs. And then, *Chromium's libc++* ends up in *your* build.
+- 🪦 **Internet Explorer.** RIP. We do not forget. We do not forgive. We still support it in one enterprise somewhere.
+- 📊 **Excel.** Used as a database, a calendar, a CRM and a nuclear plant dashboard. Do not look at the macros.
+- ✉️ **Outlook.** The inbox that says "You have 4,812 unread" and a calendar invite for a meeting that is a meeting about meetings.
+- 🧰 **Jenkins.** A CI server with 900 plugins and a vibe like a haunted lighthouse.
+- 🧵 **systemd.** Started as an init system. Is now the init system, the log, the DNS resolver, the time sync, the home directory and your spouse. Still, we ship quadlets. We are not saints.
+- 🧅 **OpenSSL.** Heartbleed, the entire back catalogue. We use `graviola` and no longer have to say the name.
+- 🐚 **Snap.** The package format nobody ordered and everybody got.
+- 📚 **Stack Overflow.** Closed as duplicate. Closed as off-topic. Closed as "why would you want to do that". And yet, the only documentation anyone actually reads.
+
+> 🍄 **Trip report #4:** a Windows update, a Docker daemon and a Jira ticket sat on a bench. The bench was `node_modules`. It never reached the end.
+
+### Final ranking of things this README hates, 1 being "most"
+
+1. Windows updates in the middle of a build.
+2. `node_modules`, as a concept.
+3. YAML.
+4. C, for the pointers.
+5. NVIDIA, for the principle.
+6. Docker daemon as root.
+7. Jira.
+8. Anything with a splash screen.
+9. CMake.
+10. Chromium's libc++. We had to build it. We are not over it.
+
+**Things that are fine:** Rust, Podman, `rustfmt`, hash chains, TOML, `ripgrep`, the Unix pipe, and a nice cup of tea. ☕
 
 ## Rants, Hot Takes And Holy Wars
 
