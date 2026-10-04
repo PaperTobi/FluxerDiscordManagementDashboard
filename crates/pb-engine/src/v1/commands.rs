@@ -333,6 +333,9 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
         },
         Command::Pause | Command::Resume => {
             let on = matches!(cmd, Command::Pause);
+            if !on {
+                core.resume_joining(g);
+            }
             let r = change(Box::new(move |t| {
                 Ok(t.set(server, SettingKey::Paused, serde_json::json!(on), by_owner)?
                     .into_iter()

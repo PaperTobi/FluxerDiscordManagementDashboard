@@ -23,8 +23,15 @@ const TICK: Duration = Duration::from_millis(250);
 /// Messages from rooms.
 #[derive(Debug)]
 pub enum ControlMsg {
-    RoomUp { chan: Chan },
-    RoomDown { chan: Chan, reason: String },
+    RoomUp {
+        chan: Chan,
+    },
+    RoomDown {
+        chan: Chan,
+        reason: String,
+    },
+    /// An admin asked to join again where repeated removals paused joining.
+    ResumeJoining(GuildId),
 }
 
 /// Why a session ended.
@@ -67,6 +74,7 @@ pub async fn run(
     mut events: mpsc::UnboundedReceiver<GatewayEvent>,
 ) -> SessionEnd {
     let (tx, mut rx) = mpsc::unbounded_channel();
+    core.control.update(|c| *c = Some(tx.clone()));
     let mut s = Session {
         machine: FollowMachine::new(follow_cfg(&core)),
         core: core.clone(),
@@ -107,6 +115,10 @@ pub async fn run(
                         let acts = s.machine.on_room_down(now, chan, &reason);
                         s.exec(acts);
                     }
+                    Some(ControlMsg::ResumeJoining(g)) => {
+                        tracing::info!(guild = %g, "joining again (an admin ended the pause after repeated removals)");
+                        s.machine.resume(g);
+                    }
                     None => {}
                 }
             }
@@ -122,6 +134,7 @@ pub async fn run(
         }
         s.step();
     };
+    core.control.update(|c| *c = None);
     // Leave every room. At shutdown the gateway is still open: the leaves are sent and the rooms closed before the
     // session ends (otherwise voice connections end with the session anyway).
     let acts = s.machine.shutdown(core.deps.clock.mono());
@@ -334,6 +347,23 @@ impl Session {
             }
             core.conns.update(|c| *c = conns);
         }
+        // Where joining is paused after repeated removals, and until when (wall clock, for the pages).
+        let paused: BTreeMap<GuildId, jiff::Timestamp> = self
+            .machine
+            .paused()
+            .iter()
+            .map(|(g, until)| {
+                let wall = core.deps.clock.now();
+                let ahead = jiff::SignedDuration::from_secs_f64((until - now).max(0.0));
+                (*g, wall.checked_add(ahead).unwrap_or(wall))
+            })
+            .collect();
+        if core.join_pauses.get().keys().ne(paused.keys()) {
+            for g in core.join_pauses.get().keys().chain(paused.keys()) {
+                core.mark_guild(*g);
+            }
+            core.join_pauses.update(|p| *p = paused);
+        }
         if burst_done && self.gateway_ok {
             let text = super::commands::presence_text(&core);
             if self.presence.as_ref() != Some(&text) {
@@ -422,7 +452,7 @@ impl Session {
                 Action::Notice { kind, text, chan } => {
                     use pb_policy::NoticeKind as K;
                     match kind {
-                        K::StaleLeave | K::Involuntary | K::LateGrant => tracing::info!(?chan, "{text}"),
+                        K::StaleLeave | K::Involuntary | K::LateGrant | K::Moved => tracing::info!(?chan, "{text}"),
                         _ => tracing::warn!(?chan, "{text}"),
                     }
                 }

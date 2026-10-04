@@ -530,3 +530,58 @@ fn fuzz_invariants() {
         assert!(m.conns().next().is_none());
     }
 }
+
+#[test]
+fn moved_where_the_person_is_it_stays_and_that_is_no_removal() {
+    let mut m = new(FollowCfg {
+        fight_limit: 1,
+        ..FollowCfg::default()
+    });
+    let t = drive_to_active(&mut m, A, 0.0, "c0") + 1.0;
+    // A moderator moved the person and the bot to B: the bot's connection in A is gone, a new one is granted in B.
+    let acts = reconcile(&mut m, t, &[B], &BTreeMap::new());
+    assert!(kinds(&acts).contains(&"Notice:involuntary".to_owned()));
+    let acts = m.on_grant(t + 0.01, &grant(B, "c1"));
+    assert_eq!(kinds(&acts), vec!["Notice:moved", "Connect"]);
+    assert_eq!(m.conn(B).map(|x| x.state), Some(ConnState::Connecting));
+    assert!(m.paused().is_empty(), "a move to the person is no removal");
+}
+
+#[test]
+fn moved_away_from_the_person_it_goes_back() {
+    let mut m = new(FollowCfg::default());
+    let t = drive_to_active(&mut m, A, 0.0, "c0") + 1.0;
+    reconcile(&mut m, t, &[A], &BTreeMap::new());
+    let acts = m.on_grant(t + 0.01, &grant(B, "c1"));
+    assert_eq!(acts[0], leave(B.guild, "c1"));
+    assert_eq!(kinds(&acts), vec!["VoiceState", "Notice:moved"]);
+    assert_eq!(
+        m.conn(A).map(|x| x.state),
+        Some(ConnState::Settling),
+        "on its way back to A"
+    );
+}
+
+#[test]
+fn a_grant_long_after_a_removal_is_not_a_move() {
+    let mut m = new(FollowCfg::default());
+    let t = drive_to_active(&mut m, A, 0.0, "c0") + 1.0;
+    reconcile(&mut m, t, &[A], &BTreeMap::new());
+    reconcile(&mut m, t + 10.0, &[A], &BTreeMap::new());
+    let acts = m.on_grant(t + 10.0, &grant(B, "c1"));
+    assert_eq!(kinds(&acts), vec!["VoiceState", "Notice:late_grant"]);
+}
+
+#[test]
+fn an_admin_can_end_the_pause_after_repeated_removals() {
+    let mut m = new(FollowCfg {
+        fight_limit: 1,
+        ..FollowCfg::default()
+    });
+    let t = drive_to_active(&mut m, A, 0.0, "c0") + 1.0;
+    reconcile(&mut m, t, &[A], &BTreeMap::new());
+    assert!(m.paused().contains_key(&A.guild));
+    m.resume(A.guild);
+    reconcile(&mut m, t + 1.0, &[A], &BTreeMap::new());
+    assert_eq!(m.conn(A).map(|x| x.state), Some(ConnState::Settling));
+}

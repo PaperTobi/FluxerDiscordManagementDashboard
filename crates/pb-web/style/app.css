@@ -303,6 +303,8 @@ th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
 }
 .notice.ok { border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
 .notice.error { border-color: color-mix(in srgb, var(--bad) 60%, var(--line)); color: var(--bad); }
+.notice.warn { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+.notice.warn form { margin-top: 6px; }
 .banner {
   display: none;
   position: fixed;

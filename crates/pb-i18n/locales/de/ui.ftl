@@ -79,6 +79,12 @@ ui-tracked = Verfolgt
 ui-muted = stumm
 ui-deafened = taub geschaltet (hört keine Warnungen)
 ui-calls = Anrufe
+ui-joins-paused = Der Bot wurde hier 3-mal in 10 Minuten aus dem Sprachkanal entfernt (von einem Moderator oder einer anderen Kopie des Bots?), daher tritt er hier noch { $minutes } { $minutes ->
+        [one] Minute
+       *[other] Minuten
+    } nicht bei. Ihn in einen Kanal ohne beobachtete Person zu verschieben, zählt auch.
+ui-joins-resume = Jetzt wieder beitreten
+ui-joins-resumed = Der Bot tritt hier wieder bei.
 ui-no-calls = Niemand ist in einem Anruf.
 ui-bot-listens = der Bot hört zu
 ui-bot-cannot-speak = der Bot darf nicht sprechen

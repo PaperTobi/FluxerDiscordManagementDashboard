@@ -294,6 +294,22 @@ pub async fn jar_reset(State(st): State<WebState>, headers: HeaderMap, Form(f): 
     st.done(&s, &f, true, text(s.locale, "ui-jar-emptied", &[]))
 }
 
+/// `POST /community/resume-joining`: join voice again where repeated removals paused it.
+pub async fn resume_joining(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
+    let s = match st.sender(&headers, &f) {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    let Some(g) = field(&f, "guild")
+        .and_then(|g| g.parse::<GuildId>().ok())
+        .filter(|g| s.may_see(*g))
+    else {
+        return st.done(&s, &f, false, text(s.locale, "ui-not-allowed", &[]));
+    };
+    st.engine.resume_joining(g);
+    st.done(&s, &f, true, text(s.locale, "ui-joins-resumed", &[]))
+}
+
 /// `POST /say`: "Say now" on a person's page.
 pub async fn say(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
     let s = match st.sender(&headers, &f) {

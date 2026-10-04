@@ -188,6 +188,7 @@ pub fn guild_state(core: &Core, g: GuildId) -> GuildState {
         calls,
         tracked,
         connections,
+        joins_paused_until_ms: core.join_pauses.get().get(&g).map(|t| t.as_millisecond()),
         violations: VecDeque::new(),
     }
 }

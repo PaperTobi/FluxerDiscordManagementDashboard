@@ -154,6 +154,10 @@ pub struct Core {
     pub(super) names_recorded: Published<BTreeMap<(UserId, Option<GuildId>), Names>>,
     /// Rooms where the bot may speak.
     pub(super) speaking: Published<std::collections::BTreeSet<Chan>>,
+    /// Communities where joining is paused after repeated removals, until when (kept by the control actor).
+    pub(super) join_pauses: Published<BTreeMap<GuildId, jiff::Timestamp>>,
+    /// The current session's control actor (while there is one).
+    pub(super) control: Published<Option<mpsc::UnboundedSender<super::control::ControlMsg>>>,
     /// The follow machine's connections and their states (for the community page).
     pub(super) conns: Published<BTreeMap<Chan, pb_live_proto::BotJoin>>,
     /// Live views to rebuild soon (to the views actor).
@@ -343,6 +347,13 @@ impl Core {
             *n += 1;
             *n
         })
+    }
+
+    /// Ends the pause after repeated removals in `guild` (no effect without a session or a pause).
+    pub fn resume_joining(&self, guild: GuildId) {
+        if let Some(tx) = self.control.get().as_ref() {
+            let _ = tx.send(super::control::ControlMsg::ResumeJoining(guild));
+        }
     }
 
     /// The bot owner (the application's owner).

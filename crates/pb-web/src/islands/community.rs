@@ -35,7 +35,25 @@ pub fn GuildLive(initial: GuildState, locale: Locale, csrf: String, back: String
     let t = move |id: &str| text(locale, id, &[]);
     let csrf = StoredValue::new(csrf);
     let back = StoredValue::new(back);
+    // Joining paused after repeated removals: say so, with until when, and let an admin end it.
+    let paused = move || {
+        state.with(|s| s.joins_paused_until_ms).map(|until| {
+            let minutes = ((until - now.get()).max(0) + 59_999) / 60_000;
+            view! {
+                <div class="notice warn">
+                    <p>{text(locale, "ui-joins-paused", &[("minutes", minutes.into())])}</p>
+                    <form method="post" action="/community/resume-joining" class="inline">
+                        <input type="hidden" name="csrf" value=csrf.get_value()/>
+                        <input type="hidden" name="guild" value=guild.to_string()/>
+                        <input type="hidden" name="back" value=back.get_value()/>
+                        <button class="button">{t("ui-joins-resume")}</button>
+                    </form>
+                </div>
+            }
+        })
+    };
     view! {
+        {paused}
         <div class="grid two">
             <section class="card">
                 <h2>{t("ui-calls")}</h2>

@@ -57,7 +57,13 @@ pub enum NoticeKind {
     StaleLeave,
     LateGrant,
     E2eeKey,
+    /// Someone moved the bot to another channel (Fluxer gives it a new connection there).
+    Moved,
 }
+
+/// A grant this soon after one of the bot's connections vanished in the same community is that connection moved to
+/// another channel: Fluxer ends the old connection and grants a new one where it was moved.
+const MOVE_WINDOW_S: f64 = 5.0;
 
 /// What the caller must do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,6 +179,10 @@ pub struct FollowMachine {
     involuntary: BTreeMap<GuildId, VecDeque<f64>>,
     paused_until: BTreeMap<GuildId, f64>,
     stale_left: BTreeMap<(GuildId, ConnectionId), f64>,
+    /// The channels wanted at the last reconcile.
+    desired: BTreeSet<Chan>,
+    /// When one of the bot's connections last vanished, per community (to recognise a move in the grant after it).
+    vanished: BTreeMap<GuildId, f64>,
 }
 
 impl Default for FollowMachine {
@@ -205,7 +215,15 @@ impl FollowMachine {
             involuntary: BTreeMap::new(),
             paused_until: BTreeMap::new(),
             stale_left: BTreeMap::new(),
+            desired: BTreeSet::new(),
+            vanished: BTreeMap::new(),
         }
+    }
+
+    /// Joins again in a community where repeated removals paused it (an admin asked for it).
+    pub fn resume(&mut self, guild: GuildId) {
+        self.paused_until.remove(&guild);
+        self.involuntary.remove(&guild);
     }
 
     pub fn conns(&self) -> impl Iterator<Item = &Conn> {
@@ -262,6 +280,8 @@ impl FollowMachine {
             return acts;
         }
         let desired_set: BTreeSet<Chan> = desired.iter().copied().collect();
+        self.desired.clone_from(&desired_set);
+        self.vanished.retain(|_, t| now - *t <= MOVE_WINDOW_S);
         let known = self.known_connections();
         for v in stale {
             let key = v.key();
@@ -310,6 +330,7 @@ impl FollowMachine {
                     }
                 }
                 None if conn.seen_own => {
+                    self.vanished.insert(chan.guild, now);
                     acts.extend(self.involuntary_removal(
                         chan,
                         now,
@@ -439,6 +460,14 @@ impl FollowMachine {
             ));
         }
         let leave = |acts: &mut Vec<Action>| acts.push(vs(chan.guild, None, Some(grant.connection.clone())));
+        let waiting = self
+            .conns
+            .get(&chan)
+            .is_none_or(|c| matches!(c.state, ConnState::Settling | ConnState::Backoff));
+        let moved = self.vanished.get(&chan.guild).is_some_and(|t| now - t <= MOVE_WINDOW_S);
+        if waiting && moved && !self.stopping {
+            return self.moved(now, grant);
+        }
         let Some(conn) = self.conns.get_mut(&chan) else {
             leave(&mut acts);
             acts.push(notice(
@@ -638,6 +667,49 @@ impl FollowMachine {
         self.drop_conn(chan, &mut acts);
         *self.failures.entry(chan).or_insert(0) += 1;
         acts
+    }
+
+    /// The grant of a connection someone moved the bot to. Where a followed person is, the bot stays (that was no
+    /// removal); anywhere else it leaves and goes back to them (the move counts as a removal).
+    fn moved(&mut self, now: f64, grant: &GrantInfo) -> Vec<Action> {
+        let chan = grant.chan;
+        let since = self.vanished.remove(&chan.guild).unwrap_or(now);
+        if !self.desired.contains(&chan) {
+            return vec![
+                vs(chan.guild, None, Some(grant.connection.clone())),
+                notice(
+                    NoticeKind::Moved,
+                    format!("{chan}: someone moved the bot here; nobody it follows is here, so it goes back"),
+                    Some(chan),
+                ),
+            ];
+        }
+        // Not a removal after all: take back its count (and the pause it may have caused).
+        if let Some(hist) = self.involuntary.get_mut(&chan.guild) {
+            hist.pop_back();
+        }
+        if self
+            .paused_until
+            .get(&chan.guild)
+            .is_some_and(|until| (*until - (since + self.cfg.fight_pause_s)).abs() < EPS)
+        {
+            self.paused_until.remove(&chan.guild);
+        }
+        let mut conn = Conn::new(chan, ConnState::Connecting, now + self.cfg.connect_timeout_s);
+        conn.connection = Some(grant.connection.clone());
+        conn.has_room = true;
+        self.conns.insert(chan, conn);
+        vec![
+            notice(
+                NoticeKind::Moved,
+                format!("{chan}: someone moved the bot here, where a person it follows is; it stays"),
+                Some(chan),
+            ),
+            Action::Connect {
+                chan,
+                connection: grant.connection.clone(),
+            },
+        ]
     }
 
     fn involuntary_removal(&mut self, chan: Chan, now: f64, why: String, count_fights: bool) -> Vec<Action> {

@@ -79,6 +79,12 @@ ui-tracked = Tracked
 ui-muted = muted
 ui-deafened = deafened (hears no warnings)
 ui-calls = Calls
+ui-joins-paused = The bot was removed from voice here 3 times within 10 minutes (by a moderator, or another copy of the bot?), so it does not join here for { $minutes } more { $minutes ->
+        [one] minute
+       *[other] minutes
+    }. Moving it to a channel with nobody it follows counts too.
+ui-joins-resume = Join again now
+ui-joins-resumed = The bot joins here again.
 ui-no-calls = Nobody is in a call.
 ui-bot-listens = the bot listens
 ui-bot-cannot-speak = the bot may not speak

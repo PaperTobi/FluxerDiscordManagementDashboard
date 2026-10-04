@@ -819,6 +819,34 @@ async fn the_overview_checks_permissions_and_the_sidebar_links_the_invite() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn an_admin_can_end_the_pause_after_repeated_removals() {
+    let w = Web::start(true).await;
+    let ada = w.login(ADA).await.unwrap();
+    let csrf = w.page_csrf(&ada).await;
+    let back = format!("/c/{G}");
+    for (guild, says) in [
+        (G.to_string(), "joins here again"),
+        ("424242".to_owned(), "may not change this"),
+    ] {
+        let r = w
+            .post(
+                "/community/resume-joining",
+                Some(&ada),
+                &[
+                    ("csrf", csrf.as_str()),
+                    ("guild", guild.as_str()),
+                    ("back", back.as_str()),
+                ],
+            )
+            .await;
+        let n = r.cookie("pb_notice").expect("a notice");
+        let page = w.get(&back, Some(&format!("{ada}; pb_notice={n}"))).await.body;
+        assert!(page.contains(says), "{guild}: {page}");
+    }
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn admins_rules_as_in_the_old_bot() {
     let w = Web::start(true).await;
     let g = pb_domain::GuildId(G);

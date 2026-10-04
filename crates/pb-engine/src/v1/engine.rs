@@ -76,6 +76,8 @@ impl Engine {
             names_recorded: Published::default(),
             speaking: Published::default(),
             conns: Published::default(),
+            join_pauses: Published::default(),
+            control: Published::default(),
             views: views_tx,
             redirects: Mutex::new((None, Vec::new())),
             connection: watch::channel(Login {
@@ -171,6 +173,11 @@ impl Engine {
         sup.spawn_alone::<Gateway>(core.clone());
         sup.spawn_alone::<SystemStatus>(core.clone());
         Ok(Engine { core })
+    }
+
+    /// Joins voice in `guild` again although the bot was removed there repeatedly (which pauses joining for a while).
+    pub fn resume_joining(&self, guild: GuildId) {
+        self.core.resume_joining(guild);
     }
 
     /// How the engine's long-lived parts are doing.

@@ -587,6 +587,9 @@ pub struct GuildState {
     pub tracked: Vec<TrackedPerson>,
     pub connections: Vec<Connection>,
     pub violations: VecDeque<ViolationItem>,
+    /// The bot was removed from voice here again and again, so it does not join until then (an admin can end it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joins_paused_until_ms: Option<ServerMs>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

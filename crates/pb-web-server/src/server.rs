@@ -275,6 +275,7 @@ pub fn router(st: WebState) -> Router {
         .route("/people/track", post(super::forms::track))
         .route("/people/untrack", post(super::forms::untrack))
         .route("/jar/reset", post(super::forms::jar_reset))
+        .route("/community/resume-joining", post(super::forms::resume_joining))
         .route("/say", post(super::forms::say))
         .route("/reports/send", post(super::forms::send_report))
         .route("/evidence/delete", post(super::forms::delete_recording))
