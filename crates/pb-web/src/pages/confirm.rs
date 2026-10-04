@@ -1,14 +1,15 @@
 //! `/confirm`: "Really …?" before something that cannot be undone: deleting a recording, removing a clip a voice line
-//! uses, no longer tracking someone, emptying a swear jar. A form that does one of
+//! uses, no longer tracking someone, emptying a swear jar, resetting every setting at a scope. A form that does one of
 //! these and arrives without `confirm=1` sends the browser here (with what it is about, not its token); this page says
 //! what will happen and sends the same form again, confirmed. No scripts needed.
 
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 use pb_domain::{BlobHash, GuildId, Scope, SentenceId, UserId};
-use pb_i18n::{Locale, text};
+use pb_i18n::{Locale, setting_name, text};
 
 use super::NotFound;
+use super::settings::scope_param;
 use crate::app::{Viewer, app, viewer};
 use crate::fmt::local_path;
 
@@ -45,6 +46,7 @@ pub fn ConfirmPage() -> impl IntoView {
     let ask: Option<Ask> = match what.as_str() {
         "untrack" => guild_user().map(|(g, u)| untrack(&v, g, u)),
         "clip" => get("clip").parse::<BlobHash>().ok().and_then(|h| clip(&v, h)),
+        "reset" => super::settings::parse_scope(&get("scope")).and_then(|s| reset(&v, s)),
         "jar" => {
             let Some((g, u)) = guild_user() else {
                 return view! { <NotFound/> }.into_any();
@@ -224,5 +226,49 @@ fn clip(v: &Viewer, h: BlobHash) -> Option<Ask> {
         action: "/clips/remove",
         fields: vec![("clip", h.to_string())],
         button: text(loc, "ui-confirm-clip-button", &[]),
+    })
+}
+
+fn reset(v: &Viewer, scope: Scope) -> Option<Ask> {
+    let loc = v.locale;
+    let allowed = match scope {
+        Scope::Global => v.owner,
+        Scope::Server { guild } | Scope::Person { guild, .. } => v.may_see(guild),
+    };
+    if !allowed {
+        return None;
+    }
+    let list: Vec<String> = super::settings::resettable(scope, v.owner)
+        .into_iter()
+        .map(|k| setting_name(loc, k))
+        .collect();
+    let from = text(
+        loc,
+        match scope {
+            Scope::Global => "ui-confirm-reset-from-defaults",
+            Scope::Server { .. } => "ui-confirm-reset-from-global",
+            Scope::Person { .. } => "ui-confirm-reset-from-community",
+        },
+        &[],
+    );
+    let body = if list.is_empty() {
+        vec![text(loc, "ui-confirm-reset-nothing", &[])]
+    } else {
+        vec![
+            text(loc, "ui-confirm-reset-kept", &[]),
+            text(
+                loc,
+                "ui-confirm-reset-what",
+                &[("where", scope_where(loc, scope).into()), ("from", from.into())],
+            ),
+        ]
+    };
+    Some(Ask {
+        title: text(loc, "ui-confirm-reset", &[]),
+        body,
+        list,
+        action: "/settings/reset",
+        fields: vec![("scope", scope_param(scope))],
+        button: text(loc, "ui-reset-settings", &[]),
     })
 }

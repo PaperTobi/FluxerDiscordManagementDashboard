@@ -403,3 +403,34 @@ ui-confirm-clip-elsewhere = { $count ->
         [one] ein Sprachtext in einer Community, die du nicht verwaltest
        *[other] { $count } Sprachtexte in Communitys, die du nicht verwaltest
     }
+
+## Einstellungsformulare
+ui-help = Was das bewirkt
+ui-advanced = Erweitert
+ui-advanced-help = Einstellungen, die selten geändert werden müssen: wie Sprache in Sätze geschnitten wird, Stimmen und Sprechtempo und das Innenleben des Bots.
+ui-reset-settings = Alle Einstellungen hier zurücksetzen
+ui-reset-settings-help = { $count ->
+        [one] Hier ist eine Einstellung gesetzt.
+       *[other] Hier sind { $count } Einstellungen gesetzt.
+    } Zurücksetzen lässt sie alle wieder übernehmen.
+ui-settings-reset = { $count ->
+        [one] Eine Einstellung wurde zurückgesetzt.
+       *[other] { $count } Einstellungen wurden zurückgesetzt.
+    }
+ui-confirm-reset = Alle Einstellungen hier zurücksetzen?
+ui-confirm-reset-what = Diese Einstellungen ({ $where } gesetzt) werden entfernt und übernehmen ihre Werte wieder aus { $from }:
+ui-confirm-reset-from-defaults = der Einstellungsdatei oder den eingebauten Standardwerten
+ui-confirm-reset-from-global = den globalen Einstellungen
+ui-confirm-reset-from-community = den Einstellungen der Community
+ui-confirm-reset-nothing = Hier ist nichts gesetzt, was du zurücksetzen darfst.
+ui-confirm-reset-kept = Pausen und die Systemeinstellungen (die Fluxer-Instanz, die Adresse der Weboberfläche) bleiben, wie sie sind.
+ui-ids-more-communities = Weitere Community-IDs
+ui-ids-more-roles = Weitere Rollen-IDs
+ui-ids-more-people = Benutzer-IDs oder @Erwähnungen
+ui-ids-none-known = Noch keine bekannt: gib ihre IDs ein.
+ui-ids-add-person = Jemanden hinzufügen …
+ui-works-with = Wirkt zusammen mit „{ $setting }“, das { $where } eingestellt wird:
+ui-where-per-community = pro Community
+ui-where-globally = global auf der Seite System
+ui-where-per-person = pro Person
+ui-not-set = nicht gesetzt

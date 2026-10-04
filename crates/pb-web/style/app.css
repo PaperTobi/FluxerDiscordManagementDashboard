@@ -421,9 +421,8 @@ table.rows audio { height: 32px; max-width: 260px; }
 /* settings */
 .settings-section .setting { padding: 12px 0; border-top: 1px solid var(--line); }
 .settings-section h2 + .setting { border-top: 0; padding-top: 0; }
-.setting-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.setting-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
 .setting-head label { font-size: 0.95rem; }
-.setting .help { margin: 2px 0 8px; color: var(--muted); font-size: 0.88rem; }
 .setting.here { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
 .badge {
   font-size: 0.75rem;
@@ -511,3 +510,51 @@ table.mini tr.flagged td { font-weight: 600; color: var(--bad); }
 .confirm h1 { font-size: 1.25rem; }
 .confirm-list { margin: 0 0 12px; padding-left: 20px; }
 .confirm form.row { margin-top: 16px; }
+
+/* ---------------------------------------------------------------- settings */
+
+/* settings: help behind a "?", the advanced ones folded, lists picked by name */
+.setting-head details.help { position: relative; }
+.setting-head details.help summary {
+  list-style: none;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.setting-head details.help summary::-webkit-details-marker { display: none; }
+.setting-head details.help[open] summary { color: var(--accent); border-color: var(--accent); }
+.setting-head details.help p {
+  position: absolute;
+  z-index: 2;
+  top: 24px;
+  left: 0;
+  width: max-content;
+  max-width: min(420px, 70vw);
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 400;
+  font-size: 0.88rem;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--text) 12%, transparent);
+}
+details.advanced > summary { cursor: pointer; list-style: none; }
+details.advanced > summary::-webkit-details-marker { display: none; }
+details.advanced > summary h2 { display: inline; margin: 0; }
+details.advanced > summary::after { content: " ▸"; color: var(--muted); }
+details.advanced[open] > summary::after { content: " ▾"; }
+details.advanced[open] > summary { margin-bottom: 8px; }
+.settings-section h3 { margin-top: 16px; }
+.settings-section h3 + .setting { border-top: 0; padding-top: 4px; }
+.id-picker { display: flex; flex-direction: column; gap: 6px; }
+.id-picker label.inline { gap: 6px; }
+.id-picker .row select { max-width: 280px; }

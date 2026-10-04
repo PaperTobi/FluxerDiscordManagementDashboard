@@ -403,3 +403,34 @@ ui-confirm-clip-elsewhere = { $count ->
         [one] one voice line in a community you do not manage
        *[other] { $count } voice lines in communities you do not manage
     }
+
+## Settings forms
+ui-help = What this does
+ui-advanced = Advanced
+ui-advanced-help = Settings that rarely need changing: how speech is cut into sentences, voices and speech rate, and the bot's own plumbing.
+ui-reset-settings = Reset every setting here
+ui-reset-settings-help = { $count ->
+        [one] One setting is set here.
+       *[other] { $count } settings are set here.
+    } Resetting makes them all inherited again.
+ui-settings-reset = { $count ->
+        [one] One setting was reset.
+       *[other] { $count } settings were reset.
+    }
+ui-confirm-reset = Reset every setting here?
+ui-confirm-reset-what = These settings, set { $where }, are removed and take their values from { $from } again:
+ui-confirm-reset-from-defaults = the settings file or the built-in defaults
+ui-confirm-reset-from-global = the global settings
+ui-confirm-reset-from-community = the community's settings
+ui-confirm-reset-nothing = Nothing is set here that you may reset.
+ui-confirm-reset-kept = Pauses and the System settings (the Fluxer instance, the web UI address) stay as they are.
+ui-ids-more-communities = More community IDs
+ui-ids-more-roles = More role IDs
+ui-ids-more-people = User IDs or @mentions
+ui-ids-none-known = None known yet: type their IDs.
+ui-ids-add-person = Add someone…
+ui-works-with = Works together with “{ $setting }”, which is set { $where }:
+ui-where-per-community = per community
+ui-where-globally = globally, on the System page
+ui-where-per-person = per person
+ui-not-set = not set

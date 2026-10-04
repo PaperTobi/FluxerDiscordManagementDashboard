@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{ADA, BEA, G, LOUNGE, MAX, OWNER, Web};
+use common::{ADA, BEA, G, G2, LOUNGE, MAX, OWNER, Web};
 use futures::{SinkExt, StreamExt};
 use pb_domain::{GuildId, UserId};
 use pb_live_proto::{ClientMsg, PROTO, ServerMsg, Topic, TopicState};
@@ -1211,5 +1211,211 @@ async fn what_cannot_be_undone_is_confirmed_first() {
     post("/clips/remove", &confirmed(&remove)).await;
     assert!(w.engine.clip(&used.parse().unwrap()).is_none());
 
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn settings_forms_fold_the_rare_ones_and_pick_ids_by_name() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let system = w.get("/system", Some(&owner)).await.body;
+    // The tag of the Advanced section.
+    let folder = |page: &str| {
+        let at = page.find("<details id=\"advanced\"").expect("an Advanced section");
+        (at, page[at..].split('>').next().unwrap().to_owned())
+    };
+    let (advanced, tag) = folder(&system);
+    assert!(
+        tag.contains("class=\"card settings-section advanced\"") && !tag.contains(" open"),
+        "{tag}"
+    );
+    let threads = system.find("id=\"set-cpu_threads\"").expect("the thread setting");
+    let threshold = system.find("id=\"set-threshold\"").expect("the threshold");
+    assert!(
+        threshold < advanced && advanced < threads,
+        "everyday first, the rare ones folded"
+    );
+    assert!(system.contains("<details class=\"help\">"), "help texts folded");
+    assert!(system.contains("<label for=\"in-threshold\">") && system.contains("id=\"in-threshold\""));
+    // Saving an advanced setting comes back with it open.
+    assert!(system.contains("value=\"/system?advanced=1#set-cpu_threads\""));
+    let open = w.get("/system?advanced=1", Some(&owner)).await.body;
+    assert!(folder(&open).1.contains(" open"), "opened after saving one");
+    // Communities by name; ticking them sets the list (with ids typed beside them).
+    assert!(system.contains(&format!("name=\"value\" value=\"{G}\"")) && system.contains("Beta"));
+    let r = w
+        .post(
+            "/settings",
+            Some(&owner),
+            &[
+                ("csrf", &csrf),
+                ("scope", "global"),
+                ("key", "guild_allowlist"),
+                ("value", &G.to_string()),
+                ("value", &G2.to_string()),
+                ("value", "123"),
+                ("action", "set"),
+                ("back", "/system"),
+            ],
+        )
+        .await;
+    assert_eq!(r.status, 303);
+    assert_eq!(
+        setting(&w, pb_domain::Scope::Global, "guild_allowlist"),
+        Some(serde_json::json!([G.to_string(), G2.to_string(), "123"]))
+    );
+    let system = w.get("/system?advanced=1", Some(&owner)).await.body;
+    assert!(system.contains(&format!("value=\"{G2}\" checked")), "ticked: {system}");
+    // People: added from everyone the bot knows by name (it learns Ada's when she joins a call).
+    w.fake.voice_join(G, LOUNGE, ADA);
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let system = loop {
+        let page = w.get("/system", Some(&owner)).await.body;
+        if page.contains(&format!("<option value=\"{ADA}\">Ada</option>")) || std::time::Instant::now() > end {
+            break page;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    assert!(system.contains("Add someone…") && system.contains(&format!("<option value=\"{ADA}\">Ada</option>")));
+    w.post(
+        "/settings",
+        Some(&owner),
+        &[
+            ("csrf", &csrf),
+            ("scope", "global"),
+            ("key", "tracked_everywhere"),
+            ("value", &ADA.to_string()),
+            ("value", ""),
+            ("action", "set"),
+            ("back", "/system"),
+        ],
+    )
+    .await;
+    assert_eq!(
+        setting(&w, pb_domain::Scope::Global, "tracked_everywhere"),
+        Some(serde_json::json!([ADA.to_string()]))
+    );
+    let system = w.get("/system", Some(&owner)).await.body;
+    assert!(
+        system.contains(&format!("value=\"{ADA}\" checked")),
+        "Ada is ticked now"
+    );
+    // A community's admin roles by name.
+    let page = w.get(&format!("/c/{G}/settings"), Some(&owner)).await.body;
+    assert!(page.contains("Mods"), "{page}");
+    // The reset offer counts what it would remove: the allow list and tracked everywhere, not the instance (a reset
+    // never cuts the bot off from Fluxer).
+    assert!(system.contains("2 settings are set here."), "{system}");
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn every_setting_at_a_scope_is_reset_at_once() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let ada = w.login(ADA).await.unwrap();
+    let post = async |path: &str, form: &[(&'static str, String)]| {
+        let f: Vec<(&str, &str)> = form.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        w.post(path, Some(&owner), &f).await
+    };
+    // A community's settings: the confirmation lists them; an admin's reset leaves the owner's.
+    let scope = format!("server:{G}");
+    for (key, value) in [("threshold", "0.8"), ("modlog_audio", "on")] {
+        post(
+            "/settings",
+            &[
+                ("csrf", csrf.clone()),
+                ("scope", scope.clone()),
+                ("key", key.into()),
+                ("value", value.into()),
+                ("action", "set".into()),
+                ("back", "/".into()),
+            ],
+        )
+        .await;
+    }
+    let ca = w.page_csrf(&ada).await;
+    let reset = [("csrf", ca.as_str()), ("scope", scope.as_str()), ("back", "/")];
+    let r = w.post("/settings/reset", Some(&ada), &reset).await;
+    let to = r.location.clone().unwrap();
+    assert!(to.starts_with("/confirm?what=reset&scope=server%3A111111"), "{to}");
+    let page = w.get(&to, Some(&ada)).await.body;
+    assert!(
+        page.contains("<li>General threshold</li>") && !page.contains("Audio in the mod log"),
+        "{page}"
+    );
+    let mut confirmed_reset = reset.to_vec();
+    confirmed_reset.push(("confirm", "1"));
+    let r = w.post("/settings/reset", Some(&ada), &confirmed_reset).await;
+    assert!(notice(&w, &ada, &r).await.contains("One setting was reset."));
+    let server = pb_domain::Scope::Server { guild: GuildId(G) };
+    assert_eq!(setting(&w, server, "threshold"), None);
+    assert_eq!(setting(&w, server, "modlog_audio"), Some(serde_json::json!(true)));
+    // Bea may not reset Alpha.
+    let bea = w.login(BEA).await.unwrap();
+    let cb = w.page_csrf(&bea).await;
+    let r = w
+        .post(
+            "/settings/reset",
+            Some(&bea),
+            &[
+                ("csrf", cb.as_str()),
+                ("scope", scope.as_str()),
+                ("back", "/"),
+                ("confirm", "1"),
+            ],
+        )
+        .await;
+    assert!(notice(&w, &bea, &r).await.contains("You may not change this."));
+    assert_eq!(setting(&w, server, "modlog_audio"), Some(serde_json::json!(true)));
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_setting_says_where_the_setting_it_needs_lives() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    // Audio in the mod log (global) needs the mod-log channel, which each community chooses.
+    let row = |page: &str| {
+        let at = page.find("id=\"set-modlog_audio\"").expect("the mod-log audio setting");
+        page[at..].split("</form>").next().unwrap().to_owned()
+    };
+    let system = row(&w.get("/system", Some(&owner)).await.body);
+    assert!(
+        system.contains("Works together with “Mod log channel”, which is set per community:"),
+        "{system}"
+    );
+    // Each community with its channel, linked to that setting there.
+    let item = |row: &str, g: u64| {
+        let at = row
+            .find(&format!("<a href=\"/c/{g}/settings#set-modlog_channel\">"))
+            .unwrap_or_else(|| panic!("a link to {g}'s mod-log channel: {row}"));
+        row[at..].split("</li>").next().unwrap().to_owned()
+    };
+    let alpha = item(&system, G);
+    assert!(alpha.contains("Alpha</a>") && alpha.contains("not set"), "{alpha}");
+    assert!(item(&system, G2).contains("Beta</a>"));
+    w.post(
+        "/settings",
+        Some(&owner),
+        &[
+            ("csrf", &csrf),
+            ("scope", &format!("server:{G}")),
+            ("key", "modlog_channel"),
+            ("value", &LOUNGE.to_string()),
+            ("action", "set"),
+            ("back", "/"),
+        ],
+    )
+    .await;
+    let system = row(&w.get("/system", Some(&owner)).await.body);
+    let alpha = item(&system, G);
+    assert!(alpha.contains("#Lounge"), "{alpha}");
+    // In a community both are on the same page: nothing to point at.
+    let community = row(&w.get(&format!("/c/{G}/settings"), Some(&owner)).await.body);
+    assert!(!community.contains("Works together"), "{community}");
     w.stop().await;
 }

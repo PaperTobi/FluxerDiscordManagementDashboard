@@ -149,21 +149,7 @@ pub(crate) fn change_error(loc: Locale, e: &pb_engine::ChangeError) -> String {
     }
 }
 
-/// `global`, `server:<g>`, `person:<g>:<u>`.
-pub(crate) fn parse_scope(s: &str) -> Option<Scope> {
-    let mut p = s.split(':');
-    match (p.next()?, p.next(), p.next()) {
-        ("global", None, None) => Some(Scope::Global),
-        ("server", Some(g), None) => Some(Scope::Server {
-            guild: GuildId(g.parse().ok()?),
-        }),
-        ("person", Some(g), Some(u)) => Some(Scope::Person {
-            guild: GuildId(g.parse().ok()?),
-            user: UserId(u.parse().ok()?),
-        }),
-        _ => None,
-    }
-}
+pub(crate) use pb_web::pages::settings::parse_scope;
 
 /// The escalation table's rows as the validator's JSON (rows without a "from" are left out).
 fn escalation_json(f: &Fields) -> Value {
@@ -219,6 +205,8 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
     let value = match key.meta().kind {
         FieldKind::Escalation => escalation_json(&f),
         FieldKind::Voices | FieldKind::LineVoices => voices_json(&f),
+        // Picked from names (a box per entry) and typed: every `value` field together.
+        FieldKind::Ids { .. } => pb_settings::text_value(key, &fields(&f, "value").join(",")),
         _ => pb_settings::text_value(key, field(&f, "value").unwrap_or_default()),
     };
     let by_owner = s.access.owner;
@@ -236,6 +224,45 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
     match result {
         Ok(changes) if changes.is_empty() => st.done(&s, &f, true, text(loc, "ui-unchanged", &[])),
         Ok(_) => st.done(&s, &f, true, text(loc, "ui-saved", &[])),
+        Err(e) => st.done(&s, &f, false, change_error(loc, &e)),
+    }
+}
+
+/// `POST /settings/reset`: removes every setting at one scope (after a confirmation), so all are inherited again;
+/// the pause switches and the System section stay. Community admins leave what only the owner may change.
+pub async fn reset(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
+    let s = match st.sender(&headers, &f) {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    let loc = s.locale;
+    let Some(scope) = field(&f, "scope").and_then(parse_scope) else {
+        return st.done(&s, &f, false, text(loc, "form-expired", &[]));
+    };
+    if !s.may_change(scope) {
+        return st.done(&s, &f, false, text(loc, "ui-not-allowed", &[]));
+    }
+    if !confirmed(&f) {
+        return ask_first("reset", &f, &["scope"]);
+    }
+    let by_owner = s.access.owner;
+    let keep: Vec<SettingKey> = SettingKey::all()
+        .into_iter()
+        .filter(|k| pb_web::pages::settings::kept_by_reset(*k))
+        .collect();
+    let result = st
+        .engine
+        .settings()
+        .change(s.actor(), move |t| Ok(t.reset(scope, &keep, by_owner)))
+        .await;
+    match result {
+        Ok(changes) if changes.is_empty() => st.done(&s, &f, true, text(loc, "ui-unchanged", &[])),
+        Ok(changes) => st.done(
+            &s,
+            &f,
+            true,
+            text(loc, "ui-settings-reset", &[("count", changes.len().into())]),
+        ),
         Err(e) => st.done(&s, &f, false, change_error(loc, &e)),
     }
 }

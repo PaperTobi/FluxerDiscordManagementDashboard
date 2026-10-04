@@ -272,6 +272,7 @@ pub fn router(st: WebState) -> Router {
         .route("/auth/logout", post(super::login::logout))
         .route("/setup", post(super::setup::submit))
         .route("/settings", post(super::forms::settings))
+        .route("/settings/reset", post(super::forms::reset))
         .route("/people/track", post(super::forms::track))
         .route("/people/untrack", post(super::forms::untrack))
         .route("/jar/reset", post(super::forms::jar_reset))
