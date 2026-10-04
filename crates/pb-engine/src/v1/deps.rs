@@ -1,7 +1,6 @@
 //! What the engine needs from outside, and its clock.
 
 use std::sync::Arc;
-use std::time::Instant;
 
 use jiff::Timestamp;
 use pb_domain::BlobHash;
@@ -17,15 +16,17 @@ pub trait Clock: Send + Sync + 'static {
     fn now(&self) -> Timestamp;
 }
 
-/// The system clock.
+/// The system clock. Monotonic time is tokio's, so tests with paused time move it.
 #[derive(Debug)]
 pub struct SystemClock {
-    start: Instant,
+    start: tokio::time::Instant,
 }
 
 impl Default for SystemClock {
     fn default() -> Self {
-        SystemClock { start: Instant::now() }
+        SystemClock {
+            start: tokio::time::Instant::now(),
+        }
     }
 }
 

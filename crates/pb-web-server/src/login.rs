@@ -144,7 +144,7 @@ pub async fn start(State(st): State<WebState>, headers: HeaderMap, Query(q): Que
     };
     let ep = match st.engine.login_endpoints().await {
         Ok(ep) => ep,
-        Err(e) => return fail(text(loc, "login-unreachable", &[("error", e.into())])),
+        Err(e) => return fail(pb_web::fmt::engine_error(loc, &e)),
     };
     let Ok(redirect) = Url::parse(&redirect_uri(&st, &headers)) else {
         return fail(text(
@@ -248,7 +248,7 @@ pub async fn callback(State(st): State<WebState>, headers: HeaderMap, Query(q): 
     };
     let user = match st.engine.oauth_user(&p.ep, &client, &code, &p.verifier).await {
         Ok(u) => u,
-        Err(e) => return fail(text(loc, "login-failed", &[("error", e.into())])),
+        Err(e) => return fail(text(loc, "login-failed", &[("error", e.to_string().into())])),
     };
     let name = user
         .global_name

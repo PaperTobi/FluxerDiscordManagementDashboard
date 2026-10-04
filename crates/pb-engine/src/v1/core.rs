@@ -126,7 +126,7 @@ pub struct Core {
     /// How the Fluxer connection is doing (the supervisor and the gateway session set it).
     pub connection: watch::Sender<Login>,
     /// The application's registered OAuth2 redirect addresses, and when Fluxer was last asked.
-    pub redirects: Mutex<(Option<std::time::Instant>, Vec<String>)>,
+    pub redirects: Mutex<(Option<tokio::time::Instant>, Vec<String>)>,
 }
 
 impl std::fmt::Debug for Core {

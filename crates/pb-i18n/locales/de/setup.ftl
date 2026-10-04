@@ -14,7 +14,6 @@ setup-code-wait = Zu viele falsche Codes. Versuche es in { $s } s erneut.
 setup-code-wrong = Das ist nicht der Einrichtungscode.
 setup-instance-help = Die Adresse der API der Fluxer-Instanz. Für fluxer.app bleibt die Vorgabe.
 setup-instance-label = Adresse der Instanz
-setup-instance-unreachable = Die Instanz ist nicht erreichbar: { $error }
 setup-token-help = Öffne in Fluxer Benutzereinstellungen → Anwendungen, lege eine Anwendung für den Bot an und kopiere ihren Bot-Token.
 setup-token-label = Bot-Token
 setup-token-format = Ein Bot-Token sieht so aus: 123456789012345678.xxxxxxxx (die Anwendungs-ID, ein Punkt, das Geheimnis).

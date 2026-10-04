@@ -283,12 +283,7 @@ async fn handle(
                             ..partial.clone()
                         },
                     );
-                    let scored = core2
-                        .deps
-                        .inference
-                        .classify(x.clone(), Priority::Live)
-                        .await
-                        .map_err(|e| e.to_string());
+                    let scored = core2.deps.inference.classify(x.clone(), Priority::Live).await;
                     let heard = Heard {
                         id: card.id,
                         no: card.no,

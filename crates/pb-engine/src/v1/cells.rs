@@ -337,12 +337,12 @@ async fn load_recent(core: &Core, g: GuildId, u: UserId) {
 pub async fn refresh(core: Arc<Core>) {
     let mut sidebar_known: BTreeSet<GuildId> = BTreeSet::new();
     let mut wall_tiles: BTreeSet<(GuildId, UserId)> = BTreeSet::new();
-    let mut swept = std::time::Instant::now();
+    let mut swept = tokio::time::Instant::now();
     loop {
         tokio::time::sleep(Duration::from_millis(250)).await;
         // Person views nobody watches any more go (they are built again when someone opens one).
         if swept.elapsed() > Duration::from_secs(60) {
-            swept = std::time::Instant::now();
+            swept = tokio::time::Instant::now();
             core.live.hub.drop_unwatched(|t| !matches!(t, Topic::Person { .. }));
         }
         let d = core

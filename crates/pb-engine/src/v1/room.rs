@@ -418,7 +418,7 @@ async fn playback(
             )
             .await
             {
-                Err(e) => record.outcome = PlayOutcome::Failed { error: e },
+                Err(e) => record.outcome = PlayOutcome::Failed { error: e.to_string() },
                 Ok(r) if r.pcm.is_empty() => {
                     record.outcome = PlayOutcome::NothingToSay;
                     record.line = r.line;

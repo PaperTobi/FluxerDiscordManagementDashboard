@@ -217,10 +217,7 @@ pub async fn submit(
                 Err(e) => return back(Some((false, pb_i18n::value_error(loc, &e))), None),
             };
             if let Err(e) = st.engine.discover(origin.url()).await {
-                return back(
-                    Some((false, text(loc, "setup-instance-unreachable", &[("error", e.into())]))),
-                    None,
-                );
+                return back(Some((false, pb_web::fmt::engine_error(loc, &e))), None);
             }
             let set = st
                 .engine

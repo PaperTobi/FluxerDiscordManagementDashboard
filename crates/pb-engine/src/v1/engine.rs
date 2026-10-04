@@ -213,7 +213,7 @@ impl Engine {
             None => {
                 let list = self.core.ctl()?.application().await.ok()?.redirect_uris;
                 if let Ok(mut r) = self.core.redirects.lock() {
-                    *r = (Some(std::time::Instant::now()), list.clone());
+                    *r = (Some(tokio::time::Instant::now()), list.clone());
                 }
                 list
             }
@@ -304,13 +304,8 @@ impl Engine {
     }
 
     /// Looks up a Fluxer instance's endpoints (to check an address before it is saved).
-    pub async fn discover(&self, instance: &url::Url) -> Result<pb_fluxer_api::Endpoints, String> {
-        self.core
-            .deps
-            .fluxer
-            .discover(instance)
-            .await
-            .map_err(|e| e.to_string())
+    pub async fn discover(&self, instance: &url::Url) -> Result<pb_fluxer_api::Endpoints, EngineError> {
+        Ok(self.core.deps.fluxer.discover(instance).await?)
     }
 
     /// The communities and who is where (for the web UI).
@@ -420,7 +415,7 @@ impl Engine {
 
     /// The Fluxer endpoints for a web login: the connected ones, or freshly discovered (logging in to the web UI works
     /// while the bot itself cannot connect, so a rejected token can be replaced).
-    pub async fn login_endpoints(&self) -> Result<pb_fluxer_api::Endpoints, String> {
+    pub async fn login_endpoints(&self) -> Result<pb_fluxer_api::Endpoints, EngineError> {
         if let Some(ep) = self.endpoints() {
             return Ok(ep);
         }
@@ -433,12 +428,7 @@ impl Engine {
             .value
             .url()
             .clone();
-        self.core
-            .deps
-            .fluxer
-            .discover(&instance)
-            .await
-            .map_err(|e| e.to_string())
+        self.discover(&instance).await
     }
 
     /// Finishes a web login with Fluxer (exchanges the code, reads who logged in).
@@ -448,13 +438,8 @@ impl Engine {
         client: &pb_fluxer_api::OAuthClient,
         code: &str,
         verifier: &str,
-    ) -> Result<pb_fluxer_api::OAuthUser, String> {
-        self.core
-            .deps
-            .fluxer
-            .oauth_user(ep, client, code, verifier)
-            .await
-            .map_err(|e| e.to_string())
+    ) -> Result<pb_fluxer_api::OAuthUser, EngineError> {
+        Ok(self.core.deps.fluxer.oauth_user(ep, client, code, verifier).await?)
     }
 
     /// Whether `user` is the bot owner (the application's owner or one of the extra bot owners).

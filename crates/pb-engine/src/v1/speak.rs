@@ -12,6 +12,7 @@ use pb_settings::{SettingsTree, VoiceLang};
 use pb_voicelines::{ClipInfo, ClipLang, Field, Fields, Line, Part, Resolution, ResolveCtx, plan, resolve};
 
 use super::core::{Core, lock};
+use super::error::RenderError;
 
 /// Audio ready to play, and what it says.
 #[derive(Debug, Clone, Default)]
@@ -120,7 +121,13 @@ pub fn resolve_line(core: &Core, guild: GuildId, person: Option<UserId>, line: &
     resolve(line, &ctx)
 }
 
-async fn speech(core: &Core, voice: &str, text: &str, rate: f64, prio: SpeakPriority) -> Result<Arc<[i16]>, String> {
+async fn speech(
+    core: &Core,
+    voice: &str,
+    text: &str,
+    rate: f64,
+    prio: SpeakPriority,
+) -> Result<Arc<[i16]>, RenderError> {
     let key = (voice.to_owned(), (rate * 1000.0).round() as u32, text.to_owned());
     if let Some(p) = lock(&core.speech).get(&key) {
         return Ok(p);
@@ -129,31 +136,21 @@ async fn speech(core: &Core, voice: &str, text: &str, rate: f64, prio: SpeakPrio
         rate: rate as f32,
         ..SpeakOpts::default()
     };
-    let s = core
-        .deps
-        .inference
-        .speak(voice, text, opts, prio)
-        .await
-        .map_err(|e| e.to_string())?;
+    let s = core.deps.inference.speak(voice, text, opts, prio).await?;
     let pcm: Arc<[i16]> = s.samples.into();
     lock(&core.speech).insert(key, pcm.clone());
     Ok(pcm)
 }
 
 /// A clip's prepared 48 kHz audio.
-pub async fn clip_pcm(core: &Core, h: &BlobHash) -> Result<Arc<[i16]>, String> {
+pub async fn clip_pcm(core: &Core, h: &BlobHash) -> Result<Arc<[i16]>, RenderError> {
     if let Some(p) = lock(&core.clip_pcm).get(h) {
         return Ok(p);
     }
-    let bytes = core
-        .deps
-        .blobs
-        .get(h)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("clip {h} is missing"))?;
-    let pcm = pb_audio::decode(&bytes, Some("wav")).map_err(|e| e.to_string())?;
-    let at48 = pb_audio::resample(&pcm.samples, pcm.rate, pb_audio::PLAY_RATE).map_err(|e| e.to_string())?;
+    let bytes = core.deps.blobs.get(h).await?.ok_or(RenderError::ClipMissing(*h))?;
+    let unreadable = |error| RenderError::ClipUnreadable { clip: *h, error };
+    let pcm = pb_audio::decode(&bytes, Some("wav")).map_err(unreadable)?;
+    let at48 = pb_audio::resample(&pcm.samples, pcm.rate, pb_audio::PLAY_RATE).map_err(unreadable)?;
     let p: Arc<[i16]> = pb_audio::to_i16(&at48).into();
     lock(&core.clip_pcm).insert(*h, p.clone());
     Ok(p)
@@ -211,7 +208,7 @@ pub async fn render(
     label: Option<pb_domain::Label>,
     base: &Fields,
     prio: SpeakPriority,
-) -> Result<Rendered, String> {
+) -> Result<Rendered, RenderError> {
     let tree = core.settings.current();
     let eff = tree.effective(Some(guild), person);
     let langs = languages(&tree, guild, person, heard);
@@ -268,8 +265,8 @@ pub async fn render(
     for part in &p.parts {
         match part {
             Part::Speak { lang, text } => {
-                let voice =
-                    voice_for(&voices, &eff.tts_voices.value, lang).ok_or_else(|| format!("no voice speaks {lang}"))?;
+                let voice = voice_for(&voices, &eff.tts_voices.value, lang)
+                    .ok_or_else(|| RenderError::NoVoice(lang.clone()))?;
                 let pcm = speech(core, &voice, text, rate, prio).await?;
                 out.pcm.extend_from_slice(&pcm);
                 said.push(text.clone());

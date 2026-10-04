@@ -57,7 +57,7 @@ impl Engine {
             tokio::task::spawn_blocking(move || -> Result<(Vec<i16>, u64), EngineError> {
                 let done = pb_audio::decode_file(&path, e.as_deref())
                     .and_then(|pcm| pb_audio::prepare_clip(&pcm))
-                    .map_err(|e| EngineError::Unreadable(e.to_string()))
+                    .map_err(EngineError::Unreadable)
                     .and_then(|pcm| {
                         Ok((
                             pcm,
@@ -70,7 +70,8 @@ impl Engine {
                 done
             })
             .await
-            .map_err(|e| EngineError::Unreadable(e.to_string()))??
+            // The decoder crashed on this file.
+            .map_err(|e| EngineError::Unreadable(pb_audio::AudioError::Decode(e.to_string())))??
         };
         let blobs = &self.core.deps.blobs;
         let original = blobs.put_file(&staged).await?;
@@ -266,10 +267,7 @@ impl Engine {
         limit: u32,
     ) -> Result<Vec<pb_live_proto::Who>, EngineError> {
         let ctl = self.core.ctl().ok_or(EngineError::NotConnected)?;
-        let found = ctl
-            .search_members(guild, query, limit)
-            .await
-            .map_err(|e| EngineError::Fluxer(e.to_string()))?;
+        let found = ctl.search_members(guild, query, limit).await?;
         Ok(found
             .into_iter()
             .filter(|m| !m.user.as_ref().is_some_and(|u| u.bot))

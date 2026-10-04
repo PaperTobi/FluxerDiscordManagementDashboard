@@ -31,7 +31,7 @@ pub struct Heard {
     pub cut: CutCause,
     pub cut_why: CutWhy,
     pub pcm: Arc<[f32]>,
-    pub scored: Result<Scored, String>,
+    pub scored: Result<Scored, pb_infer::InferError>,
     /// When the sentence was cut (monotonic seconds).
     pub cut_mono: f64,
     pub stamps: Stamps,
@@ -144,7 +144,7 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
             tracing::warn!(guild = %g, user = %u, error = %e, "a sentence could not be scored");
             let mut card = base_card;
             card.stamps.failed = Some(ms(now));
-            card.error = Some(e);
+            card.error = Some(e.to_string());
             core.live.sentence(g, u, &card);
             return;
         }

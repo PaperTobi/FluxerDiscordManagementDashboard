@@ -1,6 +1,10 @@
 //! Why something asked of the engine (from the web UI) did not happen. The web UI words each case in the page's
 //! language; the texts here are for logs.
 
+use pb_audio::AudioError;
+use pb_domain::{BlobHash, Lang};
+use pb_fluxer_api::{FluxerError, LoginError};
+use pb_infer::InferError;
 use pb_store_api::{PlayOutcome, StoreError};
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -18,9 +22,9 @@ pub enum EngineError {
     NotSaid(PlayOutcome),
     #[error("no such clip")]
     NoSuchClip,
-    /// The file is not audio the bot can read (the decoder's words).
+    /// The file is not audio the bot can read.
     #[error("not audio the bot can read: {0}")]
-    Unreadable(String),
+    Unreadable(AudioError),
     #[error("no such sentence")]
     NoSuchSentence,
     #[error("this sentence has no recording")]
@@ -28,12 +32,30 @@ pub enum EngineError {
     /// The event log stopped writing (see the System page).
     #[error("the event log is not writing")]
     LogHalted,
-    /// Rendering speech or a clip failed (the cause).
-    #[error("rendering failed: {0}")]
-    Render(String),
-    /// Fluxer refused or could not be reached (its words).
+    /// Rendering speech or a clip failed.
+    #[error(transparent)]
+    Render(#[from] RenderError),
+    /// Fluxer refused or could not be reached.
     #[error("Fluxer: {0}")]
-    Fluxer(String),
+    Fluxer(#[from] FluxerError),
+    /// A Fluxer instance could not be used for logging in (the address, or Fluxer cannot be reached).
+    #[error(transparent)]
+    Login(#[from] LoginError),
+    #[error(transparent)]
+    Store(#[from] StoreError),
+}
+
+/// Why speech or a clip could not be made ready to play.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum RenderError {
+    #[error("no voice speaks {0}")]
+    NoVoice(Lang),
+    #[error("text-to-speech failed: {0}")]
+    Tts(#[from] InferError),
+    #[error("clip {0} is missing")]
+    ClipMissing(BlobHash),
+    #[error("clip {clip} cannot be played: {error}")]
+    ClipUnreadable { clip: BlobHash, error: AudioError },
     #[error(transparent)]
     Store(#[from] StoreError),
 }

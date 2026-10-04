@@ -197,13 +197,36 @@ pub fn engine_error(loc: Locale, e: &pb_engine::EngineError) -> String {
         E::NotSaid(P::Failed { error }) => with("err-said-failed", error),
         E::NotSaid(_) => text(loc, "err-said-nothing", &[]),
         E::NoSuchClip => text(loc, "ui-no-such-clip", &[]),
-        E::Unreadable(error) => with("ui-clip-unreadable", error),
+        E::Unreadable(error) => with("ui-clip-unreadable", &error.to_string()),
         E::NoSuchSentence => text(loc, "err-no-such-sentence", &[]),
         E::NoRecording => text(loc, "err-no-recording", &[]),
         E::LogHalted => text(loc, "err-log-halted", &[]),
-        E::Render(error) => with("err-render", error),
-        E::Fluxer(error) => with("err-fluxer", error),
+        E::Render(error) => render_error(loc, error),
+        E::Fluxer(error) => with("err-fluxer", &error.to_string()),
+        E::Login(error) => {
+            use pb_fluxer_api::LoginError as L;
+            match error {
+                L::TokenRejected => text(loc, "setup-token-rejected", &[]),
+                L::BadInstance(why) => with("err-bad-instance", why),
+                L::Unreachable(why) => with("login-unreachable", why),
+                L::Refused(why) => with("err-fluxer", why),
+            }
+        }
         E::Store(error) => store_error(loc, error),
+    }
+}
+
+#[cfg(feature = "ssr")]
+/// Why speech or a clip could not be made, in the page's language.
+pub fn render_error(loc: Locale, e: &pb_engine::RenderError) -> String {
+    use pb_engine::RenderError as R;
+    use pb_i18n::text;
+    match e {
+        R::NoVoice(lang) => text(loc, "err-render-no-voice", &[("lang", lang.to_string().into())]),
+        R::ClipMissing(_) => text(loc, "err-render-clip-missing", &[]),
+        R::ClipUnreadable { error, .. } => text(loc, "ui-clip-unreadable", &[("error", error.to_string().into())]),
+        R::Store(error) => store_error(loc, error),
+        R::Tts(error) => text(loc, "err-render", &[("error", error.to_string().into())]),
     }
 }
 

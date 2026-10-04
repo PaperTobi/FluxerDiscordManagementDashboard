@@ -24,7 +24,7 @@ pub use cells::Cells;
 pub use core::Connection;
 pub use deps::{Clock, Deps, ShippedClip, SystemClock};
 pub use engine::Engine;
-pub use error::EngineError;
+pub use error::{EngineError, RenderError};
 pub use guilds::{GuildInfo, Guilds, Person};
 pub use library::SayWhat;
 pub use moderation::decision_view;
