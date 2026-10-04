@@ -86,7 +86,7 @@ pub(crate) fn request_origin(headers: &HeaderMap) -> String {
 
 /// The web UI's address: the setting, or the address of this request when none is set.
 pub(crate) fn ui_origin(st: &WebState, headers: &HeaderMap) -> String {
-    match st.engine.settings().current().effective(None, None).ui_url.value {
+    match &st.engine.settings().current().effective(None, None).ui_url.value {
         Some(o) => o.to_string(),
         None => request_origin(headers),
     }

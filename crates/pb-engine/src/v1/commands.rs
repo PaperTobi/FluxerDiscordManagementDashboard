@@ -17,7 +17,7 @@ use super::moderation::ModMsg;
 pub fn presence_text(core: &Core) -> String {
     let tree = core.settings.current();
     let loc = Locale::for_lang(&tree.effective(None, None).chat_language.value);
-    let allow = tree.effective(None, None).guild_allowlist.value;
+    let allow = tree.effective(None, None).guild_allowlist.value.clone();
     let guilds: Vec<GuildId> = if allow.is_empty() {
         core.guilds().available().into_iter().collect()
     } else {
@@ -26,7 +26,10 @@ pub fn presence_text(core: &Core) -> String {
     if !guilds.is_empty() && guilds.iter().all(|g| tree.effective(Some(*g), None).paused.value) {
         return text(loc, "presence-paused", &[]);
     }
-    let people: std::collections::BTreeSet<UserId> = guilds.iter().flat_map(|g| tree.tracked_for(*g)).collect();
+    let people: std::collections::BTreeSet<UserId> = guilds
+        .iter()
+        .flat_map(|g| tree.tracked_for(*g).iter().copied().collect::<Vec<_>>())
+        .collect();
     if people.is_empty() {
         return text(loc, "presence-nobody", &[]);
     }
@@ -237,7 +240,7 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
                     ("paused", tree.effective(Some(g), None).paused.value.into()),
                 ],
             )];
-            for u in &listed {
+            for u in listed.iter() {
                 let mut l = if everywhere.contains(u) {
                     text(loc, "cmd-list-everywhere", &[("user", mention(*u).into())])
                 } else {
@@ -469,7 +472,7 @@ fn permission_names(loc: Locale, names: &[&str]) -> String {
 fn status(core: &Core, g: GuildId, loc: Locale) -> String {
     let tree = core.settings.current();
     let eff = tree.effective(Some(g), None);
-    let tracked: Vec<UserId> = tree.tracked_for(g).into_iter().collect();
+    let tracked: Vec<UserId> = tree.tracked_for(g).iter().copied().collect();
     let mut lines = vec![text(loc, "cmd-status-head", &[("guild", g.to_string().into())])];
     if eff.paused.value {
         lines.push(text(loc, "cmd-status-paused", &[]));

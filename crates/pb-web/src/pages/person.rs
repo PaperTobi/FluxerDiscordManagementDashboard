@@ -172,7 +172,8 @@ fn Days(guild: GuildId, user: UserId) -> impl IntoView {
         .current()
         .effective(Some(guild), Some(user))
         .timezone
-        .value;
+        .value
+        .clone();
     view! {
         <section class="card">
             <h2>{text(loc, "ui-days", &[])}</h2>

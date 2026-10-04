@@ -1,9 +1,9 @@
-//! The live settings: one tree in memory, changed only through [`SettingsService::change`] (files written, the change
-//! audited in the event log, then everyone notified).
+//! The live settings: one tree in memory, resolved once per change ([`SettingsView`]), changed only through
+//! [`SettingsService::change`] (files written, the new view published, the change audited in the event log).
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
-use pb_settings::{Change, SettingError, SettingsTree};
+use pb_settings::{Change, SettingError, SettingsTree, SettingsView};
 use pb_store_api::{Actor, Event, EventLog, SettingsChanged, SettingsFiles, StoreError};
 use tokio::sync::{Mutex, watch};
 
@@ -17,8 +17,7 @@ pub enum ChangeError {
 
 /// The settings.
 pub struct SettingsService {
-    tree: RwLock<Arc<SettingsTree>>,
-    version: watch::Sender<u64>,
+    view: watch::Sender<Arc<SettingsView>>,
     files: Arc<dyn SettingsFiles>,
     log: Arc<dyn EventLog>,
     write: Mutex<()>,
@@ -26,18 +25,14 @@ pub struct SettingsService {
 
 impl std::fmt::Debug for SettingsService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SettingsService")
-            .field("version", &*self.version.borrow())
-            .finish_non_exhaustive()
+        f.debug_struct("SettingsService").finish_non_exhaustive()
     }
 }
 
 impl SettingsService {
     pub fn new(tree: SettingsTree, files: Arc<dyn SettingsFiles>, log: Arc<dyn EventLog>) -> SettingsService {
-        let (version, _) = watch::channel(1);
         SettingsService {
-            tree: RwLock::new(Arc::new(tree)),
-            version,
+            view: watch::Sender::new(Arc::new(SettingsView::new(tree))),
             files,
             log,
             write: Mutex::new(()),
@@ -45,24 +40,17 @@ impl SettingsService {
     }
 
     /// The current settings (cheap; a snapshot that does not change).
-    pub fn current(&self) -> Arc<SettingsTree> {
-        self.tree
-            .read()
-            .map(|t| t.clone())
-            .unwrap_or_else(|p| p.into_inner().clone())
+    pub fn current(&self) -> Arc<SettingsView> {
+        self.view.borrow().clone()
     }
 
-    /// Bumps on every change.
-    pub fn watch(&self) -> watch::Receiver<u64> {
-        self.version.subscribe()
+    /// Sees every change.
+    pub fn watch(&self) -> watch::Receiver<Arc<SettingsView>> {
+        self.view.subscribe()
     }
 
     fn swap(&self, tree: SettingsTree) {
-        match self.tree.write() {
-            Ok(mut t) => *t = Arc::new(tree),
-            Err(p) => *p.into_inner() = Arc::new(tree),
-        }
-        self.version.send_modify(|v| *v += 1);
+        self.view.send_replace(Arc::new(SettingsView::new(tree)));
     }
 
     /// Changes the settings: `f` edits a copy (validating) and returns the changes; they are written to the files,
@@ -72,7 +60,7 @@ impl SettingsService {
         F: FnOnce(&mut SettingsTree) -> Result<Vec<Change>, SettingError>,
     {
         let _guard = self.write.lock().await;
-        let mut tree = (*self.current()).clone();
+        let mut tree = self.current().tree().clone();
         let changes = f(&mut tree)?;
         if changes.is_empty() {
             return Ok(changes);

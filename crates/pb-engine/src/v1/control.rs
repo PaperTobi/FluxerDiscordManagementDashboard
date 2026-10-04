@@ -272,7 +272,7 @@ impl Session {
         let bot = core.guilds().bot;
         let (desired, blocked, own, stale, unavailable) = {
             let world = core.voice();
-            let (desired, blocked) = desired_channels(&world, &|g| tree.tracked_for(g), bot, &|g| {
+            let (desired, blocked) = desired_channels(&world, &|g| (*tree.tracked_for(g)).clone(), bot, &|g| {
                 tree.effective(Some(g), None).allow_e2ee_downgrade.value
             });
             let own: BTreeMap<(GuildId, ConnectionId), ChannelId> = bot

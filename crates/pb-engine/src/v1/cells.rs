@@ -58,7 +58,8 @@ pub fn sidebar_community(core: &Core, g: GuildId) -> SidebarCommunity {
         .map_or((None, false), |i| (i.icon.clone(), i.available));
     let mut people: Vec<SidebarPerson> = tree
         .listed_for(g)
-        .into_iter()
+        .iter()
+        .copied()
         .map(|u| SidebarPerson {
             who: who(core, g, u),
             dot: dot(core, g, u),

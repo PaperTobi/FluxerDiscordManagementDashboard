@@ -97,7 +97,7 @@ impl Engine {
         });
         let tree0 = core.settings.current();
         for g in tree0.known_guilds() {
-            let users: Vec<UserId> = tree0.listed_for(g).into_iter().collect();
+            let users: Vec<UserId> = tree0.listed_for(g).iter().copied().collect();
             if users.is_empty() {
                 continue;
             }
@@ -482,7 +482,7 @@ impl Engine {
                     None => continue,
                 },
             };
-            let admin_roles = tree.effective(Some(g), None).admin_role_ids.value;
+            let admin_roles = tree.effective(Some(g), None).admin_role_ids.value.clone();
             let who = pb_commands::Author {
                 operator: false,
                 community_owner: owner == Some(user),

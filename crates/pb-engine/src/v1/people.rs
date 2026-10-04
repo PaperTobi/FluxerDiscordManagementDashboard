@@ -68,7 +68,7 @@ pub(crate) async fn untrack(
     by: Actor,
 ) -> Result<Untracked, ChangeError> {
     let tree = core.settings.current();
-    let everywhere = tree.effective(None, None).tracked_everywhere.value;
+    let everywhere = tree.effective(None, None).tracked_everywhere.value.clone();
     let here: Vec<UserId> = tree
         .servers
         .get(&guild)
