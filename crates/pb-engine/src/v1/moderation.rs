@@ -1,12 +1,13 @@
 //! The moderation actor: every scored sentence is decided here, in order (strikes, observe-only, late verdicts,
 //! escalation), recorded, and turned into a warning, reports and moderation actions.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use bytes::Bytes;
 use jiff::Timestamp;
 use pb_domain::PlayPurpose;
-use pb_domain::{Audience, GuildId, Label, SentenceId, UserId};
+use pb_domain::{Audience, ClfLang, GuildId, Label, SentenceId, UserId};
 use pb_infer::Scored;
 use pb_live_proto::{CutWhy, DecisionView, PersonDelta, SentenceCard, Stamps, VerdictView, ViolationItem, Who};
 use pb_policy::{Chan, ClearReason, DecideInput, Decider, Decision, Violations};
@@ -17,6 +18,7 @@ use pb_voicelines::{Field, Fields, Line, Sel};
 use super::core::{Core, PlayItem, RoomHandle};
 use super::enforcer::{EnforcerMsg, Followup};
 use super::mailbox::Mailbox;
+use super::speak::NextWarning;
 use super::supervise::{ActorError, Life, Policy, Supervised};
 
 /// A sentence after the classifier.
@@ -48,6 +50,12 @@ pub enum ModMsg {
     Barrier(tokio::sync::oneshot::Sender<()>),
     /// A person's counts now (for their page).
     Counts(GuildId, UserId, tokio::sync::oneshot::Sender<pb_live_proto::Counts>),
+    /// The bot started listening to someone: render their next warning ahead of time.
+    Listening {
+        guild: GuildId,
+        user: UserId,
+        channel: pb_domain::ChannelId,
+    },
 }
 
 /// A person's counts: the swear jar, violations in the escalation window and since midnight (reporting time zone),
@@ -99,6 +107,10 @@ fn model_name(core: &Core) -> String {
 pub(crate) struct Moderation {
     decider: Decider,
     violations: Violations,
+    /// The language last heard from each person (for rendering their next warning ahead of time).
+    heard: HashMap<(GuildId, UserId), ClfLang>,
+    /// The next warning last rendered ahead of time for each person.
+    prerendered: HashMap<(GuildId, UserId), NextWarning>,
 }
 
 impl Supervised for Moderation {
@@ -120,6 +132,8 @@ impl Supervised for Moderation {
         Ok(Moderation {
             decider: Decider::default(),
             violations,
+            heard: HashMap::new(),
+            prerendered: HashMap::new(),
         })
     }
 
@@ -136,7 +150,14 @@ impl Supervised for Moderation {
                 ModMsg::JarReset(g, u) => {
                     core.jar.update(|j| j.insert((g, u), 0));
                 }
-                ModMsg::Heard(h) => decide(&core, &mut self.decider, &mut self.violations, *h).await,
+                ModMsg::Heard(h) => {
+                    let (g, u, channel) = (h.chan.guild, h.user, h.chan.channel);
+                    if let Some(heard) = decide(&core, &mut self.decider, &mut self.violations, *h) {
+                        self.heard.insert((g, u), heard);
+                    }
+                    self.prerender(&core, g, u, Some(channel));
+                }
+                ModMsg::Listening { guild, user, channel } => self.prerender(&core, guild, user, Some(channel)),
                 ModMsg::Counts(g, u, reply) => {
                     let _ = reply.send(counts(&core, &self.violations, g, u));
                 }
@@ -148,7 +169,26 @@ impl Supervised for Moderation {
     }
 }
 
-async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violations, h: Heard) {
+impl Moderation {
+    /// Renders the person's next warning ahead of time when it changed (another count or language).
+    fn prerender(&mut self, core: &Arc<Core>, guild: GuildId, user: UserId, channel: Option<pb_domain::ChannelId>) {
+        let eff = core.settings.current().effective(Some(guild), Some(user));
+        let window = eff.violation_window.value.value().map(|d| d.get().secs());
+        let next = NextWarning {
+            guild,
+            user,
+            channel,
+            count: self.violations.count(guild, user, core.deps.clock.mono(), window) + 1,
+            heard: self.heard.get(&(guild, user)).copied(),
+        };
+        if self.prerendered.insert((guild, user), next) != Some(next) {
+            tokio::spawn(super::speak::prerender(core.clone(), next));
+        }
+    }
+}
+
+/// Decides a scored sentence (the language heard, when it was scored).
+fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violations, h: Heard) -> Option<ClfLang> {
     let (g, u) = (h.chan.guild, h.user);
     let tree = core.settings.current();
     let eff = tree.effective(Some(g), Some(u));
@@ -176,7 +216,7 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
             card.stamps.failed = Some(ms(now));
             card.error = Some(e.to_string());
             core.live.sentence(g, u, &card);
-            return;
+            return None;
         }
     };
     let raw = &scored.raw;
@@ -237,7 +277,7 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
                     count,
                 },
             };
-            (rec, step.map(|s| (step_no, count, s)))
+            (rec, Some((step_no, count, step)))
         }
         (Decision::Strike { strike, of }, _) => (
             DecisionRecord::Strike {
@@ -354,12 +394,15 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
         .value
         .value()
         .map(|d| h.cut_mono + d.get().secs());
-    let mut fields = Fields::new();
-    if let Some((step, count, _)) = &step_info {
-        fields.insert(Field::Step, step.to_string());
-        fields.insert(Field::Count, count.to_string());
-    }
-    fields.insert(Field::Strikes, eff.strikes.value.get().to_string());
+    // The same fields the warning was rendered with ahead of time.
+    let fields = match &step_info {
+        Some((step, count, _)) => super::speak::warning_fields(&eff, *step, *count),
+        None => {
+            let mut f = Fields::new();
+            f.insert(Field::Strikes, eff.strikes.value.get().to_string());
+            f
+        }
+    };
     match (&decision, top) {
         (Decision::Warn, Some(label)) => {
             let step = step_info.as_ref().map_or(1, |s| s.0);
@@ -407,7 +450,7 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
     if follow_up && let Some(wav) = wav {
         let followup = Followup {
             sentence,
-            step: step_info.map(|(_, _, step)| step),
+            step: step_info.and_then(|(_, _, step)| step),
             room: h.room.clone(),
             heard: language,
             wav,
@@ -416,4 +459,5 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
             tracing::error!("the action and reports for a flagged sentence were dropped: the enforcer has stopped");
         }
     }
+    Some(language)
 }

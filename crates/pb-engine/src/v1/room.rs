@@ -365,7 +365,11 @@ impl Room {
             ),
         };
         core.live.ensure_person(chan.guild, who, super::live::summary(&eff));
-        tokio::spawn(super::speak::prerender(core.clone(), chan.guild, user));
+        let _ = core.moderation.send(super::moderation::ModMsg::Listening {
+            guild: chan.guild,
+            user,
+            channel: chan.channel,
+        });
         if self.greeted.insert(user) && eff.greet_enabled.value {
             let _ = self.play.send(PlaybackMsg::Play(Box::new(PlayItem {
                 line: Line::Greeting,
@@ -453,6 +457,7 @@ async fn playback(
                 item.label,
                 &item.fields,
                 SpeakPriority::Live,
+                true,
             )
             .await
             {

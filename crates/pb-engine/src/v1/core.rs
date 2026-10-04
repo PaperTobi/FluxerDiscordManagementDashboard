@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use pb_domain::PlayPurpose;
 use pb_domain::{Audience, BlobHash, ChannelId, GuildId, Lang, SentenceId, UserId};
 use pb_fluxer_api::FluxerCtl;
+use pb_infer::SpeakPriority;
 use pb_policy::Chan;
 use pb_store_api::{Actor, ClipRecord, Event, PlayRecord};
 use pb_voicelines::{Fields, Line};
@@ -86,6 +87,12 @@ impl RoomHandle {
 /// A rendered phrase: (voice, speech rate in thousandths, text).
 pub type SpeechKey = (String, u32, String);
 
+/// A phrase's 48 kHz audio, or why it could not be rendered.
+pub(super) type SpeechResult = Result<Arc<[i16]>, super::error::RenderError>;
+
+/// A render in progress that later callers wait for.
+pub(super) type Flight = Arc<tokio::sync::OnceCell<SpeechResult>>;
+
 /// How the bot's Fluxer connection is doing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Connection {
@@ -126,6 +133,8 @@ pub struct Core {
     pub(super) sentence_no: Published<HashMap<(GuildId, UserId), u32>>,
     /// Rendered speech: (voice, rate in thousandths, text) → 48 kHz samples.
     pub speech: Mutex<AudioCache<SpeechKey>>,
+    /// Speech being rendered right now, and for whom (a second caller waits for it instead of rendering again).
+    pub(super) speech_inflight: Mutex<HashMap<SpeechKey, (SpeakPriority, Flight)>>,
     /// Decoded clip renders.
     pub clip_pcm: Mutex<AudioCache<BlobHash>>,
     pub moderation: Addr<super::moderation::ModMsg>,

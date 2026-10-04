@@ -559,7 +559,6 @@ async fn the_first_warning_is_rendered_before_it_is_needed() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "fixed by step 19 of proposal 0004"]
 async fn the_next_warning_is_rendered_in_the_language_last_heard() {
     let rig = Rig::start(Setup {
         heard: ClfLang::De,

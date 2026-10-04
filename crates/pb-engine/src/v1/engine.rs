@@ -64,6 +64,7 @@ impl Engine {
             rooms: Published::default(),
             sentence_no: Published::default(),
             speech: Mutex::default(),
+            speech_inflight: Mutex::default(),
             clip_pcm: Mutex::default(),
             moderation: mod_tx,
             voice: Published::default(),
@@ -424,6 +425,7 @@ impl Engine {
             None,
             &Fields::new(),
             pb_infer::SpeakPriority::Preview,
+            false,
         )
         .await
         .map_err(EngineError::Render)

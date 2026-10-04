@@ -121,6 +121,8 @@ pub fn resolve_line(core: &Core, guild: GuildId, person: Option<UserId>, line: &
     resolve(line, &ctx)
 }
 
+/// A phrase's audio: from the cache, from a render already running (unless that one runs at a lower priority than
+/// this caller needs), or rendered now.
 async fn speech(
     core: &Core,
     voice: &str,
@@ -132,14 +134,35 @@ async fn speech(
     if let Some(p) = lock(&core.speech).get(&key) {
         return Ok(p);
     }
-    let opts = SpeakOpts {
-        rate: rate as f32,
-        ..SpeakOpts::default()
+    let cell = {
+        let mut inflight = lock(&core.speech_inflight);
+        match inflight.get(&key) {
+            Some((running, cell)) if *running >= prio => cell.clone(),
+            _ => {
+                let cell = Arc::new(tokio::sync::OnceCell::new());
+                inflight.insert(key.clone(), (prio, cell.clone()));
+                cell
+            }
+        }
     };
-    let s = core.deps.inference.speak(voice, text, opts, prio).await?;
-    let pcm: Arc<[i16]> = s.samples.into();
-    lock(&core.speech).insert(key, pcm.clone());
-    Ok(pcm)
+    let result = cell
+        .get_or_init(|| async {
+            let opts = SpeakOpts {
+                rate: rate as f32,
+                ..SpeakOpts::default()
+            };
+            let s = core.deps.inference.speak(voice, text, opts, prio).await?;
+            let pcm: Arc<[i16]> = s.samples.into();
+            lock(&core.speech).insert(key.clone(), pcm.clone());
+            Ok(pcm)
+        })
+        .await
+        .clone();
+    let mut inflight = lock(&core.speech_inflight);
+    if inflight.get(&key).is_some_and(|(_, c)| Arc::ptr_eq(c, &cell)) {
+        inflight.remove(&key);
+    }
+    result
 }
 
 /// A clip's prepared 48 kHz audio.
@@ -195,7 +218,8 @@ pub fn fields_for(
     f
 }
 
-/// Renders a line (or an exact text) for a person.
+/// Renders a line (or an exact text) for a person. Only what is played is remembered for "not the same clip twice in
+/// a row" (`remember`); previews and renders ahead of time leave that memory alone.
 #[allow(clippy::too_many_arguments)]
 pub async fn render(
     core: &Core,
@@ -208,6 +232,7 @@ pub async fn render(
     label: Option<pb_domain::Label>,
     base: &Fields,
     prio: SpeakPriority,
+    remember: bool,
 ) -> Result<Rendered, RenderError> {
     let tree = core.settings.current();
     let eff = tree.effective(Some(guild), person);
@@ -250,7 +275,7 @@ pub async fn render(
         _ => None,
     };
     let memory: pb_voicelines::SaidTo = (guild, person, key.clone().unwrap_or_default());
-    let last = core.no_repeat.lock().ok().and_then(|n| n.last(&memory).copied());
+    let last = lock(&core.no_repeat).last(&memory).copied();
     let p = plan(&res, &fields, name_clip.as_ref(), last.as_ref(), &mut |n| {
         fastrand::usize(..n.max(1))
     });
@@ -284,8 +309,8 @@ pub async fn render(
                 }) {
                     said.push(t);
                 }
-                if let Ok(mut n) = core.no_repeat.lock() {
-                    n.remember(memory.clone(), *h);
+                if remember {
+                    lock(&core.no_repeat).remember(memory.clone(), *h);
                 }
             }
             Part::Silence { ms } => out.pcm.extend(std::iter::repeat_n(
@@ -300,38 +325,61 @@ pub async fn render(
     Ok(out)
 }
 
-/// Renders the warnings a person is likely to get (every enabled type × step), so playing never waits for speech.
-pub async fn prerender(core: Arc<Core>, guild: GuildId, user: UserId) {
-    let tree = core.settings.current();
-    let eff = tree.effective(Some(guild), Some(user));
-    let steps = u32::try_from(eff.escalation.value.steps().len()).unwrap_or(1);
+/// What a person's next warning would be: its count (violations in the window plus this one), the call they are in
+/// and the language last heard from them. Rendered with exactly the fields a live warning gets, so it is found in the
+/// cache when it is needed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NextWarning {
+    pub guild: GuildId,
+    pub user: UserId,
+    pub channel: Option<pb_domain::ChannelId>,
+    pub count: u32,
+    pub heard: Option<ClfLang>,
+}
+
+/// The fields of a warning (shared by moderation and the renders ahead of time, so both give the same text).
+pub fn warning_fields(eff: &pb_settings::Effective, step: u32, count: u32) -> Fields {
+    let mut f = Fields::new();
+    f.insert(Field::Step, step.to_string());
+    f.insert(Field::Count, count.to_string());
+    f.insert(Field::Strikes, eff.strikes.value.get().to_string());
+    f
+}
+
+/// Renders the person's next warning for every enabled type, at the lowest priority, so playing never waits for
+/// speech. Nothing is remembered as said.
+pub async fn prerender(core: Arc<Core>, next: NextWarning) {
+    let NextWarning {
+        guild,
+        user,
+        channel,
+        count,
+        heard,
+    } = next;
+    let eff = core.settings.current().effective(Some(guild), Some(user));
+    let step = eff.escalation.value.step_for(count).map_or(1, |(n, _)| n);
+    let fields = warning_fields(&eff, step, count);
     for label in eff.enabled_labels() {
-        for step in 1..=steps {
-            let line = Line::Warning {
-                label: pb_voicelines::Sel::Is(label),
-                step: pb_voicelines::Sel::Is(step),
-            };
-            let mut f = Fields::new();
-            f.insert(Field::Step, step.to_string());
-            f.insert(Field::Count, step.to_string());
-            f.insert(Field::Strikes, eff.strikes.value.get().to_string());
-            // Only text lines need rendering; clips are decoded on first use.
-            if let Err(e) = render(
-                &core,
-                guild,
-                None,
-                Some(user),
-                &line,
-                None,
-                None,
-                Some(label),
-                &f,
-                SpeakPriority::Prerender,
-            )
-            .await
-            {
-                tracing::debug!(error = %e, "a warning could not be rendered ahead of time");
-            }
+        let line = Line::Warning {
+            label: pb_voicelines::Sel::Is(label),
+            step: pb_voicelines::Sel::Is(step),
+        };
+        if let Err(e) = render(
+            &core,
+            guild,
+            channel,
+            Some(user),
+            &line,
+            None,
+            heard,
+            Some(label),
+            &fields,
+            SpeakPriority::Prerender,
+            false,
+        )
+        .await
+        {
+            tracing::debug!(error = %e, "a warning could not be rendered ahead of time");
         }
     }
 }
