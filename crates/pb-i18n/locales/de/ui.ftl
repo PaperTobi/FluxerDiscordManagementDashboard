@@ -474,3 +474,8 @@ ui-list-remove-admin-role-ids = Wer die Rolle { $name } hat, verwaltet den Bot n
 ui-track-everywhere = In jeder Community verfolgen
 ui-untrack-everywhere = Nicht mehr in jeder Community verfolgen
 ui-everywhere-hint = Wer in jeder Community verfolgt wird, wird auf der eigenen Seite oder auf der Seite System von dieser Liste genommen.
+
+## Pausieren, mit Ort
+ui-paused-done = Pausiert { $where }: Der Bot verlässt dort den Sprachkanal, hört niemandem zu und sagt nichts.
+ui-resumed-done = Fortgesetzt { $where }: Der Bot folgt dort den verfolgten Personen wieder.
+ui-in-every-community = in jeder Community

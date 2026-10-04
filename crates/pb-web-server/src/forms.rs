@@ -221,8 +221,38 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
         .await;
     match result {
         Ok(changes) if changes.is_empty() => st.done(&s, &f, true, text(loc, "ui-unchanged", &[])),
+        // Pausing says what it does, and where.
+        Ok(_) if key == SettingKey::Paused => {
+            let paused = !clear && field(&f, "value") == Some("on");
+            let id = if paused { "ui-paused-done" } else { "ui-resumed-done" };
+            st.done(
+                &s,
+                &f,
+                true,
+                text(loc, id, &[("where", st.scope_words(loc, scope).into())]),
+            )
+        }
         Ok(_) => st.done(&s, &f, true, text(loc, "ui-saved", &[])),
         Err(e) => st.done(&s, &f, false, change_error(loc, &e)),
+    }
+}
+
+impl WebState {
+    /// Where a scope is, in words: "in every community", "in Alpha", "for Max in Alpha".
+    pub(crate) fn scope_words(&self, loc: Locale, scope: Scope) -> String {
+        let gs = self.engine.guilds();
+        match scope {
+            Scope::Global => text(loc, "ui-in-every-community", &[]),
+            Scope::Server { guild } => text(loc, "audit-in", &[("community", gs.guild_name(guild).into())]),
+            Scope::Person { guild, user } => text(
+                loc,
+                "audit-for",
+                &[
+                    ("person", gs.name(guild, user).into()),
+                    ("community", gs.guild_name(guild).into()),
+                ],
+            ),
+        }
     }
 }
 

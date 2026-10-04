@@ -474,3 +474,8 @@ ui-list-remove-admin-role-ids = People with the role { $name } no longer manage 
 ui-track-everywhere = Track in every community
 ui-untrack-everywhere = Stop tracking in every community
 ui-everywhere-hint = People tracked in every community are taken off that list on their own page or on the System page.
+
+## Pausing, said where
+ui-paused-done = Paused { $where }: the bot leaves voice there, listens to nobody and says nothing.
+ui-resumed-done = Resumed { $where }: the bot follows the tracked people there again.
+ui-in-every-community = in every community

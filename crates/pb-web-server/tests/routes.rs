@@ -1089,6 +1089,27 @@ async fn the_owner_pauses_the_whole_bot() {
     );
     let system = w.get("/system", Some(&owner)).await.body;
     assert!(system.contains("Resume everywhere") && system.contains("/system#pause"));
+    let r = send(&owner, switch("off")).await;
+    assert!(notice(&w, &owner, &r).await.contains("Resumed in every community"));
+    // A community's switch: the next page already shows the other button (the live view follows a moment later).
+    let pause_alpha = |value: &'static str| {
+        [
+            ("csrf", csrf.clone()),
+            ("scope", format!("server:{G}")),
+            ("key", "paused".to_owned()),
+            ("value", value.to_owned()),
+            ("action", "set".to_owned()),
+            ("back", format!("/c/{G}")),
+        ]
+    };
+    let r = send(&owner, pause_alpha("on")).await;
+    assert!(notice(&w, &owner, &r).await.contains("Paused in Alpha"));
+    let page = w.get(&format!("/c/{G}"), Some(&owner)).await.body;
+    assert!(page.contains("Resume here") && !page.contains("Pause here"), "{page}");
+    send(&owner, pause_alpha("off")).await;
+    let page = w.get(&format!("/c/{G}"), Some(&owner)).await.body;
+    assert!(page.contains("Pause here"), "{page}");
+    send(&owner, switch("on")).await;
     send(&owner, switch("off")).await;
     assert!(!w.engine.settings().current().paused_everywhere());
     assert!(w.engine.settings().current().is_tracked(g, UserId(MAX)));

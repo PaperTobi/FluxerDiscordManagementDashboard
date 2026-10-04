@@ -93,7 +93,10 @@ pub fn CommunityPage() -> impl IntoView {
         _ => view! { <NotFound/> }.into_any(),
     };
     // While the owner paused the whole bot, a community's own switch changes nothing: say so instead of offering it.
+    // Read from the settings, not the live view, which follows a change a moment later (the page after pressing the
+    // button would still offer the same button).
     let everywhere = engine.settings().current().paused_everywhere();
+    let paused = engine.settings().current().effective(Some(g), None).paused.value;
     let switch = (!everywhere).then(|| {
         view! {
             <form method="post" action="/settings">
@@ -101,16 +104,16 @@ pub fn CommunityPage() -> impl IntoView {
                 <input type="hidden" name="back" value=here.clone()/>
                 <input type="hidden" name="scope" value=format!("server:{g}")/>
                 <input type="hidden" name="key" value="paused"/>
-                <input type="hidden" name="value" value=if state.paused { "off" } else { "on" }/>
+                <input type="hidden" name="value" value=if paused { "off" } else { "on" }/>
                 <input type="hidden" name="action" value="set"/>
-                <button class="button">{text(loc, if state.paused { "ui-resume-here" } else { "ui-pause-here" }, &[])}</button>
+                <button class="button">{text(loc, if paused { "ui-resume-here" } else { "ui-pause-here" }, &[])}</button>
             </form>
         }
     });
     view! {
         <header class="page-head">
             <h1>{state.name.clone()}</h1>
-            {match (everywhere, state.paused) {
+            {match (everywhere, paused) {
                 (true, _) => Some(view! { <span class="chip warn">{text(loc, "ui-paused-everywhere", &[])}</span> }),
                 (false, true) => Some(view! { <span class="chip warn">{text(loc, "ui-paused", &[])}</span> }),
                 (false, false) => None,
