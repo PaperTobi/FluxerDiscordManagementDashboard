@@ -1,9 +1,8 @@
 //! The engine: starts the actors, keeps a Fluxer session alive (a new one after a token or instance change), and is
 //! the API the web UI and the binary use.
 
-use std::collections::HashMap;
 use std::convert::Infallible;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use pb_domain::PlayPurpose;
@@ -19,7 +18,7 @@ use tokio::sync::{oneshot, watch};
 use super::actions::Undo;
 use super::cells::Views;
 use super::control::{self, SessionEnd};
-use super::core::{Connection, Core, Login, Phase, PlayItem, RoomCmd, Snapshot};
+use super::core::{Connection, Core, Login, Phase, PlayItem, Published, RoomCmd};
 use super::deps::Deps;
 use super::enforcer::{Enforcer, EnforcerMsg};
 use super::error::EngineError;
@@ -54,28 +53,29 @@ impl Engine {
         let (mod_tx, mod_mb) = mailbox();
         let (undo_tx, undo_mb) = mailbox();
         let (enforcer_tx, enforcer_mb) = mailbox();
+        let (views_tx, views_mb) = mailbox();
         let live = Live::new(deps.hub.clone());
         let core = Arc::new(Core {
             settings,
-            guilds: Snapshot::default(),
-            ctl: RwLock::new(None),
+            guilds: Published::default(),
+            ctl: Published::default(),
             live,
-            clips: RwLock::new(Default::default()),
-            rooms: RwLock::new(Default::default()),
-            sentence_no: Mutex::new(HashMap::new()),
+            clips: Published::default(),
+            rooms: Published::default(),
+            sentence_no: Published::default(),
             speech: Mutex::default(),
             clip_pcm: Mutex::default(),
             moderation: mod_tx,
-            voice: Snapshot::default(),
-            jar: Mutex::new(HashMap::new()),
+            voice: Published::default(),
+            jar: Published::default(),
             undo: undo_tx,
             enforcer: enforcer_tx,
             no_repeat: Mutex::new(Default::default()),
-            listening: Mutex::new(Default::default()),
-            names_recorded: Mutex::new(Default::default()),
-            speaking: Mutex::new(Default::default()),
-            conns: RwLock::new(Default::default()),
-            dirty: Mutex::new(Default::default()),
+            listening: Published::default(),
+            names_recorded: Published::default(),
+            speaking: Published::default(),
+            conns: Published::default(),
+            views: views_tx,
             redirects: Mutex::new((None, Vec::new())),
             connection: watch::channel(Login {
                 attempt: 0,
@@ -126,10 +126,8 @@ impl Engine {
             }
             for p in index.people(&users, Some(g)).await? {
                 // Already recorded: not recorded again unless they change.
-                core.names_recorded
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .insert(
+                core.names_recorded.update(|r| {
+                    r.insert(
                         (p.user, Some(g)),
                         (
                             p.username.clone(),
@@ -137,7 +135,8 @@ impl Engine {
                             p.nick.clone(),
                             p.avatar.clone(),
                         ),
-                    );
+                    )
+                });
                 core.update_guilds(|gs| {
                     gs.remember(
                         g,
@@ -156,18 +155,15 @@ impl Engine {
         }
         drop(tree0);
         let jars = index.jar(None).await?;
-        if let Ok(mut j) = core.jar.lock() {
-            for r in jars {
-                j.insert((r.guild, r.user), r.count);
-            }
-        }
+        core.jar
+            .update(|j| j.extend(jars.into_iter().map(|r| ((r.guild, r.user), r.count))));
         let sup = &core.sup;
         sup.spawn::<Moderation>(core.clone(), mod_mb);
         sup.spawn::<Undo>(core.clone(), undo_mb);
         sup.spawn::<Enforcer>(core.clone(), enforcer_mb);
         sup.spawn_alone::<DigestTimer>(core.clone());
         sup.spawn_alone::<Threads>(core.clone());
-        sup.spawn_alone::<Views>(core.clone());
+        sup.spawn::<Views>(core.clone(), views_mb);
         core.record(vec![Event::Started(Started {
             version: core.deps.version.clone(),
         })]);

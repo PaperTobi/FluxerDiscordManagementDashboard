@@ -2,7 +2,7 @@
 //! who may hear the bot, and the playback of everything it says.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use pb_domain::PlayPurpose;
@@ -57,12 +57,14 @@ struct Room {
     core: Arc<Core>,
     handle: RoomHandle,
     room: Arc<dyn VoiceRoom>,
-    participants: Arc<Mutex<BTreeMap<Identity, Participant>>>,
+    /// Who is in the room (kept here; playback reads it).
+    participants: watch::Sender<BTreeMap<Identity, Participant>>,
     tracks: HashMap<TrackKey, TrackRun>,
     /// Subscriptions asked for and not finished yet.
     subscribing: BTreeSet<TrackKey>,
     subscribed: mpsc::UnboundedSender<Subscribed>,
-    echo: Arc<Mutex<EchoGuard>>,
+    /// When the bot is speaking (kept by playback; tracks read it).
+    echo: watch::Receiver<EchoGuard>,
     greeted: BTreeSet<UserId>,
     play: mpsc::UnboundedSender<PlaybackMsg>,
     /// The bot stops: nobody new is listened to.
@@ -111,9 +113,7 @@ async fn run(
     // The bot's own track; without the Speak permission there is none (the no-speak policy applies).
     let out = match room.publish_voice().await {
         Ok(out) => {
-            if let Ok(mut sp) = core.speaking.lock() {
-                sp.insert(chan);
-            }
+            core.set_speaking(chan, true);
             Some(out)
         }
         Err(TransportError::NoSpeakPermission) => {
@@ -126,21 +126,21 @@ async fn run(
         }
     };
     let _ = control.send(ControlMsg::RoomUp { chan });
-    let echo = Arc::new(Mutex::new(EchoGuard::default()));
-    let participants: Arc<Mutex<BTreeMap<Identity, Participant>>> = Arc::new(Mutex::new(
+    let (echo, echo_rx) = watch::channel(EchoGuard::default());
+    let participants = watch::Sender::new(
         room.participants()
             .into_iter()
             .map(|p| (p.identity.clone(), p))
-            .collect(),
-    ));
+            .collect::<BTreeMap<_, _>>(),
+    );
     let (play_tx, play_rx) = mpsc::unbounded_channel::<PlaybackMsg>();
     let playback = tokio::spawn(playback(
         core.clone(),
         chan,
         room.clone(),
         out,
-        echo.clone(),
-        participants.clone(),
+        echo,
+        participants.subscribe(),
         play_rx,
     ));
     let (subscribed_tx, mut subscribed) = mpsc::unbounded_channel::<Subscribed>();
@@ -148,11 +148,11 @@ async fn run(
         core: core.clone(),
         handle: handle.clone(),
         room: room.clone(),
-        participants: participants.clone(),
+        participants,
         tracks: HashMap::new(),
         subscribing: BTreeSet::new(),
         subscribed: subscribed_tx,
-        echo: echo.clone(),
+        echo: echo_rx,
         greeted: BTreeSet::new(),
         play: play_tx.clone(),
         stopping: false,
@@ -165,27 +165,29 @@ async fn run(
                 let Some(ev) = ev else { break ("the room closed".to_owned(), None) };
                 match ev {
                     RoomEvent::ParticipantJoined(p) => {
-                        if let Ok(mut ps) = participants.lock() {
+                        r.participants.send_modify(|ps| {
                             ps.insert(p.identity.clone(), p);
-                        }
+                        });
                     }
                     RoomEvent::ParticipantLeft(id) => {
-                        if let Ok(mut ps) = participants.lock() {
+                        r.participants.send_modify(|ps| {
                             ps.remove(&id);
-                        }
+                        });
                     }
                     RoomEvent::TrackPublished(t) => {
-                        if let Ok(mut ps) = participants.lock()
-                            && let Some(p) = ps.get_mut(&t.key.participant) {
+                        r.participants.send_modify(|ps| {
+                            if let Some(p) = ps.get_mut(&t.key.participant) {
                                 p.audio.retain(|a| a.key != t.key);
                                 p.audio.push(t);
                             }
+                        });
                     }
                     RoomEvent::TrackUnpublished(key) => {
-                        if let Ok(mut ps) = participants.lock()
-                            && let Some(p) = ps.get_mut(&key.participant) {
+                        r.participants.send_modify(|ps| {
+                            if let Some(p) = ps.get_mut(&key.participant) {
                                 p.audio.retain(|a| a.key != key);
                             }
+                        });
                         if let Some(t) = r.tracks.remove(&key) {
                             let _ = t.stop.send(Some(FlushReason::Close));
                             core.set_listening(chan.guild, t.user, false);
@@ -195,10 +197,11 @@ async fn run(
                         if let Some(t) = r.tracks.get(&key) {
                             let _ = t.muted.send(muted);
                         }
-                        if let Ok(mut ps) = participants.lock()
-                            && let Some(a) = ps.get_mut(&key.participant).and_then(|p| p.audio.iter_mut().find(|a| a.key == key)) {
+                        r.participants.send_modify(|ps| {
+                            if let Some(a) = ps.get_mut(&key.participant).and_then(|p| p.audio.iter_mut().find(|a| a.key == key)) {
                                 a.muted = muted;
                             }
+                        });
                         continue;
                     }
                     RoomEvent::Reconnecting => {
@@ -243,9 +246,7 @@ async fn run(
         let _ = t.stop.send(Some(FlushReason::Close));
         core.set_listening(chan.guild, t.user, false);
     }
-    if let Ok(mut sp) = core.speaking.lock() {
-        sp.remove(&chan);
-    }
+    core.set_speaking(chan, false);
     core.mark_guild(chan.guild);
     drop(r);
     drop(play_tx);
@@ -265,11 +266,7 @@ impl Room {
     fn wanted(&self) -> (BTreeMap<TrackKey, (UserId, bool)>, Vec<Identity>) {
         let tracked = self.core.settings.current().tracked_for(self.handle.chan.guild);
         let bot = self.core.bot();
-        let snapshot: Vec<Participant> = self
-            .participants
-            .lock()
-            .map(|p| p.values().cloned().collect())
-            .unwrap_or_default();
+        let snapshot: Vec<Participant> = self.participants.borrow().values().cloned().collect();
         let mut want = BTreeMap::new();
         let mut tracked_ids = Vec::new();
         for p in &snapshot {
@@ -411,8 +408,8 @@ async fn playback(
     chan: Chan,
     room: Arc<dyn VoiceRoom>,
     mut out: Option<Box<dyn AudioOut>>,
-    echo: Arc<Mutex<EchoGuard>>,
-    participants: Arc<Mutex<BTreeMap<Identity, Participant>>>,
+    echo: watch::Sender<EchoGuard>,
+    participants: watch::Receiver<BTreeMap<Identity, Participant>>,
     mut rx: mpsc::UnboundedReceiver<PlaybackMsg>,
 ) {
     while let Some(msg) = rx.recv().await {
@@ -508,8 +505,8 @@ async fn play_one(
     chan: Chan,
     room: &Arc<dyn VoiceRoom>,
     out: &mut Box<dyn AudioOut>,
-    echo: &Arc<Mutex<EchoGuard>>,
-    participants: &Arc<Mutex<BTreeMap<Identity, Participant>>>,
+    echo: &watch::Sender<EchoGuard>,
+    participants: &watch::Receiver<BTreeMap<Identity, Participant>>,
     item: &PlayItem,
     pcm: &[i16],
     record: &mut PlayRecord,
@@ -519,10 +516,7 @@ async fn play_one(
     pb_audio::gain_db(&mut samples, eff.volume_db.value.get() as f32);
     // Who hears it: only the person it is about, the tracked people, or everyone.
     let mut narrowed = false;
-    let ids: Vec<Identity> = participants
-        .lock()
-        .map(|p| p.keys().cloned().collect())
-        .unwrap_or_default();
+    let ids: Vec<Identity> = participants.borrow().keys().cloned().collect();
     let tracked = core.settings.current().tracked_for(chan.guild);
     let tracked_ids: Vec<Identity> = ids
         .iter()
@@ -550,13 +544,10 @@ async fn play_one(
     let lead = LEAD_IN_MS + if narrowed { NARROW_PAD_MS } else { 0 };
     let mut full = vec![0i16; lead * pb_audio::PLAY_RATE as usize / 1000];
     full.extend(pb_audio::to_i16(&samples));
-    if let Ok(mut e) = echo.lock() {
-        e.begin(core.deps.clock.mono());
-    }
+    // Set before the audio can be heard: a microphone that picks it up never scores the bot's own voice.
+    echo.send_modify(|e| e.begin(core.deps.clock.mono()));
     let r = out.play(&full).await;
-    if let Ok(mut e) = echo.lock() {
-        e.end(core.deps.clock.mono());
-    }
+    echo.send_modify(|e| e.end(core.deps.clock.mono()));
     {
         record.dur_ms = (full.len() as u64 * 1000 / u64::from(pb_audio::PLAY_RATE)) as u32;
     }

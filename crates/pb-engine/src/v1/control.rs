@@ -327,13 +327,11 @@ impl Session {
         self.exec(acts);
         let conns: std::collections::BTreeMap<Chan, pb_live_proto::BotJoin> =
             self.machine.conns().map(|c| (c.chan, bot_join(c.state))).collect();
-        if let Ok(mut w) = core.conns.write()
-            && *w != conns
-        {
-            for chan in w.keys().chain(conns.keys()) {
+        if *core.conns.get() != conns {
+            for chan in core.conns.get().keys().chain(conns.keys()) {
                 core.mark_guild(chan.guild);
             }
-            *w = conns;
+            core.conns.update(|c| *c = conns);
         }
         if burst_done && self.gateway_ok {
             let text = super::commands::presence_text(&core);
@@ -474,14 +472,16 @@ fn remember_person(
         nick.clone(),
         u.avatar.clone(),
     );
-    let mut recorded = core
-        .names_recorded
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if recorded.get(&(u.id, guild)) == Some(&v) {
+    let changed = core.names_recorded.update(|recorded| {
+        if recorded.get(&(u.id, guild)) == Some(&v) {
+            return false;
+        }
+        recorded.insert((u.id, guild), v);
+        true
+    });
+    if !changed {
         return None;
     }
-    recorded.insert((u.id, guild), v);
     Some(Event::PersonSeen(PersonSeen {
         user: u.id,
         guild,

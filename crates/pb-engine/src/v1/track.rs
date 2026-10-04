@@ -1,7 +1,7 @@
 //! One microphone: frames → voice activity → sentences → the classifier → the moderation actor. Also the live levels
 //! and each sentence's way along the conveyor.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use jiff::Timestamp;
@@ -56,7 +56,7 @@ pub struct TrackSpec {
     pub user: UserId,
     pub room: RoomHandle,
     pub audio: AudioIn,
-    pub echo: Arc<Mutex<EchoGuard>>,
+    pub echo: watch::Receiver<EchoGuard>,
     pub muted: watch::Receiver<bool>,
     /// Set when listening ends, with why (`Close`: the person left or is no longer tracked; `End`: the bot stops).
     pub stop: watch::Receiver<Option<FlushReason>>,
@@ -267,7 +267,7 @@ fn handle(
                 let mut pcm = ring.slice(s0, s1);
                 let (t0, t1) = (mono_of(c.s0, ring.end()), mono_of(c.s1, ring.end()));
                 // The bot's own voice picked up by this microphone is never scored as theirs.
-                let guard = spec.echo.lock().map(|e| e.clone()).unwrap_or_default();
+                let guard = spec.echo.borrow().clone();
                 if guard.overlaps(t0, t1) {
                     match keep_before_playback(t0, guard.started(), LISTEN_RATE, MIN_KEEP_S) {
                         Some(n) => pcm.truncate(n),

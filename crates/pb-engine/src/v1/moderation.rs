@@ -134,9 +134,7 @@ impl Supervised for Moderation {
             };
             match msg {
                 ModMsg::JarReset(g, u) => {
-                    if let Ok(mut j) = core.jar.lock() {
-                        j.insert((g, u), 0);
-                    }
+                    core.jar.update(|j| j.insert((g, u), 0));
                 }
                 ModMsg::Heard(h) => decide(&core, &mut self.decider, &mut self.violations, *h).await,
                 ModMsg::Counts(g, u, reply) => {
@@ -299,8 +297,8 @@ async fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violat
     // Handed to the recorder before the warning is queued: the sentence is recorded before what refers to it.
     core.recorder
         .sentence(sentence.clone(), wav.clone().filter(|_| keep_audio));
-    if jar && let Ok(mut j) = core.jar.lock() {
-        *j.entry((g, u)).or_insert(0) += 1;
+    if jar {
+        core.jar.update(|j| *j.entry((g, u)).or_insert(0) += 1);
     }
 
     // The conveyor.

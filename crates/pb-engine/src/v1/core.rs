@@ -1,7 +1,7 @@
 //! What every task shares.
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
 use pb_domain::PlayPurpose;
 use pb_domain::{Audience, BlobHash, ChannelId, GuildId, Lang, SentenceId, UserId};
@@ -115,24 +115,24 @@ pub(super) type Names = (String, Option<String>, Option<String>, Option<String>)
 pub struct Core {
     pub deps: Deps,
     pub settings: SettingsService,
-    pub(super) guilds: Snapshot<Guilds>,
-    pub ctl: RwLock<Option<Arc<dyn FluxerCtl>>>,
+    pub(super) guilds: Published<Guilds>,
+    pub(super) ctl: Published<Option<Arc<dyn FluxerCtl>>>,
     pub live: Live,
     /// The clip library (removed clips left out).
-    pub clips: RwLock<BTreeMap<BlobHash, ClipRecord>>,
+    pub(super) clips: Published<BTreeMap<BlobHash, ClipRecord>>,
     /// Rooms the bot is in.
-    pub rooms: RwLock<BTreeMap<Chan, RoomHandle>>,
+    pub(super) rooms: Published<BTreeMap<Chan, RoomHandle>>,
     /// Running number of each person's sentences (for the conveyor).
-    pub sentence_no: Mutex<HashMap<(GuildId, UserId), u32>>,
+    pub(super) sentence_no: Published<HashMap<(GuildId, UserId), u32>>,
     /// Rendered speech: (voice, rate in thousandths, text) → 48 kHz samples.
     pub speech: Mutex<AudioCache<SpeechKey>>,
     /// Decoded clip renders.
     pub clip_pcm: Mutex<AudioCache<BlobHash>>,
     pub moderation: Addr<super::moderation::ModMsg>,
     /// Who is in which voice channel (kept by the control actor).
-    pub(super) voice: Snapshot<pb_policy::VoiceWorld>,
+    pub(super) voice: Published<pb_policy::VoiceWorld>,
     /// Swear-jar counts (seeded from the index, kept current by the moderation actor).
-    pub jar: Mutex<HashMap<(GuildId, UserId), u64>>,
+    pub(super) jar: Published<HashMap<(GuildId, UserId), u64>>,
     /// Timed mutes to lift (to the undo scheduler).
     pub undo: Addr<pb_store_api::ActionRecord>,
     /// Actions and reports for flagged sentences.
@@ -140,15 +140,15 @@ pub struct Core {
     /// The clip played last per person and line (not repeated next time).
     pub no_repeat: Mutex<pb_voicelines::NoRepeat>,
     /// People whose microphone the bot listens to now.
-    pub listening: Mutex<std::collections::BTreeSet<(GuildId, UserId)>>,
+    pub(super) listening: Published<std::collections::BTreeSet<(GuildId, UserId)>>,
     /// The names last recorded per person (and community): only changes are recorded again.
-    pub(super) names_recorded: Mutex<BTreeMap<(UserId, Option<GuildId>), Names>>,
+    pub(super) names_recorded: Published<BTreeMap<(UserId, Option<GuildId>), Names>>,
     /// Rooms where the bot may speak.
-    pub speaking: Mutex<std::collections::BTreeSet<Chan>>,
+    pub(super) speaking: Published<std::collections::BTreeSet<Chan>>,
     /// The follow machine's connections and their states (for the community page).
-    pub conns: RwLock<BTreeMap<Chan, pb_live_proto::BotJoin>>,
-    /// Live cells to rebuild soon.
-    pub dirty: Mutex<super::cells::Dirty>,
+    pub(super) conns: Published<BTreeMap<Chan, pb_live_proto::BotJoin>>,
+    /// Live views to rebuild soon (to the views actor).
+    pub(super) views: Addr<super::cells::Mark>,
     /// How the Fluxer connection is doing (the supervisor and the gateway session set it).
     pub connection: watch::Sender<Login>,
     /// The application's registered OAuth2 redirect addresses, and when Fluxer was last asked.
@@ -170,27 +170,36 @@ impl std::fmt::Debug for Core {
     }
 }
 
-/// A value read often and changed seldom: readers get a snapshot and hold no lock while they use it (so one task can
-/// read twice in a row without deadlocking against a waiting writer); writers copy it when a reader still has one.
-#[derive(Debug, Default)]
-pub struct Snapshot<T>(RwLock<Arc<T>>);
+/// State one part of the engine keeps and others read: readers take a snapshot that does not change (and hold no
+/// lock while they use it) or follow changes; a change copies the value only while a reader still holds the old one.
+pub struct Published<T>(watch::Sender<Arc<T>>);
 
-impl<T: Clone> Snapshot<T> {
+impl<T> std::fmt::Debug for Published<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Published").finish_non_exhaustive()
+    }
+}
+
+impl<T: Default> Default for Published<T> {
+    fn default() -> Self {
+        Published(watch::Sender::new(Arc::default()))
+    }
+}
+
+impl<T: Clone> Published<T> {
     pub fn get(&self) -> Arc<T> {
-        read(&self.0).clone()
+        self.0.borrow().clone()
     }
 
     pub fn update<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
-        f(Arc::make_mut(&mut write(&self.0)))
+        let mut f = Some(f);
+        let mut out = None;
+        self.0.send_modify(|v| out = f.take().map(|f| f(Arc::make_mut(v))));
+        match out {
+            Some(r) => r,
+            None => unreachable!("send_modify runs its closure once"),
+        }
     }
-}
-
-fn read<T>(l: &RwLock<T>) -> std::sync::RwLockReadGuard<'_, T> {
-    l.read().unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-fn write<T>(l: &RwLock<T>) -> std::sync::RwLockWriteGuard<'_, T> {
-    l.write().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 pub(super) fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -215,7 +224,7 @@ impl Core {
     }
 
     pub fn ctl(&self) -> Option<Arc<dyn FluxerCtl>> {
-        read(&self.ctl).clone()
+        (*self.ctl.get()).clone()
     }
 
     /// A picture's address on the instance's media server (the gateway sends only its hash).
@@ -228,15 +237,15 @@ impl Core {
         if let Ok(mut r) = self.redirects.lock() {
             *r = (None, Vec::new());
         }
-        *write(&self.ctl) = ctl;
+        self.ctl.update(|c| *c = ctl);
     }
 
     pub fn room(&self, chan: Chan) -> Option<RoomHandle> {
-        read(&self.rooms).get(&chan).cloned()
+        self.rooms.get().get(&chan).cloned()
     }
 
     pub fn rooms(&self) -> Vec<RoomHandle> {
-        read(&self.rooms).values().cloned().collect()
+        self.rooms.get().values().cloned().collect()
     }
 
     pub fn room_of_channel(&self, guild: GuildId, channel: ChannelId) -> Option<RoomHandle> {
@@ -244,15 +253,14 @@ impl Core {
     }
 
     pub fn set_room(&self, chan: Chan, h: Option<RoomHandle>) {
-        let mut rooms = write(&self.rooms);
-        match h {
+        self.rooms.update(|rooms| match h {
             Some(h) => {
                 rooms.insert(chan, h);
             }
             None => {
                 rooms.remove(&chan);
             }
-        }
+        });
     }
 
     /// Who is in which call (a snapshot).
@@ -265,69 +273,67 @@ impl Core {
     }
 
     pub fn is_listening(&self, guild: GuildId, user: UserId) -> bool {
-        self.listening.lock().is_ok_and(|l| l.contains(&(guild, user)))
+        self.listening.get().contains(&(guild, user))
     }
 
     pub fn set_listening(&self, guild: GuildId, user: UserId, on: bool) {
-        if let Ok(mut l) = self.listening.lock() {
+        self.listening.update(|l| {
             if on {
                 l.insert((guild, user));
             } else {
                 l.remove(&(guild, user));
             }
-        }
+        });
         self.mark_person(guild, user);
+    }
+
+    pub fn set_speaking(&self, chan: Chan, on: bool) {
+        self.speaking.update(|s| {
+            if on {
+                s.insert(chan);
+            } else {
+                s.remove(&chan);
+            }
+        });
     }
 
     /// The community's live views need rebuilding (its page and its sidebar entry).
     pub fn mark_guild(&self, guild: GuildId) {
-        if let Ok(mut d) = self.dirty.lock() {
-            d.guilds.insert(guild);
-        }
+        let _ = self.views.send(super::cells::Mark::Guild(guild));
     }
 
     /// A person's live views need rebuilding (their page, their community).
     pub fn mark_person(&self, guild: GuildId, user: UserId) {
-        if let Ok(mut d) = self.dirty.lock() {
-            d.people.insert((guild, user));
-            d.guilds.insert(guild);
-        }
+        let _ = self.views.send(super::cells::Mark::Person(guild, user));
     }
 
     pub fn mark_all(&self) {
-        if let Ok(mut d) = self.dirty.lock() {
-            d.all = true;
-        }
+        let _ = self.views.send(super::cells::Mark::All);
     }
 
     pub fn jar(&self, guild: GuildId, user: UserId) -> u64 {
-        self.jar
-            .lock()
-            .map(|j| j.get(&(guild, user)).copied().unwrap_or(0))
-            .unwrap_or(0)
+        self.jar.get().get(&(guild, user)).copied().unwrap_or(0)
     }
 
     pub fn clip(&self, h: &BlobHash) -> Option<ClipRecord> {
-        read(&self.clips).get(h).cloned()
+        self.clips.get().get(h).cloned()
     }
 
     pub fn put_clip(&self, c: ClipRecord) {
-        write(&self.clips).insert(c.render, c);
+        self.clips.update(|cs| cs.insert(c.render, c));
     }
 
     pub fn remove_clip(&self, h: &BlobHash) {
-        write(&self.clips).remove(h);
+        self.clips.update(|cs| cs.remove(h));
         lock(&self.clip_pcm).remove(h);
     }
 
     pub fn next_sentence_no(&self, guild: GuildId, user: UserId) -> u32 {
-        let mut m = self
-            .sentence_no
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let n = m.entry((guild, user)).or_insert(0);
-        *n += 1;
-        *n
+        self.sentence_no.update(|m| {
+            let n = m.entry((guild, user)).or_insert(0);
+            *n += 1;
+            *n
+        })
     }
 
     /// The bot owner (the application's owner).

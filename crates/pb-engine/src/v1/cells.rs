@@ -3,7 +3,6 @@
 //! ([`Cells`] is the hub's cell source) and rebuilt a few times a second while something changed.
 
 use std::collections::{BTreeSet, VecDeque};
-use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -23,12 +22,37 @@ use super::mailbox::Mailbox;
 use super::moderation::decision_view;
 use super::supervise::{ActorError, Life, Policy, Supervised};
 
+/// Something whose live views need rebuilding (to the views actor).
+#[derive(Debug, Clone, Copy)]
+pub enum Mark {
+    /// A community's page and its sidebar entry.
+    Guild(GuildId),
+    /// A person's page and their community.
+    Person(GuildId, UserId),
+    All,
+}
+
 /// What changed since the last rebuild.
 #[derive(Debug, Default)]
-pub struct Dirty {
-    pub guilds: BTreeSet<GuildId>,
-    pub people: BTreeSet<(GuildId, UserId)>,
-    pub all: bool,
+struct Dirty {
+    guilds: BTreeSet<GuildId>,
+    people: BTreeSet<(GuildId, UserId)>,
+    all: bool,
+}
+
+impl Dirty {
+    fn add(&mut self, m: Mark) {
+        match m {
+            Mark::Guild(g) => {
+                self.guilds.insert(g);
+            }
+            Mark::Person(g, u) => {
+                self.people.insert((g, u));
+                self.guilds.insert(g);
+            }
+            Mark::All => self.all = true,
+        }
+    }
 }
 
 pub(crate) fn who(core: &Core, g: GuildId, u: UserId) -> Who {
@@ -104,7 +128,7 @@ pub fn guild_state(core: &Core, g: GuildId) -> GuildState {
         by_channel.entry(v.channel).or_default().push(v);
     }
     let rooms: BTreeSet<Chan> = core.rooms().into_iter().map(|r| r.chan).collect();
-    let speaking = core.speaking.lock().map(|s| s.clone()).unwrap_or_default();
+    let speaking = core.speaking.get();
     let mut calls = Vec::new();
     for (channel, states) in by_channel {
         let chan = Chan { guild: g, channel };
@@ -146,17 +170,14 @@ pub fn guild_state(core: &Core, g: GuildId) -> GuildState {
     tracked.sort_by_key(|a| a.who.name.to_lowercase());
     let connections = core
         .conns
-        .read()
-        .map(|c| {
-            c.iter()
-                .filter(|(chan, _)| chan.guild == g)
-                .map(|(chan, st)| Connection {
-                    channel: chan.channel,
-                    state: *st,
-                })
-                .collect()
+        .get()
+        .iter()
+        .filter(|(chan, _)| chan.guild == g)
+        .map(|(chan, st)| Connection {
+            channel: chan.channel,
+            state: *st,
         })
-        .unwrap_or_default();
+        .collect();
     GuildState {
         id: g,
         name: core.guilds().guild_name(g),
@@ -339,6 +360,7 @@ async fn load_recent(core: &Core, g: GuildId, u: UserId) {
 
 /// Rebuilds what changed, four times a second.
 pub(crate) struct Views {
+    dirty: Dirty,
     sidebar_known: BTreeSet<GuildId>,
     wall_tiles: BTreeSet<(GuildId, UserId)>,
     swept: tokio::time::Instant,
@@ -346,28 +368,38 @@ pub(crate) struct Views {
 
 impl Supervised for Views {
     type Ctx = Arc<Core>;
-    type Msg = Infallible;
+    type Msg = Mark;
     const NAME: &'static str = "views";
     const POLICY: Policy = Policy::Restart;
 
     /// Everything is built afresh (after a crash too).
-    async fn start(core: &Arc<Core>) -> Result<Self, ActorError> {
-        core.mark_all();
+    async fn start(_: &Arc<Core>) -> Result<Self, ActorError> {
         Ok(Views {
+            dirty: Dirty {
+                all: true,
+                ..Dirty::default()
+            },
             sidebar_known: BTreeSet::new(),
             wall_tiles: BTreeSet::new(),
             swept: tokio::time::Instant::now(),
         })
     }
 
-    async fn run(mut self, core: Arc<Core>, _: &mut Mailbox<Infallible>, life: Life) -> Result<(), ActorError> {
+    async fn run(mut self, core: Arc<Core>, mb: &mut Mailbox<Mark>, life: Life) -> Result<(), ActorError> {
+        let mut tick = tokio::time::interval(Duration::from_millis(250));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             tokio::select! {
-                () = tokio::time::sleep(Duration::from_millis(250)) => {}
+                m = mb.recv() => match m {
+                    Some(m) => self.dirty.add(m),
+                    None => return Ok(()),
+                },
+                _ = tick.tick() => {
+                    life.beat();
+                    self.refresh(&core);
+                }
                 () = life.cancel.cancelled() => return Ok(()),
             }
-            life.beat();
-            self.refresh(&core);
         }
     }
 }
@@ -379,11 +411,7 @@ impl Views {
             self.swept = tokio::time::Instant::now();
             core.live.hub.drop_unwatched(|t| !matches!(t, Topic::Person { .. }));
         }
-        let d = core
-            .dirty
-            .lock()
-            .map(|mut d| std::mem::take(&mut *d))
-            .unwrap_or_default();
+        let d = std::mem::take(&mut self.dirty);
         let guilds: BTreeSet<GuildId> = if d.all { communities(core) } else { d.guilds.clone() };
         // The sidebar: communities appear, change and go.
         let now = communities(core);
@@ -438,7 +466,7 @@ impl Views {
             }
         }
         // The wall: one tile per person the bot listens to.
-        let listening: BTreeSet<(GuildId, UserId)> = core.listening.lock().map(|l| l.clone()).unwrap_or_default();
+        let listening: BTreeSet<(GuildId, UserId)> = (*core.listening.get()).clone();
         for (g, u) in listening.difference(&self.wall_tiles) {
             let channel = core.voice().of_user(*u).find(|v| v.guild == *g).map(|v| v.channel);
             let Some(channel) = channel else { continue };
