@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pb_infer::{InferError, Inference, Models, Priority, SpeakPriority};
+use pb_infer::{InferError, Inference, Models, Priority, SpeakPriority, TtsFactory};
 use pb_models_api::{
     Classifier, ClassifierInfo, FRAME, ModelError, RawScores, SpeakOpts, Speech, TtsEngine, TtsError, VadInfo,
     VadModel, VadState, VoiceInfo,
@@ -72,13 +72,24 @@ impl VadModel for FakeVad {
     }
 }
 
-struct FakeTts;
+/// A speech model with one voice `v` that says 0.1 s (`slow`: 0.2 s) per letter.
+struct FakeTts {
+    model: &'static str,
+    slow: bool,
+}
+
+const FAKE: FakeTts = FakeTts {
+    model: "fake",
+    slow: false,
+};
 
 impl TtsEngine for FakeTts {
     fn voices(&self) -> Vec<VoiceInfo> {
         vec![VoiceInfo {
             id: "v".into(),
+            model: self.model.into(),
             language: "en".into(),
+            languages: vec!["en".into()],
             speakers: vec![],
             sample_rate: 22_050,
             quality: "x".into(),
@@ -88,7 +99,7 @@ impl TtsEngine for FakeTts {
         if voice != "v" {
             return Err(TtsError::NoVoice(voice.into()));
         }
-        let n = 2205 * text.len();
+        let n = 2205 * text.len() * if self.slow { 2 } else { 1 };
         Ok(Speech {
             samples: (0..n).map(|i| (i as f32 * 0.05).sin() * 0.5).collect(),
             sample_rate: 22_050,
@@ -115,7 +126,7 @@ fn start(delay: Duration) -> (Inference, Arc<Mutex<Vec<String>>>) {
             context: 0,
         })),
         classifier: Box::new(classifier),
-        tts: Some(Box::new(|_| Ok(Box::new(FakeTts) as Box<dyn TtsEngine>))),
+        tts: vec![Box::new(|_| Ok(Box::new(FAKE) as Box<dyn TtsEngine>))],
         tts_threads: 1,
     };
     (Inference::start(models).unwrap(), log)
@@ -215,4 +226,52 @@ async fn speech_comes_out_at_48_khz() {
         inf.classify(vec![0.0; 1000].into(), Priority::Live).await,
         Err(InferError::Stopped)
     ));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn each_voice_goes_to_its_own_model() {
+    let engine = |model: &'static str, slow: bool| -> TtsFactory {
+        Box::new(move |_| Ok(Box::new(FakeTts { model, slow }) as Box<dyn TtsEngine>))
+    };
+    let models = Models {
+        vad: Box::new(FakeVad(VadInfo {
+            model: "fake".into(),
+            context: 0,
+        })),
+        classifier: Box::new(FakeClassifier {
+            info: ClassifierInfo {
+                model: "fake".into(),
+                min_samples: 480,
+                max_samples: 480_000,
+                device: "cpu".into(),
+            },
+            log: Arc::default(),
+            delay: Duration::ZERO,
+        }),
+        tts: vec![engine("fast", false), engine("slow", true)],
+        tts_threads: 1,
+    };
+    let inf = Inference::start(models).unwrap();
+    let voices = inf.reload_tts(1).await.unwrap();
+    let ids: Vec<String> = voices.iter().map(VoiceInfo::full_id).collect();
+    assert_eq!(ids, ["fast:v", "slow:v"]);
+    assert_eq!(inf.status().voices, 2);
+    let secs = |voice: &'static str| {
+        let inf = inf.clone();
+        async move {
+            let s = inf
+                .speak(voice, "hi", SpeakOpts::default(), SpeakPriority::Live)
+                .await?;
+            Ok::<f32, InferError>(s.samples.len() as f32 / 48_000.0)
+        }
+    };
+    // A bare id is the first model that has it; `<model>:<id>` picks the model.
+    assert!((secs("v").await.unwrap() - 0.2).abs() < 0.01);
+    assert!((secs("fast:v").await.unwrap() - 0.2).abs() < 0.01);
+    assert!((secs("slow:v").await.unwrap() - 0.4).abs() < 0.01);
+    assert!(matches!(
+        secs("other:v").await,
+        Err(InferError::Tts(TtsError::NoVoice(_)))
+    ));
+    inf.shutdown();
 }

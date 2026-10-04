@@ -27,14 +27,14 @@ async fn the_real_models_answer_through_the_handle() {
     let inf = Inference::start(Models {
         vad: Box::new(vad),
         classifier: Box::new(clf),
-        tts: Some(Box::new(move |threads| {
+        tts: vec![Box::new(move |threads| {
             pb_tts_piper::PiperEngine::new(
                 std::path::Path::new(pb_espeak::BUILD_DATA_DIR),
                 std::slice::from_ref(&voices),
                 threads,
             )
             .map(|e| Box::new(e) as Box<dyn TtsEngine>)
-        })),
+        })],
         tts_threads: 2,
     })
     .unwrap();

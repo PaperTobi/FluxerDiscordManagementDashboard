@@ -97,6 +97,19 @@ pub struct QueueStats {
     pub running_ms: Option<u64>,
 }
 
+impl QueueStats {
+    /// Two queues' numbers as one (the longest waits).
+    pub fn merge(self, o: QueueStats) -> QueueStats {
+        QueueStats {
+            waiting: self.waiting + o.waiting,
+            done: self.done + o.done,
+            late: self.late + o.late,
+            oldest_ms: self.oldest_ms.max(o.oldest_ms),
+            running_ms: self.running_ms.max(o.running_ms),
+        }
+    }
+}
+
 impl<T> std::fmt::Debug for Queue<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Queue").field("stats", &self.stats()).finish()

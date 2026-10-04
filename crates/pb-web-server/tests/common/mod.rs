@@ -164,7 +164,7 @@ impl Web {
                 max_samples: 480_000,
                 device: "none".into(),
             })),
-            tts: None,
+            tts: Vec::new(),
             tts_threads: 1,
         })
         .unwrap();

@@ -46,14 +46,14 @@ pub fn inference() -> Inference {
             )
             .unwrap(),
         ),
-        tts: Some(Box::new(move |threads| {
+        tts: vec![Box::new(move |threads| {
             pb_tts_piper::PiperEngine::new(
                 std::path::Path::new(pb_espeak::BUILD_DATA_DIR),
                 std::slice::from_ref(&voices),
                 threads,
             )
             .map(|e| Box::new(e) as Box<dyn TtsEngine>)
-        })),
+        })],
         tts_threads: 2,
     })
     .unwrap()

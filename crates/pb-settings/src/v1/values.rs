@@ -60,6 +60,8 @@ pub enum ValueError {
     PrefixSpaces,
     #[error("{0:?} is not a language tag (like de or en-US)")]
     NotLang(String),
+    #[error("{0:?} is not a kind of line (warning, strike, action, greeting or say)")]
+    NotLineKind(String),
     #[error("{0:?} is not an ID")]
     NotId(String),
     #[error("{value:?} must be one of: {choices}")]
@@ -174,19 +176,30 @@ id_from_json!(
     pb_domain::ChannelId
 );
 
+/// A JSON object of texts keyed by `K` (`null` is empty).
+fn text_map<K: Ord + std::str::FromStr>(
+    v: serde_json::Value,
+    bad_key: fn(String) -> ValueError,
+) -> Result<std::collections::BTreeMap<K, String>, ValueError> {
+    match v {
+        serde_json::Value::Object(o) => o
+            .into_iter()
+            .map(|(k, v)| Ok((k.parse().map_err(|_| bad_key(k))?, text_of(v)?)))
+            .collect(),
+        serde_json::Value::Null => Ok(std::collections::BTreeMap::new()),
+        _ => Err(ValueError::NotList),
+    }
+}
+
 impl FromJson for std::collections::BTreeMap<Lang, String> {
     fn from_json(v: serde_json::Value) -> Result<Self, ValueError> {
-        match v {
-            serde_json::Value::Object(o) => o
-                .into_iter()
-                .map(|(k, v)| {
-                    let l: Lang = k.parse().map_err(|_| ValueError::NotLang(k))?;
-                    Ok((l, text_of(v)?))
-                })
-                .collect(),
-            serde_json::Value::Null => Ok(Self::new()),
-            _ => Err(ValueError::NotList),
-        }
+        text_map(v, ValueError::NotLang)
+    }
+}
+
+impl FromJson for std::collections::BTreeMap<pb_voicelines::LineKind, String> {
+    fn from_json(v: serde_json::Value) -> Result<Self, ValueError> {
+        text_map(v, ValueError::NotLineKind)
     }
 }
 

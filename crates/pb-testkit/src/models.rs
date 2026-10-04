@@ -240,7 +240,9 @@ impl TtsEngine for BeepTts {
             .into_iter()
             .map(|(id, language)| VoiceInfo {
                 id: id.into(),
+                model: "beep".into(),
                 language: language.into(),
+                languages: vec![language.into()],
                 speakers: Vec::new(),
                 sample_rate: BeepTts::RATE,
                 quality: "medium".into(),

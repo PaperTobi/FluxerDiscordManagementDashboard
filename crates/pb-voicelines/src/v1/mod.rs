@@ -8,7 +8,7 @@ mod resolve;
 mod template;
 
 pub use builtin::builtin_text;
-pub use line::{Line, LineKey, LineKeyError, Sel, Slot, Slots};
+pub use line::{Line, LineKey, LineKeyError, LineKind, Sel, Slot, Slots};
 pub use pick::{NoRepeat, SaidTo, pick};
 pub use plan::{Part, UtterancePlan, plan};
 pub use resolve::{ClipInfo, ClipLang, Resolution, ResolveCtx, ScopedSlots, Source, resolve};

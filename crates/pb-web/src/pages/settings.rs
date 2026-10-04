@@ -68,6 +68,19 @@ fn shown(v: &Value) -> String {
     }
 }
 
+/// A kind of line's name.
+fn line_kind_name(loc: Locale, k: pb_voicelines::LineKind) -> String {
+    use pb_voicelines::LineKind;
+    let id = match k {
+        LineKind::Warning => "ui-vl-warning",
+        LineKind::StrikeNotice => "ui-vl-strike",
+        LineKind::Action => "ui-vl-kind-action",
+        LineKind::Greeting => "ui-vl-greeting",
+        LineKind::Say => "ui-vl-kind-say",
+    };
+    text(loc, id, &[])
+}
+
 /// The choice list a setting's choices are named by.
 /// The languages offered: the classifier's (its language head) and every installed voice's.
 pub fn language_list() -> Vec<String> {
@@ -242,6 +255,37 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
                                             .map(|o| {
                                                 let sel = o == chosen;
                                                 view! { <option value=o.clone() selected=sel>{o.clone()}</option> }
+                                            })
+                                            .collect_view()}
+                                    </select>
+                                </label>
+                            }
+                        })
+                        .collect_view()}
+                </div>
+            }
+            .into_any()
+        }
+        FieldKind::LineVoices => {
+            let installed = app().engine.voices();
+            let current = value.as_object().cloned().unwrap_or_default();
+            view! {
+                <div class="voices">
+                    {pb_voicelines::LineKind::ALL
+                        .into_iter()
+                        .map(|k| {
+                            let chosen = current.get(k.as_str()).and_then(Value::as_str).unwrap_or_default().to_owned();
+                            view! {
+                                <label class="inline">
+                                    {line_kind_name(locale, k)}
+                                    <select name=format!("voice.{}", k.as_str()) disabled=disabled>
+                                        <option value="" selected=chosen.is_empty()>{text(locale, "ui-voice-by-language", &[])}</option>
+                                        {installed
+                                            .iter()
+                                            .map(|v| {
+                                                let sel = v.named(&chosen);
+                                                let label = format!("{} · {}", v.id, v.model);
+                                                view! { <option value=v.full_id() selected=sel>{label}</option> }
                                             })
                                             .collect_view()}
                                     </select>

@@ -1,15 +1,34 @@
 /// A text-to-speech voice.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VoiceInfo {
-    /// Stable id, e.g. `de_DE-thorsten-high`.
+    /// Stable id within its model, e.g. `de_DE-thorsten-high`; `<model>:<id>` names it among all models.
     pub id: String,
-    /// Language tag of the voice, e.g. `de-DE`, `en-US`.
+    /// The speech model it belongs to (`piper`, …).
+    pub model: String,
+    /// Language tag of the voice, e.g. `de-DE`, `en-US` (the main one when it speaks several).
     pub language: String,
+    /// Every language it speaks (one for most voices; many for a multilingual model and its cloned voices).
+    pub languages: Vec<String>,
     /// Speaker names when the voice has several (index = speaker id).
     pub speakers: Vec<String>,
     pub sample_rate: u32,
     /// Quality label of the voice (x_low, low, medium, high).
     pub quality: String,
+}
+
+impl VoiceInfo {
+    /// `<model>:<id>`: its name among every model's voices.
+    pub fn full_id(&self) -> String {
+        format!("{}:{}", self.model, self.id)
+    }
+
+    /// Whether `voice` (its id, or `<model>:<id>`) names it.
+    pub fn named(&self, voice: &str) -> bool {
+        self.id == voice
+            || voice
+                .split_once(':')
+                .is_some_and(|(model, id)| model == self.model && id == self.id)
+    }
 }
 
 /// How to speak.

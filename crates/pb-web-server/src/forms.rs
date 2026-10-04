@@ -169,7 +169,7 @@ fn escalation_json(f: &Fields) -> Value {
     Value::Array(rows)
 }
 
-/// The voice per language (`voice.<lang>` fields; empty = the default voice).
+/// The voice per language or per kind of line (`voice.<lang>` / `voice.<kind>` fields; empty = none chosen).
 fn voices_json(f: &Fields) -> Value {
     Value::Object(
         f.iter()
@@ -199,7 +199,7 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
     let clear = field(&f, "action") == Some("clear");
     let value = match key.meta().kind {
         FieldKind::Escalation => escalation_json(&f),
-        FieldKind::Voices => voices_json(&f),
+        FieldKind::Voices | FieldKind::LineVoices => voices_json(&f),
         _ => pb_settings::text_value(key, field(&f, "value").unwrap_or_default()),
     };
     let by_owner = s.access.owner;

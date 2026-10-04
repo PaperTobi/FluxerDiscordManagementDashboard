@@ -29,6 +29,63 @@ pub enum Line {
     Name,
 }
 
+/// The kinds of lines a voice can be chosen for (a name is said in the voice of the line it is part of).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LineKind {
+    Warning,
+    #[serde(rename = "strike")]
+    StrikeNotice,
+    Action,
+    Greeting,
+    Say,
+}
+
+impl LineKind {
+    pub const ALL: [LineKind; 5] = [
+        LineKind::Warning,
+        LineKind::StrikeNotice,
+        LineKind::Action,
+        LineKind::Greeting,
+        LineKind::Say,
+    ];
+
+    /// The same words as in [`LineKey`]s.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LineKind::Warning => "warning",
+            LineKind::StrikeNotice => "strike",
+            LineKind::Action => "action",
+            LineKind::Greeting => "greeting",
+            LineKind::Say => "say",
+        }
+    }
+}
+
+impl std::str::FromStr for LineKind {
+    type Err = LineKeyError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        LineKind::ALL
+            .into_iter()
+            .find(|k| k.as_str() == s)
+            .ok_or_else(|| LineKeyError(s.to_owned()))
+    }
+}
+
+impl Line {
+    /// Its kind (`None` for the name, which is part of other lines).
+    pub fn kind(&self) -> Option<LineKind> {
+        match self {
+            Line::Warning { .. } => Some(LineKind::Warning),
+            Line::StrikeNotice => Some(LineKind::StrikeNotice),
+            Line::Action { .. } => Some(LineKind::Action),
+            Line::Greeting => Some(LineKind::Greeting),
+            Line::Say { .. } => Some(LineKind::Say),
+            Line::Name => None,
+        }
+    }
+}
+
 /// The stable text form of a [`Line`], used as a key in settings files and URLs:
 /// `warning.<label|any>.<step|any>`, `greeting`, `strike`, `action.<kind|any>`, `say.<preset>`, `name`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -182,6 +239,29 @@ mod tests {
         ] {
             assert!(bad.parse::<LineKey>().is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn line_kinds_match_their_keys() {
+        for k in LineKind::ALL {
+            assert_eq!(k.as_str().parse::<LineKind>(), Ok(k));
+        }
+        let named: BTreeMap<LineKind, String> =
+            toml::from_str("warning = 'a'\nstrike = 'b'\naction = 'c'\ngreeting = 'd'\nsay = 'e'").expect("toml");
+        assert!(named.keys().copied().eq(LineKind::ALL));
+        for (key, kind) in [
+            ("warning.any.2", Some(LineKind::Warning)),
+            ("strike", Some(LineKind::StrikeNotice)),
+            ("action.mute", Some(LineKind::Action)),
+            ("greeting", Some(LineKind::Greeting)),
+            ("say.calm-down", Some(LineKind::Say)),
+            ("name", None),
+        ] {
+            let line = key.parse::<LineKey>().expect(key).0;
+            assert_eq!(line.kind(), kind, "{key}");
+            assert!(kind.is_none_or(|k| key.starts_with(k.as_str())));
+        }
+        assert!("name".parse::<LineKind>().is_err());
     }
 
     #[test]

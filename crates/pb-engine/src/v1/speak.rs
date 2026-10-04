@@ -40,29 +40,43 @@ pub fn lang_of(l: ClfLang) -> Option<Lang> {
     }
 }
 
-/// The installed voice for a language: the one chosen in the settings, else the first installed one for that
-/// language (medium quality first: the old bot's default `en_US-lessac-medium`).
+/// The installed voice (as `<model>:<id>`) for a line in a language: the voice chosen for its kind of line when it
+/// speaks the language, else the one chosen for the language, else the first installed one for that language (medium
+/// quality first: the old bot's default `en_US-lessac-medium`).
 pub fn voice_for(
     voices: &[VoiceInfo],
+    line_voice: Option<&str>,
     chosen: &std::collections::BTreeMap<Lang, String>,
     lang: &Lang,
 ) -> Option<String> {
-    let installed = |id: &str| voices.iter().any(|v| v.id == id);
+    let want = lang.to_string().replace('-', "_").to_ascii_lowercase();
+    let speaks = |v: &VoiceInfo| {
+        std::iter::once(&v.language).chain(&v.languages).any(|l| {
+            let code = l.replace('-', "_").to_ascii_lowercase();
+            code == want || code.split('_').next() == Some(lang.language())
+        })
+    };
+    let installed = |id: &str| voices.iter().find(|v| v.named(id));
+    if let Some(v) = line_voice.and_then(installed).filter(|v| speaks(v)) {
+        return Some(v.full_id());
+    }
     if let Some(v) = chosen
         .get(lang)
         .or_else(|| chosen.get(&lang.base()))
-        .filter(|v| installed(v))
+        .and_then(|id| installed(id))
     {
-        return Some(v.clone());
+        return Some(v.full_id());
     }
-    let matches = |v: &&VoiceInfo| {
-        let code = v.language.replace('-', "_").to_ascii_lowercase();
-        let want = lang.to_string().replace('-', "_").to_ascii_lowercase();
-        code == want || code.split('_').next() == Some(lang.language())
-    };
-    let mut fitting: Vec<&VoiceInfo> = voices.iter().filter(matches).collect();
+    let mut fitting: Vec<&VoiceInfo> = voices.iter().filter(|v| speaks(v)).collect();
     fitting.sort_by_key(|v| (v.quality != "medium", v.quality != "high", v.id.clone()));
-    fitting.first().map(|v| v.id.clone())
+    fitting.first().map(|v| v.full_id())
+}
+
+/// The voice chosen for a line's kind (none for a name: it is said in the voice of the line it is part of).
+fn line_voice<'a>(eff: &'a pb_settings::Effective, line: &Line) -> Option<&'a str> {
+    line.kind()
+        .and_then(|k| eff.line_voices.value.get(&k))
+        .map(String::as_str)
 }
 
 /// The person's languages, in order.
@@ -107,8 +121,7 @@ pub fn resolve_line(core: &Core, guild: GuildId, person: Option<UserId>, line: &
     let tree = core.settings.current();
     let eff = tree.effective(Some(guild), person);
     let voices = core.deps.inference.voices();
-    let chosen = eff.tts_voices.value.clone();
-    let has_voice = |l: &Lang| voice_for(&voices, &chosen, l).is_some();
+    let has_voice = |l: &Lang| voice_for(&voices, line_voice(&eff, line), &eff.tts_voices.value, l).is_some();
     let shipped: Vec<BlobHash> = core.deps.shipped_clips.iter().map(|s| s.hash).collect();
     let info = clip_info(core);
     let ctx = ResolveCtx {
@@ -290,7 +303,7 @@ pub async fn render(
     for part in &p.parts {
         match part {
             Part::Speak { lang, text } => {
-                let voice = voice_for(&voices, &eff.tts_voices.value, lang)
+                let voice = voice_for(&voices, line_voice(&eff, line), &eff.tts_voices.value, lang)
                     .ok_or_else(|| RenderError::NoVoice(lang.clone()))?;
                 let pcm = speech(core, &voice, text, rate, prio).await?;
                 out.pcm.extend_from_slice(&pcm);
@@ -381,5 +394,66 @@ pub async fn prerender(core: Arc<Core>, next: NextWarning) {
         {
             tracing::debug!(error = %e, "a warning could not be rendered ahead of time");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn voice(model: &str, id: &str, languages: &[&str], quality: &str) -> VoiceInfo {
+        VoiceInfo {
+            id: id.into(),
+            model: model.into(),
+            language: languages[0].into(),
+            languages: languages.iter().map(|&l| l.into()).collect(),
+            speakers: vec![],
+            sample_rate: 22_050,
+            quality: quality.into(),
+        }
+    }
+
+    #[test]
+    fn the_line_voice_speaks_its_languages_and_the_language_voice_the_rest() {
+        let voices = [
+            voice("piper", "de_DE-thorsten-high", &["de_DE"], "high"),
+            voice("piper", "en_US-amy-low", &["en_US"], "low"),
+            voice("piper", "en_US-lessac-medium", &["en_US"], "medium"),
+            voice("omni", "anna", &["en", "de", "fr"], "x"),
+        ];
+        let lang = |l: &str| l.parse::<Lang>().expect("lang");
+        let mut chosen = std::collections::BTreeMap::new();
+        // Nothing chosen: the language's first installed voice, medium quality first.
+        assert_eq!(
+            voice_for(&voices, None, &chosen, &lang("en")).as_deref(),
+            Some("piper:en_US-lessac-medium")
+        );
+        // Chosen for the language, by bare id.
+        chosen.insert(lang("en"), "en_US-amy-low".to_owned());
+        assert_eq!(
+            voice_for(&voices, None, &chosen, &lang("en-US")).as_deref(),
+            Some("piper:en_US-amy-low")
+        );
+        // The line's voice wins where it speaks the language …
+        let line = Some("omni:anna");
+        assert_eq!(
+            voice_for(&voices, line, &chosen, &lang("de")).as_deref(),
+            Some("omni:anna")
+        );
+        assert_eq!(
+            voice_for(&voices, line, &chosen, &lang("en")).as_deref(),
+            Some("omni:anna")
+        );
+        // … and elsewhere the language's voice speaks.
+        assert_eq!(
+            voice_for(&voices, Some("piper:de_DE-thorsten-high"), &chosen, &lang("en")).as_deref(),
+            Some("piper:en_US-amy-low")
+        );
+        // A voice that is not installed (any more) is skipped.
+        assert_eq!(
+            voice_for(&voices, Some("omni:gone"), &chosen, &lang("de")).as_deref(),
+            Some("piper:de_DE-thorsten-high")
+        );
+        assert_eq!(voice_for(&voices, line, &chosen, &lang("ja")), None);
     }
 }

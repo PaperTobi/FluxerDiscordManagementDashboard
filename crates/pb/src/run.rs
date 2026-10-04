@@ -351,9 +351,9 @@ fn models(data: &Path, cfg: &Config, tree: &SettingsTree) -> Result<Inference, F
     Inference::start(Models {
         vad: Box::new(vad),
         classifier,
-        tts: Some(Box::new(move |threads| {
+        tts: vec![Box::new(move |threads| {
             pb_tts_piper::PiperEngine::new(&espeak, &voice_dirs, threads).map(|e| Box::new(e) as Box<dyn TtsEngine>)
-        })),
+        })],
         tts_threads: eff.tts_threads.value.get() as usize,
     })
     .map_err(|e| Fail(Exit::Internal, format!("the model threads could not start: {e}")))

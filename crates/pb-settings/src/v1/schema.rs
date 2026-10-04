@@ -5,6 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use pb_domain::{ChannelId, GuildId, Label, Lang, RoleId, ScopeKind, UserId};
+use pb_voicelines::LineKind;
 use serde::{Deserialize, Serialize};
 
 use super::values::*;
@@ -99,11 +100,20 @@ pub enum FieldKind {
     Bool,
     Probability,
     Count,
-    Duration { min_ms: u64, unlimited: bool },
-    Number { unit: &'static str },
+    Duration {
+        min_ms: u64,
+        unlimited: bool,
+    },
+    Number {
+        unit: &'static str,
+    },
     Rate,
-    Choice { choices: Vec<&'static str> },
-    Ids { of: &'static str },
+    Choice {
+        choices: Vec<&'static str>,
+    },
+    Ids {
+        of: &'static str,
+    },
     Channel,
     TimeOfDay,
     Tz,
@@ -114,6 +124,8 @@ pub enum FieldKind {
     Langs,
     VoiceLang,
     Voices,
+    /// A voice per kind of line.
+    LineVoices,
     Escalation,
 }
 
@@ -187,6 +199,7 @@ kind!(Lang => FieldKind::Lang);
 kind!(Vec<Lang> => FieldKind::Langs);
 kind!(VoiceLang => FieldKind::VoiceLang);
 kind!(BTreeMap<Lang, String> => FieldKind::Voices);
+kind!(BTreeMap<LineKind, String> => FieldKind::LineVoices);
 kind!(Escalation => FieldKind::Escalation);
 
 /// A detection type's own settings at one scope.
@@ -493,6 +506,7 @@ settings! {
         voice_language(VoiceLanguage): VoiceLang = VoiceLang::Fixed(lang("en")); ALL_SCOPES, Admins, Live;
         fallback_languages(FallbackLanguages): Vec<Lang> = vec![lang("en")]; ALL_SCOPES, Admins, Live;
         tts_voices(TtsVoices): BTreeMap<Lang, String> = BTreeMap::new(); ALL_SCOPES, Admins, Live;
+        line_voices(LineVoices): BTreeMap<LineKind, String> = BTreeMap::new(); ALL_SCOPES, Admins, Live;
         speech_rate(SpeechRate): Rate = Rate::new(1.0).unwrap_or_else(|_| unreachable!()); ALL_SCOPES, Admins, Live;
         no_speak_policy(NoSpeakPolicy): NoSpeakPolicy = NoSpeakPolicy::Text; ALL_SCOPES, Admins, Live;
         strike_notice(StrikeNotice): bool = false; ALL_SCOPES, Admins, Live;
@@ -642,8 +656,8 @@ pub fn text_value(key: SettingKey, raw: &str) -> serde_json::Value {
     let raw = raw.trim();
     let unmention = |s: &str| Value::String(pb_domain::unmention(s).to_owned());
     match key.meta().kind {
-        // `de=thorsten-high en=lessac-medium`
-        FieldKind::Voices => Value::Object(
+        // `de=thorsten-high en=lessac-medium`, `warning=piper:de_DE-thorsten-high`
+        FieldKind::Voices | FieldKind::LineVoices => Value::Object(
             raw.split([',', ' ', '\n'])
                 .filter_map(|p| p.split_once(['=', ':']))
                 .map(|(l, v)| (l.trim().to_owned(), Value::String(v.trim().to_owned())))
@@ -794,6 +808,26 @@ mod tests {
             Err(SettingError::Invalid { .. })
         ));
         assert_eq!(l.misplaced(ScopeKind::Global), vec![SettingKey::ModlogChannel]);
+    }
+
+    #[test]
+    fn line_voices_are_typed_as_pairs() {
+        let mut l = Layer::default();
+        let v = text_value(
+            SettingKey::LineVoices,
+            "warning=piper:de_DE-thorsten-high, greeting=x:y",
+        );
+        l.set_json(SettingKey::LineVoices, v).expect("set");
+        let set = l.line_voices.clone().expect("set");
+        assert_eq!(set[&LineKind::Warning], "piper:de_DE-thorsten-high");
+        assert_eq!(set[&LineKind::Greeting], "x:y");
+        let bad = text_value(SettingKey::LineVoices, "name=piper:x");
+        assert!(l.set_json(SettingKey::LineVoices, bad).is_err());
+        let toml: Layer = toml::from_str("[line_voices]\nstrike = \"piper:en_US-lessac-medium\"\n").expect("toml");
+        assert_eq!(
+            toml.line_voices.expect("set")[&LineKind::StrikeNotice],
+            "piper:en_US-lessac-medium"
+        );
     }
 
     #[test]

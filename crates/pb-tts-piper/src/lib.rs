@@ -87,7 +87,9 @@ impl TtsEngine for PiperEngine {
             .iter()
             .map(|(id, (_, c))| VoiceInfo {
                 id: id.clone(),
+                model: "piper".into(),
                 language: c.language.clone(),
+                languages: vec![c.language.clone()],
                 speakers: c.speakers.clone(),
                 sample_rate: c.sample_rate,
                 quality: c.quality.clone(),

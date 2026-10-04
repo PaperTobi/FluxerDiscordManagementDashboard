@@ -70,7 +70,8 @@ pub type TtsFactory = Box<dyn Fn(usize) -> Result<Box<dyn TtsEngine>, TtsError> 
 pub struct Models {
     pub vad: Box<dyn VadModel>,
     pub classifier: Box<dyn Classifier>,
-    pub tts: Option<TtsFactory>,
+    /// The speech models (Piper, and others), each on its own thread.
+    pub tts: Vec<TtsFactory>,
     pub tts_threads: usize,
 }
 
@@ -414,6 +415,7 @@ enum TtsJob {
 }
 
 fn tts_thread(factory: TtsFactory, threads: usize, queue: Arc<Queue<TtsJob>>, voices: Arc<Mutex<Vec<VoiceInfo>>>) {
+    // `voices` is this engine's own list.
     let set_voices = |list: Vec<VoiceInfo>| {
         if let Ok(mut v) = voices.lock() {
             *v = list;
@@ -482,9 +484,20 @@ struct Inner {
     vad_info: VadInfo,
     clf: Arc<Queue<ClfJob>>,
     clf_info: ClassifierInfo,
-    tts: Option<Arc<Queue<TtsJob>>>,
-    voices: Arc<Mutex<Vec<VoiceInfo>>>,
+    tts: Vec<SpeechModel>,
     threads: Mutex<Vec<(Worker, JoinHandle<()>)>>,
+}
+
+/// A speech model's queue and its voices (kept by its thread).
+struct SpeechModel {
+    queue: Arc<Queue<TtsJob>>,
+    voices: Arc<Mutex<Vec<VoiceInfo>>>,
+}
+
+impl SpeechModel {
+    fn voices(&self) -> Vec<VoiceInfo> {
+        self.voices.lock().map(|v| v.clone()).unwrap_or_default()
+    }
 }
 
 /// The way to the models.
@@ -515,7 +528,6 @@ impl Inference {
             fallbacks: AtomicU64::new(0),
         });
         let clf = Arc::new(Queue::default());
-        let voices = Arc::new(Mutex::new(Vec::new()));
         let mut threads = Vec::new();
         let vad = models.vad;
         let counters = vad_counters.clone();
@@ -526,15 +538,14 @@ impl Inference {
             Worker::Classifier,
             spawn("pb-classify", move || classifier_thread(classifier, q))?,
         ));
-        let tts = match models.tts {
-            Some(factory) => {
-                let q = Arc::new(Queue::default());
-                let (q2, v2, n) = (q.clone(), voices.clone(), models.tts_threads);
-                threads.push((Worker::Speech, spawn("pb-tts", move || tts_thread(factory, n, q2, v2))?));
-                Some(q)
-            }
-            None => None,
-        };
+        let mut tts = Vec::new();
+        for factory in models.tts {
+            let q = Arc::new(Queue::default());
+            let voices = Arc::new(Mutex::new(Vec::new()));
+            let (q2, v2, n) = (q.clone(), voices.clone(), models.tts_threads);
+            threads.push((Worker::Speech, spawn("pb-tts", move || tts_thread(factory, n, q2, v2))?));
+            tts.push(SpeechModel { queue: q, voices });
+        }
         Ok(Inference {
             inner: Arc::new(Inner {
                 vad_tx,
@@ -544,7 +555,6 @@ impl Inference {
                 clf,
                 clf_info,
                 tts,
-                voices,
                 threads: Mutex::new(threads),
             }),
         })
@@ -584,12 +594,28 @@ impl Inference {
         opts: SpeakOpts,
         prio: SpeakPriority,
     ) -> Result<Speech48, InferError> {
-        let q = self.inner.tts.as_ref().ok_or(InferError::NoTts)?;
+        if self.inner.tts.is_empty() {
+            return Err(InferError::NoTts);
+        }
+        // The engine that has the voice (the first one when none does: it says which voice is missing).
+        let q = &self
+            .inner
+            .tts
+            .iter()
+            .find(|m| m.voices().iter().any(|v| v.named(voice)))
+            .or_else(|| self.inner.tts.first())
+            .ok_or(InferError::NoTts)?
+            .queue;
+        let id = self
+            .voices()
+            .into_iter()
+            .find(|v| v.named(voice))
+            .map_or_else(|| voice.to_owned(), |v| v.id);
         let (reply, rx) = oneshot::channel();
         if !q.push(
             prio as u8,
             TtsJob::Speak {
-                voice: voice.to_owned(),
+                voice: id,
                 text: text.to_owned(),
                 opts,
                 reply,
@@ -600,19 +626,25 @@ impl Inference {
         rx.await.map_err(|_| InferError::Stopped)?
     }
 
-    /// The installed voices.
+    /// The installed voices of every speech model.
     pub fn voices(&self) -> Vec<VoiceInfo> {
-        self.inner.voices.lock().map(|v| v.clone()).unwrap_or_default()
+        self.inner.tts.iter().flat_map(SpeechModel::voices).collect()
     }
 
-    /// Restarts text-to-speech with `threads` threads (and picks up newly installed voices).
+    /// Restarts every speech model with `threads` threads (and picks up newly installed voices).
     pub async fn reload_tts(&self, threads: usize) -> Result<Vec<VoiceInfo>, InferError> {
-        let q = self.inner.tts.as_ref().ok_or(InferError::NoTts)?;
-        let (reply, rx) = oneshot::channel();
-        if !q.push(u8::MAX, TtsJob::Reload { threads, reply }) {
-            return Err(InferError::Stopped);
+        if self.inner.tts.is_empty() {
+            return Err(InferError::NoTts);
         }
-        rx.await.map_err(|_| InferError::Stopped)?
+        let mut all = Vec::new();
+        for m in &self.inner.tts {
+            let (reply, rx) = oneshot::channel();
+            if !m.queue.push(u8::MAX, TtsJob::Reload { threads, reply }) {
+                return Err(InferError::Stopped);
+            }
+            all.extend(rx.await.map_err(|_| InferError::Stopped)??);
+        }
+        Ok(all)
     }
 
     /// Changes the classifier's thread count (before the next job).
@@ -634,8 +666,12 @@ impl Inference {
             classifier_model: i.clf_info.model.clone(),
             classifier_device: i.clf_info.device.clone(),
             classify: i.clf.stats(),
-            speak: i.tts.as_ref().map(|q| q.stats()).unwrap_or_default(),
-            voices: i.voices.lock().map(|v| v.len()).unwrap_or(0),
+            speak: i
+                .tts
+                .iter()
+                .map(|m| m.queue.stats())
+                .fold(QueueStats::default(), QueueStats::merge),
+            voices: self.voices().len(),
         }
     }
 
@@ -667,8 +703,8 @@ impl Inference {
     pub fn shutdown(&self) {
         let i = &self.inner;
         i.clf.close();
-        if let Some(q) = &i.tts {
-            q.close();
+        for m in &i.tts {
+            m.queue.close();
         }
         let _ = i.vad_tx.send(VadMsg::Stop);
         let handles: Vec<_> = i

@@ -276,9 +276,9 @@ impl Rig {
         let inference = Inference::start(Models {
             vad: Box::new(ToneVad::default()),
             classifier: Box::new(classifier),
-            tts: Some(Box::new(
+            tts: vec![Box::new(
                 move |_| Ok(Box::new(engine_tts.clone()) as Box<dyn TtsEngine>),
-            )),
+            )],
             tts_threads: 1,
         })
         .unwrap();
