@@ -50,6 +50,10 @@ impl<K: Clone + Eq + Hash> AudioCache<K> {
 
     pub fn insert(&mut self, key: K, pcm: Arc<[i16]>) {
         self.remove(&key);
+        // Larger than the whole budget: not kept (it would push out everything else and then itself).
+        if pcm.len() * 2 > self.budget {
+            return;
+        }
         self.tick += 1;
         self.bytes += pcm.len() * 2;
         self.order.insert(self.tick, key.clone());
@@ -95,8 +99,8 @@ mod tests {
         assert!(c.get(&"a").is_some() && c.get(&"c").is_some());
         c.remove(&"a");
         assert_eq!(c.bytes, 40);
-        c.insert("big", pcm(200)); // larger than the whole budget: not kept, and everything older goes
-        assert!(c.get(&"big").is_none() && c.get(&"c").is_none());
-        assert_eq!(c.bytes, 0);
+        c.insert("big", pcm(200)); // larger than the whole budget: not kept, the rest stays
+        assert!(c.get(&"big").is_none() && c.get(&"c").is_some());
+        assert_eq!(c.bytes, 40);
     }
 }
