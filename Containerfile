@@ -7,6 +7,7 @@
 # again), and a small runtime image (glibc: LiveKit's libwebrtc needs it). Nothing is downloaded when the bot runs.
 
 # ---------------------------------------------------------------------------------------------------------- build
+# rustup comes with the image; rust-toolchain.toml chooses the Rust that builds the bot.
 FROM docker.io/library/rust:1.99.0-bookworm AS build
 
 # apt drops to this user to download. Builders without user namespaces (chroot isolation) cannot: pass
@@ -23,11 +24,13 @@ RUN apt-get -o APT::Sandbox::User=$APT_SANDBOX_USER update \
  && apt-get -o APT::Sandbox::User=$APT_SANDBOX_USER update \
  && apt-get -o APT::Sandbox::User=$APT_SANDBOX_USER install -y --no-install-recommends \
       clang-21 lld-21 libglib2.0-dev pkg-config cmake ninja-build git \
- && rm -rf /var/lib/apt/lists/* \
- && rustup target add wasm32-unknown-unknown
+ && rm -rf /var/lib/apt/lists/*
 ENV CC=clang-21 CXX=clang++-21
 
 WORKDIR /src
+# The Rust of rust-toolchain.toml (nightly, with the wasm32 target), in its own layer.
+COPY rust-toolchain.toml ./
+RUN rustup toolchain install
 COPY . .
 # The registry and target directories are build caches: a rebuild after a code change only compiles what changed.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

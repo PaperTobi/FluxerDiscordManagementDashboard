@@ -53,27 +53,6 @@ pub(crate) fn safe_next(next: Option<&str>) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::safe_next;
-
-    #[test]
-    fn only_local_paths_come_back() {
-        for (given, want) in [
-            ("/c/1?before=5", "/c/1?before=5"),
-            ("//evil.example", "/"),
-            ("/\\evil.example", "/"),
-            ("/\t/evil.example", "/"),
-            ("/\n/evil.example", "/"),
-            ("/ /evil.example", "/"),
-            ("https://evil.example", "/"),
-            ("", "/"),
-        ] {
-            assert_eq!(safe_next(Some(given)), want, "{given:?}");
-        }
-    }
-}
-
 /// `scheme://host[:port]` as the browser used it.
 pub(crate) fn request_origin(headers: &HeaderMap) -> String {
     let scheme = if https(headers) { "https" } else { "http" };
@@ -347,4 +326,25 @@ pub(crate) fn forget_stale(st: &WebState) {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .retain(|_, p| p.started.elapsed() < PENDING_FOR);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe_next;
+
+    #[test]
+    fn only_local_paths_come_back() {
+        for (given, want) in [
+            ("/c/1?before=5", "/c/1?before=5"),
+            ("//evil.example", "/"),
+            ("/\\evil.example", "/"),
+            ("/\t/evil.example", "/"),
+            ("/\n/evil.example", "/"),
+            ("/ /evil.example", "/"),
+            ("https://evil.example", "/"),
+            ("", "/"),
+        ] {
+            assert_eq!(safe_next(Some(given)), want, "{given:?}");
+        }
+    }
 }

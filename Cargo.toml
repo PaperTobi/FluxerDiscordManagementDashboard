@@ -113,6 +113,7 @@ unic-langid = "0.9.6"
 
 # Patched dependencies (each folder has a PATCHES.md saying what changed and why; see docs/exceptions.toml).
 [patch.crates-io]
+branches = { path = "third_party/branches" }
 burn-flex = { path = "third_party/burn-flex" }
 turso = { path = "third_party/turso" }
 turso_sdk_kit = { path = "third_party/turso_sdk_kit" }
@@ -140,3 +141,7 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 opt-level = 2
 debug = false
+
+# The VAD's maths is our own code.
+[profile.dev.package.pb-vad-silero]
+opt-level = 2

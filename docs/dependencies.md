@@ -32,6 +32,9 @@ database.
 | console_error_panic_hook | 0.1.7 | removed | Repository archived (the rustwasm organisation was retired). Replaced by a three-line panic hook in pb-web. |
 | hound | 3.5.1 | removed | No release since 2023. WAV is written by `pb_audio::wav16` and laid out by `pb_audio::wav_layout` (both small and tested); everything else is decoded by symphonia, which was already used. |
 | parking_lot | 0.12.5 | removed from pb-voice-livekit | The standard library's `Mutex` does the job. |
+| burn, burn-flex, onnx-ir, protobuf | 0.21 / 3.7 in pb-vad-silero | removed from pb-vad-silero | The VAD is now a hand-written forward pass (Burn spent most of each 0.2 ms step dispatching tiny operations; the loops take about 0.02 ms). Leaves the tree: onnx-ir, protobuf (with -support, -parse, -codegen) and strum. Burn stays for the classifier. |
+| (new in pb-vad-silero) rten-onnx, rten-simd | — | 0.27.0 (2026-10-02) | Both were already in the tree through rten (pb-tts-piper), so nothing new is compiled; see below. |
+| branches (through turso_core) | 0.4.6 from crates.io | 0.4.6 patched in `third_party/branches` | On nightly its build script picks code that calls `core::intrinsics::abort`, which nightly renamed: the bot did not build on nightly. 0.5.1 follows the rename but turso_core 0.8.1 asks for 0.4; the patch takes the stable code on every channel (third_party/branches/PATCHES.md). Drop it once turso_core moves to 0.5. |
 
 ### Kept, with low release activity
 
@@ -42,7 +45,6 @@ database.
 | secrecy | 2024-10 | Part of iqlusion's crates monorepo, which is active (2026-09). |
 | unicode-normalization | 2025-10 | The unicode-rs organisation is active (2026-09). |
 | opus-decoder | 2026-03 | Pure Rust, `forbid(unsafe_code)`, passes all 12 RFC 8251 conformance vectors, repository active (2026-07). The alternative, ropus, has less use and `unsafe` hot loops. symphonia has no Opus decoder. |
-| protobuf (rust-protobuf 3) | 2024-12 | Needed only for its `Message` trait, to read ONNX through burn's onnx-ir, which pins this version. Follows burn. |
 | espeak-ng (Rust port) | 2026-09 | A test-only dependency: it records how the Rust port differs from C espeak-ng (the reason the C library is an exception). |
 
 ### Unmaintained crates deeper in the tree (`deny.toml`)
@@ -70,3 +72,5 @@ for the whole build. Our own connections use graviola. See the `ring` entry in `
 | HTTPS for the web UI | tokio-rustls 0.26.6 (the rustls organisation, 2026-09), crypto through pb-tls (graviola); the TLS listener is ours (about 80 lines, handshakes concurrent) | axum-server: one more layer for what axum's `Listener` trait already allows |
 | Terminal output | anstream 1.0, comfy-table 8, indicatif 0.18 (all released in 2026) | — |
 | The engine's scenario tests (no weights, no LiveKit) | nothing new: pb-testkit's stand-in models (`fakemodels`) and in-process voice, the fake Fluxer, and crates already in the tree (tempfile 3.27, 2026-03, repository active 2026-10; futures; async-trait; tracing-subscriber; tokio's `test-util`) | — |
+| Reading `silero_vad.onnx` | rten-onnx 0.27 (robertknight/rten, released 2026-10-02, repository active; no dependencies, `forbid(unsafe_code)`) | onnx-ir + protobuf: pulled burn-tensor and protobuf's code generator into the VAD for one file |
+| Vector instructions for the VAD's loops, chosen at run time (AVX-512, AVX2 with FMA, Arm Neon, else a portable fallback) without `unsafe` in our code | rten-simd 0.27 (same project and release) | pulp 0.22 (also in the tree, through gemm): depends on the archived `paste`. `std::arch` directly: needs `unsafe`, which the workspace denies. Plain loops: compiled for the x86-64 baseline only (SSE2), about half the speed |

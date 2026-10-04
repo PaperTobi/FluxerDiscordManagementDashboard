@@ -32,8 +32,9 @@ Layers (enforced by `cargo xtask deps`):
 | L4 delivery | pb-web (`ssr`/`hydrate`), pb-web-server | `hydrate`: L0 only; `ssr`/server: L3 handles + L1 | concrete adapters |
 | L5 binaries and tooling | pb, xtask, pb-testkit (dev), pb-fluxer-fake (dev), tools/pb-fetch | everything | — |
 
-Extra rules: `livekit` only in pb-voice-livekit; `burn` only in pb-vad-silero and pb-classifier-roblox; `rten` and
-`espeak-ng` only in pb-tts-piper; `turso` only in pb-store and pb-import; only `pb` wires concrete implementations.
+Extra rules: `livekit` only in pb-voice-livekit; `burn` only in pb-classifier-roblox; `rten` and `espeak-ng` only in
+pb-tts-piper (pb-vad-silero uses rten's ONNX reader and SIMD crates, not the runtime); `turso` only in pb-store and
+pb-import; only `pb` wires concrete implementations.
 
 | Crate | Responsibility |
 |---|---|
@@ -50,7 +51,7 @@ Extra rules: `livekit` only in pb-voice-livekit; `burn` only in pb-vad-silero an
 | pb-voice-api | `VoiceTransport`, `VoiceRoom`, `AudioOut`, `RoomEvent`, `TrackKey` |
 | pb-store-api | `EventLog`, `Index`, `Blobs`, `SettingsRepo`, `SessionRepo`; `Event` enum (log schema v1); typed queries |
 | pb-audio | decode (symphonia + opus-decoder wrapper), WAV (hound), resample (rubato), loudness (ebur128), limiting, fades |
-| pb-vad-silero | Silero v6.2 in Burn from `silero_vad_16k.safetensors`, batched across streams; energy-gate fallback |
+| pb-vad-silero | Silero v6.2, a hand-written forward pass (weights from the official `silero_vad.onnx`, SIMD chosen at run time), batched across streams; energy-gate fallback |
 | pb-classifier-roblox | Roblox voice-safety-classifier v3 in Burn (burn-flex; feature `gpu` = burn-wgpu) |
 | pb-tts-piper | Piper VITS on rten, espeak-ng phonemes, piper id mapping, resample to 48 kHz |
 | pb-infer | OS threads owning the models, priority queues, live thread-count changes, metrics, `Inference` handle |

@@ -1,7 +1,8 @@
-# The Rust release this project is built and tested with. rustup installs it, with the browser (wasm32) target, on the
-# first `cargo` command in this directory. Keep it in step with `rust-version` in Cargo.toml and the Containerfile.
+# The project is built with Rust nightly: rustup installs the newest nightly, with the browser (wasm32) target, on the
+# first `cargo` command in this directory. The code stays within stable Rust (`rust-version` in Cargo.toml is the
+# oldest release that builds it), so a stable compiler works as well.
 [toolchain]
-channel = "1.99.0"
+channel = "nightly"
 targets = ["wasm32-unknown-unknown"]
 components = ["clippy", "rustfmt"]
 profile = "minimal"

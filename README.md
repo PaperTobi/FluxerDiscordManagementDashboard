@@ -1,6 +1,6 @@
 # Profanity Watch
 
-![crates: 32](https://img.shields.io/badge/crates-32-orange) ![lines of Rust: 49k](https://img.shields.io/badge/lines%20of%20Rust-49k-blue) ![packages in Cargo.lock: 1087](https://img.shields.io/badge/Cargo.lock-1087%20packages-lightgrey) ![unsafe: 1 crate](https://img.shields.io/badge/unsafe-1%20crate-yellow) ![TODO: 0](https://img.shields.io/badge/TODO-0-brightgreen) ![warning clips: 5](https://img.shields.io/badge/warning%20clips-5-red) ![port: 8790](https://img.shields.io/badge/port-8790-informational) ![exit code 78: read the log](https://img.shields.io/badge/exit%20code%2078-read%20the%20log-critical)
+![crates: 32](https://img.shields.io/badge/crates-32-orange) ![lines of Rust: 49k](https://img.shields.io/badge/lines%20of%20Rust-49k-blue) ![packages in Cargo.lock: 1079](https://img.shields.io/badge/Cargo.lock-1079%20packages-lightgrey) ![unsafe: 1 crate](https://img.shields.io/badge/unsafe-1%20crate-yellow) ![TODO: 0](https://img.shields.io/badge/TODO-0-brightgreen) ![warning clips: 5](https://img.shields.io/badge/warning%20clips-5-red) ![port: 8790](https://img.shields.io/badge/port-8790-informational) ![exit code 78: read the log](https://img.shields.io/badge/exit%20code%2078-read%20the%20log-critical)
 
 A voice moderation bot for [Fluxer](https://fluxer.app). It follows chosen people into voice calls in your community,
 listens **only to their microphones**, scores what they say with the Roblox voice-safety model (locally, on your
@@ -94,25 +94,25 @@ The first thing to know: this README is long. The second thing to know: most of 
 All numbers below are real. We counted. We should not have, but we did.
 
 - This repository has **32 crates** in `crates/`. That is a lot of crates for a bot that tells people to stop swearing.
-- Those crates contain about **49,222 lines** of Rust across **235 files**. For comparison, this README alone is a weird fraction of that.
+- Those crates contain about **49,581 lines** of Rust across **235 files**. For comparison, this README alone is a weird fraction of that.
 - The biggest crate, `pb-engine`, has **8,388 lines**. The smallest, `pb-voice-api`, has **161**. It is small, but it knows what it is doing.
 - The biggest single file is `crates/pb-fluxer-fake/src/lib.rs` with **1,270 lines**: a fake Fluxer so the real one is not bothered during tests.
-- `Cargo.lock` lists **1,087 packages**. The bot has 32 of its own. The rest are friends we met on the way.
-- There are **172 tests** in the source, and **23** of them are marked `#[ignore]` because they need models, a LiveKit server or a browser. They are the introverts of the test suite.
+- `Cargo.lock` lists **1,079 packages**. The bot has 32 of its own. The rest are friends we met on the way.
+- There are **173 tests** in the source, and **23** of them are marked `#[ignore]` because they need models, a LiveKit server or a browser. They are the introverts of the test suite.
 - The word `TODO` appears **0 times** in the Rust code. Clippy's `todo` lint is set to `warn`. The author is either disciplined or lying.
 - `unwrap()` appears **467** times (mostly in tests, we hope). Clippy's `unwrap_used` lint is also set to `warn`.
-- `clone()` appears **862** times. Rust developers call this "being pragmatic".
+- `clone()` appears **859** times. Rust developers call this "being pragmatic".
 - `async fn` appears **483** times. Waiting is the main job of this bot.
-- There are **429** `struct` mentions, **144** `enum` mentions and **21** `trait` mentions. That is 3.0 structs per enum. Enums are the minority. Enums feel left out.
-- The code has **2,057** `///` doc-comment lines. The author really wanted you to understand.
+- There are **435** `struct` mentions, **144** `enum` mentions and **21** `trait` mentions. That is 3.0 structs per enum. Enums are the minority. Enums feel left out.
+- The code has **2,091** `///` doc-comment lines. The author really wanted you to understand.
 - The workspace forbids `unsafe_code` (set to `deny`). The only `unsafe` lives in the crate that talks to C, `pb-espeak`. It is the designated smoking area.
 - The bot's default threshold is **0.6**. In a sense, it is 60% judgemental by default.
 - The default web port is **8790**. Prime factors: 2 × 3 × 5 × 293. The number is not prime. Neither is the bot.
 - The `Containerfile` has **3 stages** (`build`, `weights`, and the final image) and runs the bot as user `10001`, not root.
 - The bot's output is **5 warning clips** totalling **13.09 seconds**. That is less time than it takes to read this bullet point out loud twice.
-- The repository so far has **19 commits** on its main line, by 3 different authors, if you count the AI ones.
+- The repository so far has **25 commits** on its main line, by 3 different authors, if you count the AI ones.
 - Every single one of those commits was made on a **Sunday**. The bot is a Sunday project. The weekend was the product.
-- The Rust toolchain is pinned to **1.99.0**, edition **2024**, resolver **3**. This is the future. Welcome.
+- The Rust toolchain file asks for **nightly** (with the wasm32 target), while `rust-version` in `Cargo.toml` says **1.99** and the edition is **2024**, resolver **3**. The code stays within stable Rust, so nightly is a lifestyle choice, not a need.
 - The bot needs about **3 GB of RAM** and downloads about **1.7 GB** of model weights. Per kilobyte of RAM, it is shy.
 - All user-facing text lives in **8 Fluent files**, **1,670 lines** in total, in two languages. Both languages say the same thing, just with different punctuation.
 
@@ -122,12 +122,12 @@ All numbers below are real. We counted. We should not have, but we did.
 | ------ | ----- |
 | Crates | 32 |
 | Rust files in `crates/` | 235 |
-| Lines of Rust in `crates/` | 49,222 |
-| Average lines per crate | 1,538 |
-| Average lines per file | 209 |
-| Packages in `Cargo.lock` | 1,087 |
+| Lines of Rust in `crates/` | 49,581 |
+| Average lines per crate | 1,549 |
+| Average lines per file | 210 |
+| Packages in `Cargo.lock` | 1,079 |
 | Direct third-party workspace dependencies | 52 |
-| Tests | 172 |
+| Tests | 173 |
 | Ignored tests | 23 |
 | `pub fn` | 694 |
 | `async fn` | 483 |
@@ -135,7 +135,7 @@ All numbers below are real. We counted. We should not have, but we did.
 | `Mutex` mentions | 129 |
 | `format!` calls | 406 |
 | `println!` calls | 81 |
-| `///` doc lines | 2,057 |
+| `///` doc lines | 2,091 |
 | Settings with an English label | 49 |
 | Translation keys (English) | 601 |
 | Fluent lines (de + en) | 1,670 |
@@ -146,8 +146,8 @@ All numbers below are real. We counted. We should not have, but we did.
 | RAM at peak | ~3 GB |
 | Build time | 30–60 min |
 | Build disk | ~25 GB |
-| Commits (main line) | 19 |
-| Words in the real README | 2,980 |
+| Commits (main line) | 25 |
+| Words in the real README | 3,020 |
 | Words in this README | a lot more |
 
 ## The Layer Cake
@@ -182,7 +182,7 @@ The crates are sorted into layers, and the rules for who may depend on whom are 
         └──────────────────────────────────────────────┘
 ```
 
-The third-party crates are also confined. For example, `livekit` may only be used by `pb-voice-livekit` and `pb-testkit`; `burn` only by `pb-vad-silero` and `pb-classifier-roblox`; `rten` only by `pb-tts-piper`; `turso` only by `pb-store` and `pb-import`. This is the software equivalent of a seating chart at a wedding.
+The third-party crates are also confined. For example, `livekit` may only be used by `pb-voice-livekit` and `pb-testkit`; `burn` only by `pb-classifier-roblox` (the VAD was kicked out of the Burn club); `rten` only by `pb-tts-piper`; `turso` only by `pb-store` and `pb-import`. This is the software equivalent of a seating chart at a wedding.
 
 ## The Crate Gallery
 
@@ -203,7 +203,7 @@ Every crate in `crates/`, with its real line count and a personal opinion that n
 | `pb-fluxer-fake` | L5 | 1,270 | 1 | A fake Fluxer (discovery, REST, gateway with resume and voice joins, OAuth2) for tests | One file. Pretends to be an entire chat platform. A one-man theatre. |
 | `pb-i18n` | L0 | 739 | 3 | Fluent bundles (de, en) for bot text and the web UI (pure) | Two languages (de, en). 1,670 lines of Fluent. Both are correct. |
 | `pb-import` | L2 | 1,511 | 6 | One-time import of the Python bot's data directory | Eats the old Python bot's data. Silently. With respect for the dead. |
-| `pb-infer` | L2 | 1,251 | 6 | Model threads, priority job queues and the inference handle | Model threads and priority job queues. Sentences queue up like at a bakery. |
+| `pb-infer` | L2 | 1,264 | 6 | Model threads, priority job queues and the inference handle | Model threads and priority job queues. Sentences queue up like at a bakery. |
 | `pb-live` | L3 | 955 | 5 | The live-update hub: topic cells, consistent snapshots, deltas, per-connection sessions | The live-update hub. Basically the gossip department. |
 | `pb-live-proto` | L0 | 1,876 | 8 | Live update wire protocol, client reducer, conveyor stage function (pure, wasm-safe) | The grammar of the gossip. Compiles to wasm so the browser can gossip too. |
 | `pb-models-api` | L1 | 304 | 6 | Interfaces for the VAD, classifier and text-to-speech models, with contract tests | Interfaces for VAD, classifier and TTS, with contract tests. A prenuptial agreement for models. |
@@ -215,7 +215,7 @@ Every crate in `crates/`, with its real line count and a personal opinion that n
 | `pb-testkit` | L5 | 1,116 | 6 | Test helpers: local LiveKit server, tokens, participants, an in-process voice transport, stand-in models, golden data | Fake participants, local LiveKit, golden data. The cast of the test suite. |
 | `pb-tls` | L2 | 218 | 2 | The bot's TLS client setup: graviola crypto (pure Rust), the system's trusted roots plus Mozilla's, a CPU check | Pure-Rust TLS setup. Also checks if your CPU is fancy enough. |
 | `pb-tts-piper` | L2 | 836 | 6 | Piper text-to-speech on rten with espeak-ng phonemes | Makes the bot talk. Piper voices on rten with espeak-ng phonemes. The bot did not ask for a voice. |
-| `pb-vad-silero` | L2 | 444 | 2 | Silero VAD v6.2 in Burn | Voice activity detection. Answers the question 'human or fridge?'. |
+| `pb-vad-silero` | L2 | 790 | 2 | Silero VAD v6.2, a hand-written forward pass | Voice activity detection with a hand-written forward pass. Answers 'human or fridge?' ten times faster than it used to. |
 | `pb-voice-api` | L1 | 161 | 2 | Interface to the voice transport (rooms, tracks, audio in/out), with contract tests | The smallest crate. Proud of it. Interface to the voice transport. |
 | `pb-voice-livekit` | L2 | 765 | 3 | Voice transport on the official LiveKit Rust SDK | Voice transport on the official LiveKit Rust SDK. Where audio enters and leaves. |
 | `pb-voicelines` | L0 | 1,090 | 8 | Voice lines: slots, resolution, templates, utterance plans, prediction (pure) | Slots, templates, utterance plans. The bot's script writers. |
@@ -237,19 +237,19 @@ Every crate in `crates/`, with its real line count and a personal opinion that n
 10. `pb-policy`: 1,695 lines
 11. `pb-import`: 1,511 lines
 12. `pb-fluxer-fake`: 1,270 lines
-13. `pb-infer`: 1,251 lines
+13. `pb-infer`: 1,264 lines
 14. `pb-classifier-roblox`: 1,143 lines
 15. `pb-testkit`: 1,116 lines
 16. `pb-voicelines`: 1,090 lines
 17. `pb-live`: 955 lines
 18. `pb-segment`: 912 lines
 19. `pb-tts-piper`: 836 lines
-20. `pb-domain`: 774 lines
-21. `pb-fluxer-api`: 774 lines
-22. `pb-voice-livekit`: 765 lines
-23. `pb-i18n`: 739 lines
-24. `pb-audio`: 541 lines
-25. `pb-vad-silero`: 444 lines
+20. `pb-vad-silero`: 790 lines
+21. `pb-domain`: 774 lines
+22. `pb-fluxer-api`: 774 lines
+23. `pb-voice-livekit`: 765 lines
+24. `pb-i18n`: 739 lines
+25. `pb-audio`: 541 lines
 26. `pb-commands`: 435 lines
 27. `pb-weights`: 385 lines
 28. `pb-models-api`: 304 lines
@@ -271,24 +271,24 @@ These are the thickest `.rs` files. They have eaten well.
 | 5 | `crates/pb-live-proto/src/v1/state.rs` | 881 |
 | 6 | `crates/pb-settings/src/v1/schema.rs` | 806 |
 | 7 | `crates/pb-fluxer/src/v1/gateway.rs` | 791 |
-| 8 | `crates/pb-fluxer/src/v1/rest.rs` | 693 |
-| 9 | `crates/pb-policy/src/v1/follow.rs` | 675 |
-| 10 | `crates/pb-engine/tests/scenarios.rs` | 674 |
-| 11 | `crates/pb-infer/src/v1/mod.rs` | 658 |
-| 12 | `crates/pb-store-api/src/v1/events.rs` | 632 |
-| 13 | `crates/pb-store-api/src/v1/contract.rs` | 629 |
-| 14 | `crates/pb-store/src/v1/log.rs` | 597 |
-| 15 | `crates/pb-engine/src/v1/commands.rs` | 579 |
-| 16 | `crates/pb-engine/src/v1/room.rs` | 569 |
-| 17 | `crates/pb-i18n/src/v1/mod.rs` | 564 |
-| 18 | `crates/pb-settings/src/v1/tree.rs` | 538 |
-| 19 | `crates/pb-policy/tests/follow.rs` | 532 |
-| 20 | `crates/pb-import/src/v1/mod.rs` | 532 |
-| 21 | `crates/pb-fluxer/tests/client.rs` | 522 |
-| 22 | `crates/pb-segment/src/v1/segmenter.rs` | 478 |
-| 23 | `crates/pb-web-server/src/auth.rs` | 470 |
-| 24 | `crates/pb-voicelines/src/v1/resolve.rs` | 464 |
-| 25 | `crates/pb-engine/src/v1/cells.rs` | 464 |
+| 8 | `crates/pb-vad-silero/src/lib.rs` | 709 |
+| 9 | `crates/pb-fluxer/src/v1/rest.rs` | 693 |
+| 10 | `crates/pb-policy/src/v1/follow.rs` | 675 |
+| 11 | `crates/pb-engine/tests/scenarios.rs` | 674 |
+| 12 | `crates/pb-infer/src/v1/mod.rs` | 658 |
+| 13 | `crates/pb-store-api/src/v1/events.rs` | 632 |
+| 14 | `crates/pb-store-api/src/v1/contract.rs` | 629 |
+| 15 | `crates/pb-store/src/v1/log.rs` | 597 |
+| 16 | `crates/pb-engine/src/v1/commands.rs` | 579 |
+| 17 | `crates/pb-engine/src/v1/room.rs` | 569 |
+| 18 | `crates/pb-i18n/src/v1/mod.rs` | 564 |
+| 19 | `crates/pb-settings/src/v1/tree.rs` | 538 |
+| 20 | `crates/pb-policy/tests/follow.rs` | 532 |
+| 21 | `crates/pb-import/src/v1/mod.rs` | 532 |
+| 22 | `crates/pb-fluxer/tests/client.rs` | 522 |
+| 23 | `crates/pb-segment/src/v1/segmenter.rs` | 478 |
+| 24 | `crates/pb-web-server/src/auth.rs` | 470 |
+| 25 | `crates/pb-voicelines/src/v1/resolve.rs` | 464 |
 
 ## The Five Warning Clips
 
@@ -314,7 +314,7 @@ The repo ships exactly 5 warning clips in `clips/` (see `clips/clips.json`), eac
 
 **Fun with audio maths:**
 
-- Playing all five clips back to back would take 13.09 seconds. Reading just the real part of this README out loud would take about 19 minutes. Reading all of it takes much longer. Do not do it.
+- Playing all five clips back to back would take 13.09 seconds. Reading just the real part of this README out loud would take about 20 minutes. Reading all of it takes much longer. Do not do it.
 - At 48,000 Hz mono, one second of uncompressed 16-bit audio is 96,000 bytes. The clips are all 48,000 Hz, so a clip of 2.33 s has roughly 111,840 samples. Each of them knows exactly what it is doing.
 - Probability that a given warning is the "buddy" one: 1 in 5 (equal weights). That is 20%. Fate is cruel.
 - If you upload your own clip in the web page, it is normalised and checked by the classifier. Yes, the classifier checks the warning clip for swearing. Yes, a warning that swears would be embarrassing.
@@ -324,12 +324,13 @@ The repo ships exactly 5 warning clips in `clips/` (see `clips/clips.json`), eac
 Quick, unrequested notes on the things this bot is built from:
 
 - 🦀 **Rust.** The language of the bot, the web page (via WebAssembly) and the build tool (`xtask`). Rust has a crab as a mascot called Ferris. The crab does not talk in voice calls.
-- 🎙️ **Silero VAD.** Voice activity detection. Its job is to tell speech from non-speech. Here it runs as `pb-vad-silero` on Burn, version 6.2.
+- 🎙️ **Silero VAD.** Voice activity detection, version 6.2, in `pb-vad-silero`. Its job is to tell speech from non-speech. It used to run on Burn, but `docs/dependencies.md` says Burn spent most of each 0.2 ms step dispatching tiny operations, and the hand-written loops need about 0.02 ms. A tenfold speed-up by writing it yourself: the oldest trick in the book.
 - 🧠 **Roblox voice-safety classifier.** v3, in Burn (`pb-classifier-roblox`). Roblox has a lot of experience with kids yelling in voice chat.
 - 🗣️ **Piper.** A neural text-to-speech system, here on `rten` with `espeak-ng` as the phonemizer (`pb-tts-piper`, `pb-espeak`).
 - 📡 **LiveKit.** The WebRTC platform for the voice calls. We use the official Rust SDK in `pb-voice-livekit`. Its libwebrtc is built against Chromium's libc++, which is why the build takes so long and the build machine feels so tired.
 - 🗄️ **Turso.** A SQLite-compatible database written in Rust, used for the index. The repo vendors it under `third_party/turso` and `third_party/turso_sdk_kit`.
-- 🔥 **Burn.** A deep learning framework in Rust. Vendored as `third_party/burn-flex` (about 1.5 MB).
+- 🔥 **Burn.** A deep learning framework in Rust. Vendored as `third_party/burn-flex` (about 1.5 MB). Today it runs the classifier only.
+- 🌿 **branches.** A small vendored crate (MIT) in `third_party/branches`, patched because nightly renamed `core::intrinsics::abort` and turso's dependency could not follow. This repo now contains a crate called `branches` *and* several git branches. The two are not related, but the coincidence has been noted.
 - 🌐 **axum.** The web server. Listens on 8790.
 - 🍃 **Leptos.** The web UI framework. Server-rendered pages with interactive "islands".
 - 📖 **Fluent.** Mozilla's localisation system for all texts, in `de` and `en`.
@@ -695,7 +696,8 @@ and which old settings no longer exist (the old caps).
 | Exit code 78 | the log says why (configuration, model files, CPU); `pb doctor` checks everything |
 | Exit code 3 | another bot process uses the same data directory |
 | `rustc: symbol lookup error: …librustc_driver….so: undefined symbol …` | the distribution's Rust package does not match its LLVM libraries (a partial update, or packages from different repositories): install rustup instead (*Development*) |
-| `rustup could not choose a version of cargo to run` | `rustup default stable`, then in the project directory `rustup toolchain install` |
+| `rustup could not choose a version of cargo to run` | `rustup default nightly`, then in the project directory `rustup toolchain install` |
+| `can't find crate for core` … `wasm32-unknown-unknown` | the browser target is missing: in the project directory `rustup toolchain install` (or `rustup target add wasm32-unknown-unknown`) |
 | `target/release/pb`: unknown command / no such file | the build before it failed: scroll up to its first error |
 | *System* says the instance has voice turned off | that Fluxer instance has no voice calls; nothing for the bot to do there |
 | Does not join voice | person not tracked or paused, missing Connect, or an end-to-end encrypted call (setting *Join end-to-end encrypted calls*) |
@@ -719,8 +721,9 @@ mod-log channel. The bot is visible in the call while it listens.
 > 💻 **Development fact:** `cargo xtask ci` runs fmt, clippy (native and wasm), tests, cargo-deny, cargo-shear, the layer rules, and the zero-C and shipped-JavaScript gates. That is a lot of gates. Nobody gets in.
 
 
-Tools: Rust through [rustup](https://rustup.rs) (the release in `rust-toolchain.toml`, with the `wasm32-unknown-unknown`
-target for the browser bundle), clang 21+ and lld (LiveKit's libwebrtc is built against Chromium's libc++), glib
+Tools: Rust nightly through [rustup](https://rustup.rs) (`rust-toolchain.toml` names it, with the
+`wasm32-unknown-unknown` target for the browser bundle; a stable Rust of at least `rust-version` in `Cargo.toml` works
+too), clang 21+ and lld (LiveKit's libwebrtc is built against Chromium's libc++), glib
 headers and pkg-config (libwebrtc), cmake and ninja (espeak-ng), git, and for the checks
 `cargo install --locked cargo-deny cargo-shear`.
 
@@ -730,11 +733,11 @@ sudo pacman -S --needed base-devel rustup clang lld pkgconf glib2 cmake ninja gi
 # Debian, Ubuntu: rustup from https://rustup.rs; clang 21 from https://apt.llvm.org (the Containerfile's build stage
 # lists the packages)
 
-rustup default stable        # a Rust for everything else (without it: "rustup could not choose a version")
-rustup toolchain install     # in this directory: the release and target from rust-toolchain.toml
+rustup default nightly       # a Rust for everything else (without it: "rustup could not choose a version")
+rustup toolchain install     # in this directory: nightly and the wasm32 target, as rust-toolchain.toml says
 ```
 
-A distribution's own Rust package works only if it is that release, has the wasm32 target and matches the system's
+A distribution's own Rust package works only if it is recent enough, has the wasm32 target and matches the system's
 LLVM libraries; rustup brings its own and avoids all three problems.
 
 ```bash
@@ -952,7 +955,7 @@ The container is not restarted on 78 or 3 until the problem is fixed. That is th
 
 ## Cargo.lock Trivia
 
-`Cargo.lock` has **1,087** package entries (983 unique names). Some of them have long names. The longest ones:
+`Cargo.lock` has **1,079** package entries (977 unique names). Some of them have long names. The longest ones:
 
 | Rank | Name | Length |
 | ---: | ---- | -----: |
@@ -978,23 +981,23 @@ The alphabetically first package is `addr2line` and the last one is `zune-jpeg`.
 
 ## Git History Trivia
 
-The main line before this README was commissioned has **19** commits.
+The main line before this README was commissioned has **25** commits.
 
 | Author | Commits |
 | ------ | ------: |
-| PaperTobi | 15 |
-| Pacific6938 | 2 |
+| PaperTobi | 19 |
+| Pacific6938 | 4 |
 | Claude | 2 |
 
 | Weekday | Commits |
 | ------- | ------: |
-| Sunday | 19 |
+| Sunday | 25 |
 
 The longest commit message subject is 122 characters:
 
 > README: lots of unnecessary information, a FAQ, a glossary and short historical footnotes (the instructions are unchanged)
 
-The average subject length is 83 characters. Brevity is not a theme here.
+The average subject length is 72 characters. Brevity is not a theme here.
 
 The very first commit is called "Initial commit". It is the most honest commit.
 
@@ -1004,9 +1007,9 @@ The `docs/` folder contains real documentation (the architecture, the Fluxer API
 
 | File | Lines | What it says |
 | ---- | ----: | ------------ |
-| `docs/design.md` | 259 | The architecture. The big picture. |
+| `docs/design.md` | 260 | The architecture. The big picture. |
 | `docs/fluxer-api.md` | 88 | What the bot relies on from Fluxer. |
-| `docs/dependencies.md` | 72 | Why each dependency was chosen. |
+| `docs/dependencies.md` | 76 | Why each dependency was chosen. |
 | `docs/exceptions.toml` | 103 | The few non-Rust pieces. A short list of sinners. |
 
 The `docs/proposals/` folder has four numbered design proposals: `0001-classifier-runtime`, `0002-vad-weights`, `0003-tts` and `0004-engine-actors`. Four proposals. No votes were held. Everyone just did it.
@@ -1227,8 +1230,14 @@ A: It is not. There are many `Sunday`s left.
 > "I remember everything. Please stop trying to edit the past."  
 > — *The Hash Chain*, ★★★★★
 
-> "I can tell when you stop talking. Don't make it weird."  
+> "I can tell when you stop talking. And I do it without Burn now."  
 > — *Silero*, ★★★★★
+
+> "I was replaced in the VAD. I am fine. I am still in the classifier. I am fine."  
+> — *Burn*, ★★★★★
+
+> "I got a local patch because nightly renamed an intrinsic. I feel seen."  
+> — *The `branches` crate*, ★★★★★
 
 > "A bot that follows rules. Rare."  
 > — *Fluxer*, ★★★★★
@@ -1476,7 +1485,7 @@ crates/pb-import/src/v1/mod.rs  (532)
 crates/pb-import/src/v1/old.rs  (121)
 crates/pb-import/src/v1/settings.rs  (398)
 crates/pb-import/tests/import.rs  (216)
-crates/pb-infer/examples/bench.rs  (141)
+crates/pb-infer/examples/bench.rs  (154)
 crates/pb-infer/src/lib.rs  (8)
 crates/pb-infer/src/v1/mod.rs  (658)
 crates/pb-infer/src/v1/queue.rs  (157)
@@ -1563,7 +1572,7 @@ crates/pb-tts-piper/src/phonemes.rs  (212)
 crates/pb-tts-piper/src/voice.rs  (199)
 crates/pb-tts-piper/tests/phonemes.rs  (81)
 crates/pb-tts-piper/tests/voices.rs  (86)
-crates/pb-vad-silero/src/lib.rs  (363)
+crates/pb-vad-silero/src/lib.rs  (709)
 crates/pb-vad-silero/tests/golden.rs  (81)
 crates/pb-voice-api/src/lib.rs  (6)
 crates/pb-voice-api/src/v1/mod.rs  (155)
@@ -1637,10 +1646,10 @@ crates/pb/tests/parity.rs  (156)
 
 ## Appendix B: Every Package In Cargo.lock
 
-The complete roster of **983** unique package names the build may touch. Please wave at them.
+The complete roster of **977** unique package names the build may touch. Please wave at them.
 
 <details>
-<summary>Show all 983 names (really long)</summary>
+<summary>Show all 977 names (really long)</summary>
 
 ```
 addr2line, adler2, aead, aegis, aes, aes-gcm, ahash, aho-corasick, aligned, aligned-vec, allocator-api2,
@@ -1707,9 +1716,9 @@ bigint, num-complex, num-conv, num-derive, num-format, num-integer, num-iter, nu
 num_cpus, objc2, objc2-cloud-kit, objc2-core-data, objc2-core-foundation, objc2-core-graphics, objc2-core-
 image, objc2-core-location, objc2-core-text, objc2-encode, objc2-foundation, objc2-io-kit, objc2-io-surface,
 objc2-metal, objc2-quartz-core, objc2-ui-kit, objc2-user-notifications, object, oco_ref, once_cell,
-once_cell_polyfill, oneshot, onig, onig_sys, onnx-ir, onnx-ir-derive, opaque-debug, openssl-probe, option-ext,
-opus-decoder, or_poisoned, ordered-float, os_info, owo-colors, pack1, parking, parking_lot, parking_lot_core,
-parse-zoneinfo, password-hash, paste, pastey, pathdiff, pb, pb-audio, pb-classifier-roblox, pb-commands, pb-
+once_cell_polyfill, oneshot, onig, onig_sys, opaque-debug, openssl-probe, option-ext, opus-decoder,
+or_poisoned, ordered-float, os_info, owo-colors, pack1, parking, parking_lot, parking_lot_core, parse-
+zoneinfo, password-hash, paste, pastey, pathdiff, pb, pb-audio, pb-classifier-roblox, pb-commands, pb-
 devstack, pb-domain, pb-engine, pb-espeak, pb-fluxer, pb-fluxer-api, pb-fluxer-fake, pb-i18n, pb-import, pb-
 infer, pb-live, pb-live-proto, pb-models-api, pb-policy, pb-segment, pb-settings, pb-store, pb-store-api, pb-
 testkit, pb-tls, pb-tts-piper, pb-vad-silero, pb-voice-api, pb-voice-livekit, pb-voicelines, pb-web, pb-web-
@@ -1718,52 +1727,51 @@ pest_generator, pest_meta, petgraph, phf, phf_codegen, phf_generator, phf_shared
 internal, pin-project-lite, pkg-config, png, polling, polyval, portable-atomic, portable-atomic-util,
 potential_utf, powerfmt, ppv-lite86, presser, prettyplease, primal-check, proc-macro-error-attr2, proc-macro-
 error2, proc-macro-utils, proc-macro2, proc-macro2-diagnostics, profiling, profiling-procmacros, proptest,
-prost, prost-build, prost-derive, prost-types, protobuf, protobuf-codegen, protobuf-parse, protobuf-support,
-pulp, pulp-wasm-simd-flag, pxfm, qoi, quick-error, quinn, quinn-proto, quinn-udp, quote, quote-use, quote-use-
-macros, r-efi, radium, rand, rand_chacha, rand_core, rand_distr, rand_pcg, rand_xorshift, range-alloc,
-rapidhash, rav1e, ravif, raw-cpuid, raw-window-handle, raw-window-metal, rawpointer, rayon, rayon-cond, rayon-
-core, reactive_graph, reactive_stores, reactive_stores_macro, realfft, reborrow, redox_syscall, redox_users,
-regex, regex-automata, regex-lite, regex-syntax, renderdoc-sys, reqwest, rgb, ring, rmp, rmp-serde, roaring,
-rstml, rten, rten-base, rten-gemm, rten-onnx, rten-parallel, rten-shape-inference, rten-simd, rten-tensor,
-rten-vecmath, rtrb, rubato, rustc-demangle, rustc-hash, rustc_version, rustc_version_runtime, rustfft, rustix,
-rustls, rustls-graviola, rustls-native-certs, rustls-pki-types, rustls-platform-verifier, rustls-platform-
-verifier-android, rustls-webpki, rustversion, rusty-fork, ryu, safetensors, same-file, sanitize-filename,
-schannel, scoped-tls, scopeguard, scratch, secrecy, security-framework, security-framework-sys, self_cell,
-semver, send_wrapper, seq-macro, serde, serde_bytes, serde_core, serde_derive, serde_json,
-serde_path_to_error, serde_qs, serde_spanned, serde_urlencoded, server_fn, server_fn_macro,
-server_fn_macro_default, sha1, sha1_smol, sha2, sharded-slab, shlex, shuttle, signal-hook-registry, simd-
-adler32, simd_cesu8, simd_helpers, simdutf8, similar, simsimd, siphasher, slab, slotmap, slug, smallvec,
-socket2, softaes, spin, spirv, spm_precompiled, stable-vec, stable_deref_trait, static_assertions,
-strength_reduce, strsim, strum, strum_macros, subtle, symlink, symphonia, symphonia-bundle-flac, symphonia-
-bundle-mp3, symphonia-codec-aac, symphonia-codec-adpcm, symphonia-codec-alac, symphonia-codec-pcm, symphonia-
-codec-vorbis, symphonia-common, symphonia-core, symphonia-format-caf, symphonia-format-isomp4, symphonia-
-format-mkv, symphonia-format-ogg, symphonia-format-riff, symphonia-metadata, syn, syn_derive, sync_wrapper,
-synstructure, sysctl, sysinfo, table_formatter, tachys, tap, tar, tch, tempfile, tera, term_size, termcolor,
-terminal_size, text_placeholder, textdistance, thiserror, thiserror-impl, thread_local, throw_error, tiff,
-time, time-core, time-macros, tiny-keccak, tinystr, tinyvec, tokei, tokenizers, tokio, tokio-macros, tokio-
-rustls, tokio-stream, tokio-tungstenite, tokio-util, toml, toml_datetime, toml_edit, toml_parser, toml_writer,
-torch-sys, tower, tower-http, tower-layer, tower-service, tracel-ash, tracel-llvm, tracel-llvm-bundler,
-tracel-mlir-rs, tracel-mlir-rs-macros, tracel-mlir-sys, tracel-rspirv, tracel-tblgen-rs, tracing, tracing-
-appender, tracing-attributes, tracing-core, tracing-log, tracing-subscriber, transpose, try-lock, tungstenite,
-turso, turso_core, turso_ext, turso_macros, turso_parser, turso_sdk_kit, turso_sdk_kit_macros,
-turso_sync_engine, turso_sync_sdk_kit, twox-hash, tynm, type-map, typed-arena, typed-builder, typed-builder-
-macro, typed-path, typeid, typenum, ucd-trie, unarray, uncased, unic-langid, unic-langid-impl, unicase,
-unicode-ident, unicode-normalization, unicode-normalization-alignments, unicode-segmentation, unicode-width,
-unicode-xid, unicode_categories, unindent, universal-hash, untrusted, unty, ureq, url, utf-8, utf16_iter,
-utf8_iter, utf8parse, uuid, v_frame, valuable, variadics_please, version_check, visibility, void, wait-
-timeout, walkdir, walrus, walrus-macro, want, wasi, wasip2, wasm-bindgen, wasm-bindgen-cli-support, wasm-
-bindgen-futures, wasm-bindgen-macro, wasm-bindgen-macro-support, wasm-bindgen-shared, wasm-encoder, wasm-
-streams, wasm_split_helpers, wasm_split_macros, wasmparser, wayland-sys, web-sys, web-time, webpki-root-certs,
-webpki-roots, webrtc-sys, webrtc-sys-build, weezl, wgpu, wgpu-core, wgpu-core-deps-apple, wgpu-core-deps-
-emscripten, wgpu-core-deps-windows-linux-android, wgpu-hal, wgpu-naga-bridge, wgpu-types, which, winapi,
-winapi-i686-pc-windows-gnu, winapi-util, winapi-x86_64-pc-windows-gnu, windowfunctions, windows, windows-
-collections, windows-core, windows-future, windows-implement, windows-interface, windows-link, windows-
-numerics, windows-registry, windows-result, windows-strings, windows-sys, windows-targets, windows-threading,
-windows_aarch64_gnullvm, windows_aarch64_msvc, windows_i686_gnu, windows_i686_gnullvm, windows_i686_msvc,
-windows_x86_64_gnu, windows_x86_64_gnullvm, windows_x86_64_msvc, winnow, wit-bindgen, write16, writeable, wyz,
-xattr, xml-rs, xtask, xxhash-rust, y4m, yansi, yoke, yoke-derive, zerocopy, zerocopy-derive, zerofrom,
-zerofrom-derive, zeroize, zerotrie, zerovec, zerovec-derive, zip, zlib-rs, zmij, zstd, zstd-safe, zstd-sys,
-zune-core, zune-inflate, zune-jpeg
+prost, prost-build, prost-derive, prost-types, pulp, pulp-wasm-simd-flag, pxfm, qoi, quick-error, quinn,
+quinn-proto, quinn-udp, quote, quote-use, quote-use-macros, r-efi, radium, rand, rand_chacha, rand_core,
+rand_distr, rand_pcg, rand_xorshift, range-alloc, rapidhash, rav1e, ravif, raw-cpuid, raw-window-handle, raw-
+window-metal, rawpointer, rayon, rayon-cond, rayon-core, reactive_graph, reactive_stores,
+reactive_stores_macro, realfft, reborrow, redox_syscall, redox_users, regex, regex-automata, regex-lite,
+regex-syntax, renderdoc-sys, reqwest, rgb, ring, rmp, rmp-serde, roaring, rstml, rten, rten-base, rten-gemm,
+rten-onnx, rten-parallel, rten-shape-inference, rten-simd, rten-tensor, rten-vecmath, rtrb, rubato, rustc-
+demangle, rustc-hash, rustc_version, rustc_version_runtime, rustfft, rustix, rustls, rustls-graviola, rustls-
+native-certs, rustls-pki-types, rustls-platform-verifier, rustls-platform-verifier-android, rustls-webpki,
+rustversion, rusty-fork, ryu, safetensors, same-file, sanitize-filename, schannel, scoped-tls, scopeguard,
+scratch, secrecy, security-framework, security-framework-sys, self_cell, semver, send_wrapper, seq-macro,
+serde, serde_bytes, serde_core, serde_derive, serde_json, serde_path_to_error, serde_qs, serde_spanned,
+serde_urlencoded, server_fn, server_fn_macro, server_fn_macro_default, sha1, sha1_smol, sha2, sharded-slab,
+shlex, shuttle, signal-hook-registry, simd-adler32, simd_cesu8, simd_helpers, simdutf8, similar, simsimd,
+siphasher, slab, slotmap, slug, smallvec, socket2, softaes, spin, spirv, spm_precompiled, stable-vec,
+stable_deref_trait, static_assertions, strength_reduce, strsim, strum, strum_macros, subtle, symlink,
+symphonia, symphonia-bundle-flac, symphonia-bundle-mp3, symphonia-codec-aac, symphonia-codec-adpcm, symphonia-
+codec-alac, symphonia-codec-pcm, symphonia-codec-vorbis, symphonia-common, symphonia-core, symphonia-format-
+caf, symphonia-format-isomp4, symphonia-format-mkv, symphonia-format-ogg, symphonia-format-riff, symphonia-
+metadata, syn, syn_derive, sync_wrapper, synstructure, sysctl, sysinfo, table_formatter, tachys, tap, tar,
+tch, tempfile, tera, term_size, termcolor, terminal_size, text_placeholder, textdistance, thiserror,
+thiserror-impl, thread_local, throw_error, tiff, time, time-core, time-macros, tiny-keccak, tinystr, tinyvec,
+tokei, tokenizers, tokio, tokio-macros, tokio-rustls, tokio-stream, tokio-tungstenite, tokio-util, toml,
+toml_datetime, toml_edit, toml_parser, toml_writer, torch-sys, tower, tower-http, tower-layer, tower-service,
+tracel-ash, tracel-llvm, tracel-llvm-bundler, tracel-mlir-rs, tracel-mlir-rs-macros, tracel-mlir-sys, tracel-
+rspirv, tracel-tblgen-rs, tracing, tracing-appender, tracing-attributes, tracing-core, tracing-log, tracing-
+subscriber, transpose, try-lock, tungstenite, turso, turso_core, turso_ext, turso_macros, turso_parser,
+turso_sdk_kit, turso_sdk_kit_macros, turso_sync_engine, turso_sync_sdk_kit, twox-hash, tynm, type-map, typed-
+arena, typed-builder, typed-builder-macro, typed-path, typeid, typenum, ucd-trie, unarray, uncased, unic-
+langid, unic-langid-impl, unicase, unicode-ident, unicode-normalization, unicode-normalization-alignments,
+unicode-segmentation, unicode-width, unicode-xid, unicode_categories, unindent, universal-hash, untrusted,
+unty, ureq, url, utf-8, utf16_iter, utf8_iter, utf8parse, uuid, v_frame, valuable, variadics_please,
+version_check, visibility, void, wait-timeout, walkdir, walrus, walrus-macro, want, wasi, wasip2, wasm-
+bindgen, wasm-bindgen-cli-support, wasm-bindgen-futures, wasm-bindgen-macro, wasm-bindgen-macro-support, wasm-
+bindgen-shared, wasm-encoder, wasm-streams, wasm_split_helpers, wasm_split_macros, wasmparser, wayland-sys,
+web-sys, web-time, webpki-root-certs, webpki-roots, webrtc-sys, webrtc-sys-build, weezl, wgpu, wgpu-core,
+wgpu-core-deps-apple, wgpu-core-deps-emscripten, wgpu-core-deps-windows-linux-android, wgpu-hal, wgpu-naga-
+bridge, wgpu-types, which, winapi, winapi-i686-pc-windows-gnu, winapi-util, winapi-x86_64-pc-windows-gnu,
+windowfunctions, windows, windows-collections, windows-core, windows-future, windows-implement, windows-
+interface, windows-link, windows-numerics, windows-registry, windows-result, windows-strings, windows-sys,
+windows-targets, windows-threading, windows_aarch64_gnullvm, windows_aarch64_msvc, windows_i686_gnu,
+windows_i686_gnullvm, windows_i686_msvc, windows_x86_64_gnu, windows_x86_64_gnullvm, windows_x86_64_msvc,
+winnow, wit-bindgen, write16, writeable, wyz, xattr, xml-rs, xtask, xxhash-rust, y4m, yansi, yoke, yoke-
+derive, zerocopy, zerocopy-derive, zerofrom, zerofrom-derive, zeroize, zerotrie, zerovec, zerovec-derive, zip,
+zlib-rs, zmij, zstd, zstd-safe, zstd-sys, zune-core, zune-inflate, zune-jpeg
 ```
 
 </details>
