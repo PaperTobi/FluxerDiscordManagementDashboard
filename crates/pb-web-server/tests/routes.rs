@@ -1904,3 +1904,51 @@ async fn a_voice_line_says_which_line_the_bot_uses() {
     assert!(row(&person, "warning.any.any").contains("from this community"));
     w.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_saved_or_refused_setting_says_so_next_to_it() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    let back = format!("/c/{G}/settings");
+    let scope = format!("server:{G}");
+    let save = async |value: &str| {
+        w.post(
+            "/settings",
+            Some(&owner),
+            &[
+                ("csrf", csrf.as_str()),
+                ("scope", scope.as_str()),
+                ("key", "strikes"),
+                ("value", value),
+                ("action", "set"),
+                ("back", back.as_str()),
+            ],
+        )
+        .await
+    };
+    let after = async |r: &common::Got| {
+        let n = r.cookie("pb_notice").expect("a notice");
+        let page = w
+            .get(r.location.as_deref().unwrap(), Some(&format!("{owner}; pb_notice={n}")))
+            .await
+            .body;
+        let at = page.find("id=\"set-strikes\"").expect("the setting");
+        let end = page[at + 10..].find("id=\"set-").map_or(page.len(), |e| at + 10 + e);
+        (page[at..end].to_owned(), page)
+    };
+    // Refused: the reason under the field, and what was typed stays in it.
+    let r = save("lots").await;
+    let (row, _) = after(&r).await;
+    assert!(row.contains("class=\"field-note error\""), "{row}");
+    assert!(row.contains("value=\"lots\""), "what was typed stays: {row}");
+    // Saved: the top says which setting, the setting says so too.
+    let r = save("3").await;
+    let (row, page) = after(&r).await;
+    assert!(page.contains("Saved: Strikes before a warning."), "{page}");
+    assert!(
+        row.contains("class=\"field-note ok\"") && row.contains("value=\"3\""),
+        "{row}"
+    );
+    w.stop().await;
+}

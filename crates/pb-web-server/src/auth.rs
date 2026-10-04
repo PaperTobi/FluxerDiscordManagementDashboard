@@ -397,11 +397,17 @@ impl std::fmt::Debug for Notices {
 impl Notices {
     /// Stores a notice; returns the `Set-Cookie` value that points the browser at it.
     pub fn put(&self, ok: bool, text: String, secure: bool) -> HeaderValue {
+        self.put_fields(ok, text, Vec::new(), secure)
+    }
+
+    /// A notice that also says what happened to each field (shown next to it).
+    pub fn put_fields(&self, ok: bool, text: String, fields: Vec<pb_web::app::FieldNote>, secure: bool) -> HeaderValue {
         self.store(
             pb_web::app::Notice {
                 ok,
                 text,
                 log_in_again: None,
+                fields,
             },
             secure,
         )
@@ -414,6 +420,7 @@ impl Notices {
                 ok: false,
                 text,
                 log_in_again: Some(next),
+                fields: Vec::new(),
             },
             secure,
         )

@@ -54,6 +54,38 @@ pub struct Notice {
     pub text: String,
     /// Offer to log in again and come back to this path.
     pub log_in_again: Option<String>,
+    /// What happened to each field of the form, shown next to it.
+    pub fields: Vec<FieldNote>,
+}
+
+/// What happened to one field of a form (a setting), shown next to it on the next page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldNote {
+    /// The field: a setting's key.
+    pub key: String,
+    pub ok: bool,
+    pub text: String,
+    /// What was typed, when it was refused (the field shows it again instead of the old value).
+    pub typed: Option<String>,
+}
+
+/// This request's notice (taken from the store once, then shared by the notice bar and the forms).
+#[derive(Debug, Clone)]
+struct CurrentNotice(Option<Notice>);
+
+/// The notice the last form left for this page (taken from the store once per request).
+pub fn current_notice() -> Option<Notice> {
+    if let Some(n) = use_context::<CurrentNotice>() {
+        return n.0;
+    }
+    let n = use_context::<http::request::Parts>().and_then(|p| app().host.take_notice(&p));
+    provide_context(CurrentNotice(n.clone()));
+    n
+}
+
+/// What the notice says about one field.
+pub fn field_note(key: &str) -> Option<FieldNote> {
+    current_notice().and_then(|n| n.fields.into_iter().find(|f| f.key == key))
 }
 
 /// Where the setup wizard is.
@@ -241,6 +273,7 @@ fn Page(children: Children) -> impl IntoView {
         sidebar.communities.retain(|c| v.guilds.contains(&c.id));
     }
     let paused_everywhere = app().engine.settings().current().paused_everywhere();
+    current_notice();
     let nav = |href: &'static str, id: &str| {
         let active = if href == "/" {
             path == "/"
@@ -355,7 +388,7 @@ pub fn login_href() -> String {
 /// The message the last form left, if any.
 #[component]
 pub fn NoticeBar() -> impl IntoView {
-    let notice = use_context::<http::request::Parts>().and_then(|p| app().host.take_notice(&p));
+    let notice = current_notice();
     let loc = viewer().map_or(Locale::En, |v| v.locale);
     notice.map(|n| {
         let (class, role) = if n.ok {

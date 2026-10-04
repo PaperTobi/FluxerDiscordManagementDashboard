@@ -488,3 +488,6 @@ audit-by-id = jemand (ID { $id })
 ## Sprachtexte: woher ein Sprachtext kommt
 ui-vl-own = Eigener Sprachtext
 ui-vl-uses = nutzt „{ $line }“ ({ $from })
+
+## Was Speichern bewirkt hat
+ui-saved-what = Gespeichert: { $what }.

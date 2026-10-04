@@ -543,6 +543,12 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
     let meta = key.meta();
     let here = tree.overrides(scope).get_json(key);
     let (value, source) = effective_value(&tree, scope, key);
+    // What the last save said about this setting; a refused value is shown again as typed.
+    let note = crate::app::field_note(&key.name());
+    let value = match note.as_ref().and_then(|n| n.typed.clone()) {
+        Some(typed) => Value::String(typed),
+        None => value,
+    };
     let disabled = meta.who == Who::Owner && !viewer.owner;
     let is_here = here.is_some();
     let badge = if is_here {
@@ -605,6 +611,9 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
                     <button class="link" name="action" value="clear">{text(loc, "ui-use-inherited", &[])}</button>
                 })}
             </div>
+            {note.map(|n| view! {
+                <p class=if n.ok { "field-note ok" } else { "field-note error" } role=if n.ok { "status" } else { "alert" }>{n.text}</p>
+            })}
             {partner}
         </form>
     }

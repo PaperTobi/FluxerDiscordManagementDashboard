@@ -488,3 +488,6 @@ audit-by-id = someone (ID { $id })
 ## Voice lines: where a line comes from
 ui-vl-own = Own line
 ui-vl-uses = uses “{ $line }” ({ $from })
+
+## What a save did
+ui-saved-what = Saved: { $what }.

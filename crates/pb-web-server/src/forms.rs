@@ -120,6 +120,21 @@ impl WebState {
     pub(crate) fn done(&self, s: &Sender, f: &Fields, ok: bool, msg: String) -> Response {
         redirect_with(&safe_next(field(f, "back")), vec![self.notices.put(ok, msg, s.secure)])
     }
+
+    /// Back to the form's page with a notice and what happened to each field (shown next to it).
+    pub(crate) fn done_fields(
+        &self,
+        s: &Sender,
+        f: &Fields,
+        ok: bool,
+        msg: String,
+        notes: Vec<pb_web::app::FieldNote>,
+    ) -> Response {
+        redirect_with(
+            &safe_next(field(f, "back")),
+            vec![self.notices.put_fields(ok, msg, notes, s.secure)],
+        )
+    }
 }
 
 /// Whether a form that destroys something was confirmed on the `/confirm` page.
@@ -219,8 +234,20 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
             }
         })
         .await;
+    // The result is shown next to the setting too; a refused value stays in the field as it was typed.
+    let note = |ok: bool, msg: &str| pb_web::app::FieldNote {
+        key: key.name(),
+        ok,
+        text: msg.to_owned(),
+        typed: (!ok).then(|| field(&f, "value").map(str::to_owned)).flatten(),
+    };
+    let name = pb_i18n::setting_name(loc, key);
     match result {
         Ok(changes) if changes.is_empty() => st.done(&s, &f, true, text(loc, "ui-unchanged", &[])),
+        Err(e) => {
+            let msg = change_error(loc, &e);
+            st.done_fields(&s, &f, false, msg.clone(), vec![note(false, &msg)])
+        }
         // Pausing says what it does, and where.
         Ok(_) if key == SettingKey::Paused => {
             let paused = !clear && field(&f, "value") == Some("on");
@@ -232,8 +259,13 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
                 text(loc, id, &[("where", st.scope_words(loc, scope).into())]),
             )
         }
-        Ok(_) => st.done(&s, &f, true, text(loc, "ui-saved", &[])),
-        Err(e) => st.done(&s, &f, false, change_error(loc, &e)),
+        Ok(_) => st.done_fields(
+            &s,
+            &f,
+            true,
+            text(loc, "ui-saved-what", &[("what", name.into())]),
+            vec![note(true, &text(loc, "ui-saved", &[]))],
+        ),
     }
 }
 

@@ -591,3 +591,9 @@ details.chat-commands[open] > summary { margin-bottom: 8px; }
 
 /* What a link or a saved form jumps to stays clear of the sticky section menu. */
 .setting, .vline, details.chat-commands, .pause-everywhere, .card[id] { scroll-margin-top: 64px; }
+
+/* ---------------------------------------------------------------- what a save did, next to the field */
+
+.field-note { margin: 6px 0 0; font-size: 0.88rem; }
+.field-note.ok { color: var(--ok); }
+.field-note.error { color: var(--bad); font-weight: 600; }
