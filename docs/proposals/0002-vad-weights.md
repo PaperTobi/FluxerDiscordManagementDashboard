@@ -16,5 +16,8 @@ the ONNX outputs to 1.7e-6.
 (`onnx-ir`). One official file, pinned by hash, no conversion. Golden tests: probabilities within 1.2e-6 of the ONNX
 model on speech, noise and dialogue; 0.17 ms per frame for one stream, 0.034 ms per stream-frame with 30 streams.
 
+Update 2026-10-04: the network is now a hand-written forward pass, and the ONNX file is read with rten-onnx. Same
+file and weights, same golden tests (within 4.4e-6); 0.02 ms per frame for one stream.
+
 ## How to undo
 Another VAD implementation can replace it behind `pb_models_api::VadModel` (same contract tests).

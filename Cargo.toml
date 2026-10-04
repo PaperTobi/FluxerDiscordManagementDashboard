@@ -140,3 +140,7 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 opt-level = 2
 debug = false
+
+# The VAD's maths is our own code.
+[profile.dev.package.pb-vad-silero]
+opt-level = 2
