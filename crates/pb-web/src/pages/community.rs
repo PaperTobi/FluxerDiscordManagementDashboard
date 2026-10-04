@@ -66,6 +66,7 @@ pub fn CommunityPage() -> impl IntoView {
                 <p class="muted small">{text(loc, "ui-track-help", &[])}</p>
             </section>
             <PermissionCheck guild=g/>
+            <section class="card"><super::commands::ChatCommands guild=Some(g) locale=loc/></section>
         }
         .into_any(),
         "settings" => view! { <SettingsForm scope=Scope::Server { guild: g } back=here.clone()/> }.into_any(),

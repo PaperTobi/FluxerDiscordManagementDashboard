@@ -450,3 +450,8 @@ ui-first-invite = Der Bot ist noch in keiner Community. Lade ihn zuerst in eine 
 ui-first-track = Noch wird niemand verfolgt. Öffne eine Community und verfolge jemanden: Der Bot hört der Person zu, sobald sie in einem Anruf ist, dem er beitreten kann.
 ui-clip-name-empty = Ein Clip braucht einen Namen.
 ui-record-default-name = Aufnahme { $when }
+
+## Chat-Befehle
+ui-chat-commands = Chat-Befehle
+ui-chat-commands-how = Fluxer hat keine Slash-Befehle und keine Autovervollständigung: Ein Befehl ist eine gewöhnliche Nachricht in einem Textkanal der Community, die mit { $prefix } oder einer Erwähnung des Bots beginnt; er antwortet in diesem Kanal.
+ui-chat-commands-off = Chat-Befehle sind ausgeschaltet (System → Chat-Befehle).

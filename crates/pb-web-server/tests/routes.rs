@@ -1549,3 +1549,53 @@ async fn a_clip_keeps_a_name() {
     assert_eq!(w.engine.clip(&clip.parse().unwrap()).unwrap().name, "Calm down");
     w.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn chat_commands_are_explained_in_the_web_ui() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    // On the System page beside the commands' settings, with the prefix in use.
+    let system = w.get("/system", Some(&owner)).await.body;
+    let at = system
+        .find("id=\"chat-commands\"")
+        .expect("the chat commands on the System page");
+    assert!(
+        system[..at].contains("id=\"section-commands\""),
+        "in the chat commands section"
+    );
+    assert!(
+        system.contains("<code>!pb status</code>") && system.contains("no slash commands"),
+        "{system}"
+    );
+    w.post(
+        "/settings",
+        Some(&owner),
+        &[
+            ("csrf", &csrf),
+            ("scope", "global"),
+            ("key", "command_prefix"),
+            ("value", "?w"),
+            ("action", "set"),
+            ("back", "/system"),
+        ],
+    )
+    .await;
+    // On a community's overview; settings with a command of their own link there.
+    let ada = w.login(ADA).await.unwrap();
+    let overview = w.get(&format!("/c/{G}"), Some(&ada)).await.body;
+    assert!(
+        overview.contains("id=\"chat-commands\"") && overview.contains("<code>?w add @user…</code>"),
+        "{overview}"
+    );
+    let settings = w.get(&format!("/c/{G}/settings"), Some(&ada)).await.body;
+    assert!(
+        settings.contains(&format!("href=\"/c/{G}#chat-commands\""))
+            && settings.contains("<code>?w jar [@user]</code>"),
+        "{settings}"
+    );
+    // A person's settings link only the commands that name a person.
+    let person = w.get(&format!("/c/{G}/p/{MAX}/settings"), Some(&ada)).await.body;
+    assert!(person.contains("<code>?w set strikes 2 [@user]</code>") && !person.contains("<code>?w pause</code>"));
+    w.stop().await;
+}

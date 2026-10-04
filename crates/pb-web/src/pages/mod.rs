@@ -1,6 +1,7 @@
 //! Server-rendered pages.
 
 pub mod audit;
+pub mod commands;
 pub mod community;
 pub mod confirm;
 pub mod invite;

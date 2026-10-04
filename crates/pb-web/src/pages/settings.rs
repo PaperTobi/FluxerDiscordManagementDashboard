@@ -704,6 +704,7 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
                 </details>
                 <span class="badge" class:here=is_here>{badge}</span>
                 {(meta.who == Who::Owner).then(|| view! { <span class="badge owner">{text(loc, "ui-owner-only", &[])}</span> })}
+                {super::commands::setting_commands(key, scope, loc)}
             </div>
             <div class="row">
                 {input(key, scope, &value, loc, disabled)}
@@ -771,10 +772,14 @@ pub fn SettingsForm(scope: Scope, back: String) -> impl IntoView {
     let cards = sections
         .into_iter()
         .map(|(section, keys)| {
+            // The chat commands' reference beside their settings (on the System page).
+            let commands = (section == Section::Commands && scope == Scope::Global)
+                .then(|| view! { <super::commands::ChatCommands guild=None locale=loc/> });
             view! {
                 <section class="card settings-section" id=format!("section-{}", section.key())>
                     <h2>{section_name(loc, section)}</h2>
                     {keys.into_iter().map(row).collect_view()}
+                    {commands}
                 </section>
             }
         })

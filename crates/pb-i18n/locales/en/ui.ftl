@@ -450,3 +450,8 @@ ui-first-invite = The bot is in no community yet. Invite it to a Fluxer communit
 ui-first-track = Nobody is tracked yet. Open a community and track someone: the bot listens to them whenever they are in a call it can join.
 ui-clip-name-empty = A clip needs a name.
 ui-record-default-name = Recording { $when }
+
+## Chat commands
+ui-chat-commands = Chat commands
+ui-chat-commands-how = Fluxer has no slash commands and no autocomplete: a command is an ordinary message in a text channel of the community, starting with { $prefix } or a mention of the bot, which answers in that channel.
+ui-chat-commands-off = Chat commands are switched off (System → Chat commands).
