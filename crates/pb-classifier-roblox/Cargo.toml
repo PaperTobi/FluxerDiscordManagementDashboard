@@ -31,7 +31,7 @@ thiserror.workspace = true
 [dev-dependencies]
 pb-testkit.workspace = true
 pb-models-api = { workspace = true, features = ["contract-tests"] }
-safetensors = "0.8"
+safetensors.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

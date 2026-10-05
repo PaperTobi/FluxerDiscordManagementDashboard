@@ -16,7 +16,8 @@ fn from_env(name: &str) -> Result<Option<SecretString>, String> {
     let file_var = format!("{name}_FILE");
     match std::env::var(&file_var) {
         Ok(path) => match std::fs::read_to_string(&path) {
-            Ok(v) => Ok(Some(SecretString::from(v.trim().to_owned()))),
+            // An empty file is no secret (as an empty variable is).
+            Ok(v) => Ok((!v.trim().is_empty()).then(|| SecretString::from(v.trim().to_owned()))),
             Err(e) => Err(format!("{file_var}={path}: {e}")),
         },
         Err(_) => Ok(None),

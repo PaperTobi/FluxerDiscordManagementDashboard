@@ -55,7 +55,7 @@ pb-fluxer-fake.workspace = true
 pb-testkit = { workspace = true, features = ["livekit", "memvoice"] }
 secrecy.workspace = true
 serde_json.workspace = true
-tempfile = "3"
+tempfile.workspace = true
 jiff.workspace = true
 
 [lints]

@@ -28,7 +28,7 @@ turso.workspace = true
 
 [dev-dependencies]
 pb-store-api = { workspace = true, features = ["contract-tests"] }
-tempfile = "3"
+tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "fs", "macros", "time"] }
 
 [lints]

@@ -21,7 +21,7 @@ pb-testkit.workspace = true
 # Only for the report that tracks the pure-Rust espeak-ng port against the C library (docs/proposals/0003).
 espeak-ng = { version = "0.2.0", default-features = false, features = ["bundled-data"] }
 pb-models-api = { workspace = true, features = ["contract-tests"] }
-safetensors = "0.8"
+safetensors.workspace = true
 
 [lints]
 workspace = true

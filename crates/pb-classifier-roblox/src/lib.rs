@@ -98,7 +98,7 @@ pub fn load_runner<B: Ops>(dir: &Path, device: &B::Device) -> Result<(Runner<B>,
         )));
     }
     let model = model.no_grad();
-    Ok((Runner::new(model, &cfg), cfg))
+    Ok((Runner::new(model, &cfg)?, cfg))
 }
 
 impl<B: Ops> RobloxClassifier<B> {

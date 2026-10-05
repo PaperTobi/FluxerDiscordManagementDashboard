@@ -23,7 +23,7 @@ turso.workspace = true
 
 [dev-dependencies]
 pb-store.workspace = true
-tempfile = "3"
+tempfile.workspace = true
 tokio = { workspace = true, features = ["fs", "rt-multi-thread", "macros"] }
 
 [lints]

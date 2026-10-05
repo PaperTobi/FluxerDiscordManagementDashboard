@@ -7,3 +7,7 @@ reason = "pinned to the exact wasm-bindgen version the app links (the two must m
 [[allow]]
 crate = "wasm-bindgen"
 reason = "pinned exactly so the browser bundle's loader and module match; bump both together"
+
+[[allow]]
+crate = "unic-langid"
+reason = "the language tag type of Fluent (fluent-bundle 0.16 takes unic_langid::LanguageIdentifier); it goes when Fluent moves to ICU4X's locale type"

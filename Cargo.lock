@@ -6902,7 +6902,6 @@ dependencies = [
  "pb-models-api",
  "pb-voice-api",
  "pb-voice-livekit",
- "rubato",
  "serde_json",
  "sha2 0.11.0",
  "tokio",

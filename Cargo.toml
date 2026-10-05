@@ -107,6 +107,10 @@ tokio-util = { version = "0.7.19", default-features = false, features = ["rt"] }
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
 toml = "1.1"
 fastrand = "2"
+tempfile = "3"
+safetensors = "0.8"
+http = "1"
+livekit = { version = "0.9.3", default-features = false }
 toml_edit = { version = "0.25.15", features = ["serde"] }
 turso = { version = "0.8.1", default-features = false, features = ["pure-rust-crypto"] }
 unic-langid = "0.9.6"

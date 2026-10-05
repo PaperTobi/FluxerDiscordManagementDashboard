@@ -13,7 +13,7 @@ base64.workspace = true
 futures.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
-http = "1"
+http.workspace = true
 jiff.workspace = true
 leptos = { workspace = true, features = ["ssr"] }
 leptos_axum.workspace = true
@@ -53,7 +53,7 @@ pb-vad-silero.workspace = true
 pb-voice-api.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
-tempfile = "3"
+tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net"] }
 tokio-tungstenite.workspace = true
 tracing-subscriber.workspace = true

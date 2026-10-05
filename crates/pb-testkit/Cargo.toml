@@ -10,9 +10,8 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 pb-audio.workspace = true
-livekit = { version = "0.9.3", default-features = false, optional = true }
+livekit = { workspace = true, optional = true }
 pb-voice-livekit = { workspace = true, optional = true }
-rubato.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full"], optional = true }
 futures = { workspace = true, optional = true }

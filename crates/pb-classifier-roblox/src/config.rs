@@ -66,8 +66,11 @@ impl ModelConfig {
         if !self.hidden_size.is_multiple_of(self.num_attention_heads) || !self.classifier_proj_size.is_multiple_of(16) {
             return fail("hidden sizes not divisible by the head counts".into());
         }
-        if self.sample_rate != pb_models_api::LISTEN_RATE || self.n_fft / 2 + 1 == 0 {
+        if self.sample_rate != pb_models_api::LISTEN_RATE {
             return fail(format!("sample rate {}", self.sample_rate));
+        }
+        if self.n_fft < 2 || self.hop_length == 0 || self.hop_length > self.n_fft {
+            return fail(format!("frames of {} samples every {}", self.n_fft, self.hop_length));
         }
         if self
             .time_reduction

@@ -113,6 +113,7 @@ pub fn check(root: &Path) -> Result<()> {
     let mut seen: BTreeMap<(String, String), RepoState> = BTreeMap::new();
 
     let mut problems = Vec::new();
+    let mut unchecked: Vec<String> = Vec::new();
     println!(
         "{:<28} {:<16} {:<16} {:>8} {:>8}  repository",
         "crate", "locked", "newest", "release", "push"
@@ -195,6 +196,7 @@ pub fn check(root: &Path) -> Result<()> {
         println!("{name:<28} {lock:<16} {newest:<16} {:>7}d {push:>8}  {repo}", released);
         if let RepoState::Unknown(why) = &state {
             println!("    repository not checked: {why}");
+            unchecked.push(name.clone());
         }
         let mut why = Vec::new();
         if behind {
@@ -227,10 +229,21 @@ pub fn check(root: &Path) -> Result<()> {
         println!("freshness: GitHub's rate limit was reached; set GITHUB_TOKEN to check every repository");
     }
     if problems.is_empty() {
-        println!(
-            "freshness: {} direct dependencies, all current and maintained",
-            reqs.len()
-        );
+        if unchecked.is_empty() {
+            println!(
+                "freshness: {} direct dependencies, all current and maintained",
+                reqs.len()
+            );
+        } else {
+            // Releases were checked for every crate; repositories only for the others.
+            println!(
+                "freshness: {} direct dependencies current; the repositories of {} were not checked ({}), so whether \
+                 they are maintained is not known",
+                reqs.len(),
+                unchecked.len(),
+                unchecked.join(", ")
+            );
+        }
         Ok(())
     } else {
         for p in &problems {

@@ -41,7 +41,7 @@ pb-fluxer.workspace = true
 pb-fluxer-fake.workspace = true
 pb-store.workspace = true
 pb-testkit = { workspace = true, features = ["fakemodels", "memvoice"] }
-tempfile = "3"
+tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }
 tracing-subscriber.workspace = true
 

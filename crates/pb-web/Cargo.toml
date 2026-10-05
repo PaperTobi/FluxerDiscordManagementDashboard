@@ -28,7 +28,7 @@ pb-store-api = { workspace = true, optional = true }
 pb-voicelines = { workspace = true, optional = true }
 pb-fluxer-api = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
-http = { version = "1", optional = true }
+http = { workspace = true, optional = true }
 url = { workspace = true, optional = true }
 # browser side
 js-sys = { workspace = true, optional = true }

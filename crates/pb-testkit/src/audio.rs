@@ -3,8 +3,6 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use rubato::audioadapter_buffers::direct::InterleavedSlice;
-use rubato::{Fft, FixedSync, Resampler};
 
 /// Mono 16-bit samples and their rate.
 pub fn read_wav(path: &Path) -> Result<(Vec<i16>, u32)> {
@@ -20,23 +18,13 @@ pub fn read_wav(path: &Path) -> Result<(Vec<i16>, u32)> {
     Ok((mono, layout.rate))
 }
 
-/// Resample mono 16-bit audio (whole buffer, resampler delay trimmed).
+/// Resample mono 16-bit audio (pb-audio's resampler, as the bot uses).
 pub fn resample(input: &[i16], from: u32, to: u32) -> Result<Vec<i16>> {
-    if from == to {
-        return Ok(input.to_vec());
-    }
-    let floats: Vec<f32> = input.iter().map(|&s| f32::from(s) / 32768.0).collect();
-    let mut resampler = Fft::<f32>::new(from as usize, to as usize, 1024, 1, FixedSync::Input)?;
-    let out_len = resampler.process_all_needed_output_len(floats.len());
-    let mut out = vec![0.0f32; out_len];
-    let input_buf = InterleavedSlice::new(&floats[..], 1, floats.len())?;
-    let mut output_buf = InterleavedSlice::new_mut(&mut out[..], 1, out_len)?;
-    let (_, produced) = resampler.process_all_into_buffer(&input_buf, &mut output_buf, floats.len(), None)?;
-    out.truncate(produced);
-    Ok(out
-        .iter()
-        .map(|&x| (x * 32767.0).clamp(-32768.0, 32767.0) as i16)
-        .collect())
+    Ok(pb_audio::to_i16(&pb_audio::resample(
+        &pb_audio::from_i16(input),
+        from,
+        to,
+    )?))
 }
 
 /// Loudness envelope: RMS per `window` samples.

@@ -7,6 +7,7 @@ use burn::nn::{LayerNorm, Linear, LinearConfig, PaddingConfig1d};
 use burn::tensor::activation::{gelu, sigmoid, silu, softmax};
 use burn::tensor::backend::Backend;
 use burn::tensor::{Tensor, TensorData};
+use pb_models_api::ModelError;
 
 use crate::config::ModelConfig;
 use crate::frontend::{FeatureExtractor, Frontend};
@@ -237,7 +238,7 @@ pub struct Runner<B: Backend> {
 }
 
 impl<B: Ops> Runner<B> {
-    pub fn new(model: Model<B>, cfg: &ModelConfig) -> Self {
+    pub fn new(model: Model<B>, cfg: &ModelConfig) -> Result<Self, ModelError> {
         let frontend = Frontend::new(&model.feature_extractor, cfg.n_fft, cfg.hop_length);
         let device = model.feature_extractor.window.val().device();
         let w: Vec<f32> = model
@@ -248,19 +249,26 @@ impl<B: Ops> Runner<B> {
             .to_vec()
             .unwrap_or_default();
         let b: Vec<f32> = model.attn_mask_conv.bias.val().into_data().to_vec().unwrap_or_default();
-        Runner {
+        let (Ok(mask_weight), Some(&mask_bias)) = (<[f32; 3]>::try_from(w.as_slice()), b.first()) else {
+            return Err(ModelError::Load(format!(
+                "the attention mask convolution has {} weights and {} biases (3 and 1 expected)",
+                w.len(),
+                b.len()
+            )));
+        };
+        Ok(Runner {
             model,
             device,
             frontend,
-            mask_weight: [w[0], w[1], w[2]],
-            mask_bias: b[0],
+            mask_weight,
+            mask_bias,
             hop: cfg.hop_length,
             reductions: cfg
                 .time_reduction
                 .iter()
                 .map(|[layer, ratio]| (*layer, *ratio))
                 .collect(),
-        }
+        })
     }
 
     /// One clip (16 kHz samples in [-1, 1]) → logits and language logits (and the tensors along the way).

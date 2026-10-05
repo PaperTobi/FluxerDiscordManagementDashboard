@@ -13,6 +13,7 @@ pub fn build(root: &Path, dev: bool) -> Result<()> {
         "cargo",
         &[
             "build",
+            "--locked",
             "-p",
             "pb-web",
             "--lib",
