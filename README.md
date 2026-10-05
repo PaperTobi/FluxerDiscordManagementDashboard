@@ -1,4 +1,4 @@
-# Profanity Watch
+# Profanity Watch (RichysMomm)
 
 A voice moderation bot for [Fluxer](https://fluxer.app). It follows chosen people into voice calls in your community,
 listens **only to their microphones**, scores what they say with the Roblox voice-safety model (locally, on your
