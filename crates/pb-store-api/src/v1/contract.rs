@@ -139,12 +139,14 @@ pub async fn blob_store<B: BlobStore>(store: &B) {
 
 use std::sync::Arc;
 
-use pb_domain::{ActionKind, ActionOutcome, Audience, ChannelId, ClfLang, Label, PlayPurpose, Scope, SentenceId};
+use pb_domain::{
+    ActionKind, ActionOutcome, Audience, ChannelId, ClfLang, Label, MessageId, PlayPurpose, Scope, SentenceId,
+};
 
 use super::{
-    ActionRecord, AuditFilter, BlobDeleted, ClipRecord, ClipRemoved, CommunitySeen, CutCause, DecisionRecord, Index,
-    MessagePurpose, MessageSent, Page, PersonSeen, PlayOutcome, PlayRecord, SentenceFilter, SentenceKind,
-    SentenceRecord, SentenceSource, SettingsChanged, VoiceRecord, VoiceRemoved,
+    ActionRecord, AuditFilter, BlobDeleted, ChatDeleted, ChatRecord, ClipRecord, ClipRemoved, CommunitySeen, CutCause,
+    DecisionRecord, Index, MessagePurpose, MessageSent, Page, PersonSeen, PlayOutcome, PlayRecord, SentenceFilter,
+    SentenceKind, SentenceRecord, SentenceSource, SettingsChanged, VoiceRecord, VoiceRemoved,
 };
 
 fn sentence(user: u64, at: &str, decision: DecisionRecord, jar: bool, audio: Option<BlobHash>) -> SentenceRecord {
@@ -567,6 +569,54 @@ where
         .unwrap();
     wait_for(&index, r[0].seq).await;
     assert!(index.clips().await.unwrap().is_empty());
+
+    // Flagged chat messages: listed newest first, a deletion noted, and their violations counted with the sentences'.
+    let before = index.violation_times().await.unwrap().len();
+    let chat = |n: u8, violation: bool| ChatRecord {
+        id: SentenceId::new(),
+        guild: GuildId(1),
+        channel: ChannelId(4),
+        message: MessageId(u64::from(n)),
+        user: UserId(5),
+        at: at("2026-10-02T12:00:00Z").unwrap(),
+        text: format!("message {n}"),
+        matches: vec!["fuck*".into()],
+        decision: if violation {
+            DecisionRecord::Warn {
+                label: Label::Profanity,
+                score: 1.0,
+                step: 1,
+                count: 1,
+            }
+        } else {
+            DecisionRecord::Strike { strike: 1, of: 2 }
+        },
+        jar: violation,
+    };
+    let (strike, warned) = (chat(1, false), chat(2, true));
+    let r = log
+        .append(vec![
+            Event::ChatFlagged(Box::new(strike)).to_new(None).unwrap(),
+            Event::ChatFlagged(Box::new(warned.clone())).to_new(None).unwrap(),
+            Event::ChatDeleted(ChatDeleted {
+                id: warned.id,
+                ok: true,
+                error: None,
+            })
+            .to_new(None)
+            .unwrap(),
+        ])
+        .await
+        .unwrap();
+    wait_for(&index, r[2].seq).await;
+    let rows = index.chat(Some(GuildId(1)), None, 10).await.unwrap().items;
+    assert_eq!(
+        rows.iter().map(|r| r.record.text.as_str()).collect::<Vec<_>>(),
+        ["message 2", "message 1"]
+    );
+    assert_eq!((rows[0].deleted, rows[1].deleted), (Some(true), None));
+    assert_eq!(index.violation_times().await.unwrap().len(), before + 1);
+    assert!(index.chat(Some(GuildId(2)), None, 10).await.unwrap().items.is_empty());
 
     // The voice library: added, renamed (keeping when it was added), removed.
     let voice = |id: &str, name: &str| VoiceRecord {

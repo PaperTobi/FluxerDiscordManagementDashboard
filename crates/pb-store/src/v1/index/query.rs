@@ -7,9 +7,9 @@ use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use pb_domain::{GuildId, Label, SentenceId, UserId};
 use pb_store_api::{
-    AUDIT_KINDS, ActionRecord, AuditFilter, AuditRow, ClipRecord, ClipRow, CommunitySeen, Cursor, DayRow, DigestRow,
-    Event, JarRow, LastDigest, Page, PersonName, SentenceFilter, SentenceKind, SentenceRecord, SentenceRow, StoreError,
-    VoiceRecord, VoiceRow,
+    AUDIT_KINDS, ActionRecord, AuditFilter, AuditRow, ChatRecord, ChatRow, ClipRecord, ClipRow, CommunitySeen, Cursor,
+    DayRow, DigestRow, Event, JarRow, LastDigest, Page, PersonName, SentenceFilter, SentenceKind, SentenceRecord,
+    SentenceRow, StoreError, VoiceRecord, VoiceRow,
 };
 use turso::Value;
 
@@ -155,6 +155,33 @@ pub async fn sentences(
     Ok(page(items, limit, |r| r.seq))
 }
 
+pub async fn chat(
+    db: &Db,
+    guild: Option<GuildId>,
+    cursor: Option<Cursor>,
+    limit: u32,
+) -> Result<Page<ChatRow>, StoreError> {
+    let mut w = Where::new();
+    w.add("seq < ?", cursor_seq(cursor));
+    if let Some(g) = guild {
+        w.add("guild = ?", g.to_string());
+    }
+    let (clause, params) = w.limit(limit);
+    let items = db
+        .rows(&format!("SELECT seq, data, deleted FROM chat{clause}"), params)
+        .await?
+        .iter()
+        .map(|r| {
+            Ok(ChatRow {
+                seq: seq(&r[0]),
+                record: decode::<ChatRecord>(&r[1], "chat message")?,
+                deleted: int(&r[2]).map(|d| d == 1),
+            })
+        })
+        .collect::<Result<Vec<_>, StoreError>>()?;
+    Ok(page(items, limit, |r| r.seq))
+}
+
 pub async fn sentence(db: &Db, id: SentenceId) -> Result<Option<SentenceRow>, StoreError> {
     let rows = db
         .rows(
@@ -259,7 +286,8 @@ pub async fn jar(db: &Db, guild: Option<GuildId>) -> Result<Vec<JarRow>, StoreEr
 
 pub async fn violation_times(db: &Db) -> Result<Vec<(GuildId, UserId, Timestamp)>, StoreError> {
     db.rows(
-        "SELECT guild, user, ts_ms FROM sentences WHERE violation = 1 ORDER BY seq",
+        "SELECT guild, user, ts_ms FROM (SELECT seq, guild, user, ts_ms FROM sentences WHERE violation = 1 \
+         UNION ALL SELECT seq, guild, user, ts_ms FROM chat WHERE violation = 1) ORDER BY seq",
         Vec::new(),
     )
     .await?

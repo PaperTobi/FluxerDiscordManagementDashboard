@@ -205,6 +205,7 @@ fn summary(loc: Locale, e: &Event) -> String {
                     MessagePurpose::Modlog { .. } => "audit-msg-modlog",
                     MessagePurpose::OwnerDm { .. } => "audit-msg-dm",
                     MessagePurpose::Digest { .. } => "audit-msg-digest",
+                    MessagePurpose::ChatReply { .. } => "audit-msg-chat-reply",
                 },
                 &[],
             );

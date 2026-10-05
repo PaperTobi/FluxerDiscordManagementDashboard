@@ -606,6 +606,90 @@ async fn the_voice_library_is_back_after_a_restart() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_listed_word_in_the_chat_counts_like_a_flagged_sentence() {
+    let rig = Rig::start(Setup {
+        settings: Box::new(|t| {
+            let mut c = set(t, Scope::Global, SettingKey::ChatModeration, json!(true));
+            c.extend(set(t, Scope::Global, SettingKey::WordList, json!(["fuck*", "shut up"])));
+            c.extend(set(t, Scope::Global, SettingKey::ChatDelete, json!(true)));
+            c
+        }),
+        ..Setup::default()
+    })
+    .await;
+    wait("the bot is online", 10, || {
+        rig.engine.connection() == pb_engine::Connection::Ready
+    })
+    .await;
+    // Someone who is not tracked, and a command, are left alone.
+    rig.fake.say(G, TEXT, OWNER, &[], "fuck this");
+    rig.fake.say(G, TEXT, ALICE, &[], "!pb status, shut up");
+    // Alice's message counts: recorded, deleted, answered with the warning and posted in the mod log.
+    let said = rig.fake.say(G, TEXT, ALICE, &[], "what the FUCKING hell");
+    let flagged = rig
+        .wait_event(
+            "the flagged message",
+            10,
+            |e| matches!(e, Event::ChatFlagged(c) if c.message.0 == said),
+        )
+        .await;
+    let Event::ChatFlagged(c) = flagged else { unreachable!() };
+    assert_eq!(c.user, UserId(ALICE));
+    assert_eq!(c.matches, ["fuck*"]);
+    assert!(
+        matches!(c.decision, DecisionRecord::Warn { step: 1, count: 1, .. }),
+        "{:?}",
+        c.decision
+    );
+    rig.wait_event(
+        "the deletion",
+        10,
+        |e| matches!(e, Event::ChatDeleted(d) if d.id == c.id && d.ok),
+    )
+    .await;
+    assert!(
+        rig.fake
+            .deleted()
+            .iter()
+            .any(|(ch, m, reason)| *ch == TEXT && *m == said && reason.is_some())
+    );
+    rig.wait_event(
+        "the reply",
+        10,
+        |e| matches!(e, Event::MessageSent(m) if m.purpose == MessagePurpose::ChatReply { record: c.id } && m.ok),
+    )
+    .await;
+    rig.wait_event(
+        "the mod log post",
+        10,
+        |e| matches!(e, Event::MessageSent(m) if m.purpose == MessagePurpose::Modlog { sentence: c.id } && m.ok),
+    )
+    .await;
+    let in_text: Vec<String> = rig
+        .fake
+        .sent()
+        .into_iter()
+        .filter(|m| m.channel == TEXT)
+        .map(|m| m.content().to_owned())
+        .collect();
+    assert!(
+        in_text.iter().any(|t| t.starts_with(&format!("<@{ALICE}>"))),
+        "{in_text:?}"
+    );
+    assert!(
+        in_text.iter().any(|t| t.contains("💬") && t.contains("FUCKING hell")),
+        "{in_text:?}"
+    );
+    // One message flagged, nothing else: and it counts with her calls (the jar has it).
+    let events = rig.events().await;
+    assert_eq!(events.iter().filter(|e| matches!(e, Event::ChatFlagged(_))).count(), 1);
+    rig.index.caught_up(rig.log.head().unwrap().seq).await;
+    let jar = rig.index.jar(Some(GuildId(G))).await.unwrap();
+    assert!(jar.iter().any(|j| j.user == UserId(ALICE) && j.count == 1), "{jar:?}");
+    rig.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn muting_or_leaving_ends_the_sentence() {
     let rig = Rig::start(Setup::default()).await;
     let mic = rig.alice_joins().await;

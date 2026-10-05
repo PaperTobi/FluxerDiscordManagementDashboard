@@ -1,7 +1,7 @@
 //! The index's tables. The index is derived from the log; a change here bumps [`SCHEMA`] and the index is rebuilt.
 
 /// Bump on any change below.
-pub const SCHEMA: i64 = 4;
+pub const SCHEMA: i64 = 5;
 
 pub const DDL: &str = "
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS audit (seq INTEGER PRIMARY KEY, ts_ms INTEGER NOT NUL
 CREATE INDEX IF NOT EXISTS audit_kind ON audit (kind, seq);
 CREATE INDEX IF NOT EXISTS audit_guild ON audit (guild, seq);
 CREATE TABLE IF NOT EXISTS clips (render TEXT PRIMARY KEY, seq INTEGER NOT NULL, added_ms INTEGER NOT NULL, removed INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS chat (seq INTEGER PRIMARY KEY, id TEXT NOT NULL, ts_ms INTEGER NOT NULL, guild TEXT NOT NULL, user TEXT NOT NULL, violation INTEGER NOT NULL, deleted INTEGER, data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS chat_id ON chat (id);
+CREATE INDEX IF NOT EXISTS chat_guild ON chat (guild, seq);
 CREATE TABLE IF NOT EXISTS voices (model TEXT NOT NULL, id TEXT NOT NULL, seq INTEGER NOT NULL, added_ms INTEGER NOT NULL, removed INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL, PRIMARY KEY (model, id));
 CREATE TABLE IF NOT EXISTS people (user TEXT PRIMARY KEY, username TEXT NOT NULL, display_name TEXT, avatar TEXT);
 CREATE TABLE IF NOT EXISTS nicks (guild TEXT NOT NULL, user TEXT NOT NULL, nick TEXT, PRIMARY KEY (guild, user));

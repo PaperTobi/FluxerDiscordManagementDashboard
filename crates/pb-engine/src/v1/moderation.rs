@@ -12,7 +12,7 @@ use pb_infer::Scored;
 use pb_live_proto::{CutWhy, DecisionView, PersonDelta, SentenceCard, Stamps, VerdictView, ViolationItem};
 use pb_policy::{Chan, ClearReason, DecideInput, Decider, Decision, Violations};
 use pb_settings::Recordings;
-use pb_store_api::{CutCause, DecisionRecord, SentenceRecord, SentenceSource};
+use pb_store_api::{ChatRecord, CutCause, DecisionRecord, SentenceRecord, SentenceSource};
 use pb_voicelines::{Field, Fields, Line, Sel};
 
 use super::core::{Core, PlayItem, RoomHandle};
@@ -44,6 +44,8 @@ pub struct Heard {
 #[derive(Debug)]
 pub enum ModMsg {
     Heard(Box<Heard>),
+    /// A chat message with listed words.
+    Chat(Box<super::chat::ChatHeard>),
     /// The swear jar was emptied.
     JarReset(GuildId, UserId),
     /// Answered once every sentence handed over before is decided.
@@ -156,6 +158,11 @@ impl Supervised for Moderation {
                         self.heard.insert((g, u), heard);
                     }
                     self.prerender(&core, g, u, Some(channel));
+                }
+                ModMsg::Chat(c) => {
+                    let (g, u) = (c.guild, c.user);
+                    decide_chat(&core, &mut self.decider, &mut self.violations, *c);
+                    self.prerender(&core, g, u, None);
                 }
                 ModMsg::Listening { guild, user, channel } => self.prerender(&core, guild, user, Some(channel)),
                 ModMsg::Counts(g, u, reply) => {
@@ -444,7 +451,7 @@ fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violations, 
 
     // The action, then one report with its result (per person in order; Fluxer may be slow).
     if follow_up && let Some(wav) = wav {
-        let followup = Followup {
+        let followup = Followup::Sentence {
             sentence,
             step: step_info.and_then(|(_, _, step)| step),
             room: h.room.clone(),
@@ -456,4 +463,104 @@ fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violations, 
         }
     }
     Some(language)
+}
+
+/// Decides a chat message with listed words: the same strikes and escalation counts as sentences (a match counts as
+/// profanity at score 1), recorded, and followed by the enforcer (deletion, reply, action, reports).
+fn decide_chat(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violations, c: super::chat::ChatHeard) {
+    let (g, u) = (c.guild, c.user);
+    let eff = core.settings.current().effective(Some(g), Some(u));
+    let now_mono = core.deps.clock.mono();
+    let input = DecideInput {
+        flagged: true,
+        finite: true,
+        still_tracked: true,
+        observe_only: eff.observe_only.value,
+        strikes: eff.strikes.value.get(),
+        strike_window: eff.strike_window.value.value().map(|d| d.get().secs()),
+        late: false,
+    };
+    let decision = decider.decide(g, u, &input, now_mono);
+    let window = eff.violation_window.value.value().map(|d| d.get().secs());
+    let (label, score) = (Label::Profanity, 1.0);
+    let (record, step) = match decision {
+        Decision::Warn | Decision::Observe | Decision::Late => {
+            let count = violations.record(g, u, now_mono, window);
+            let (step_no, step) = eff
+                .escalation
+                .value
+                .step_for(count)
+                .map_or((1, None), |(n, s)| (n, Some(s.clone())));
+            let rec = if decision == Decision::Warn {
+                DecisionRecord::Warn {
+                    label,
+                    score,
+                    step: step_no,
+                    count,
+                }
+            } else {
+                DecisionRecord::Observe {
+                    label,
+                    score,
+                    step: step_no,
+                    count,
+                }
+            };
+            (rec, step)
+        }
+        Decision::Strike { strike, of } => (DecisionRecord::Strike { strike, of }, None),
+        Decision::Clear { .. } => (DecisionRecord::NothingFlagged, None),
+    };
+    let jar = record.is_violation() && eff.jar_enabled.value;
+    let chat = ChatRecord {
+        id: SentenceId::new(),
+        guild: g,
+        channel: c.channel,
+        message: c.message,
+        user: u,
+        at: c.at,
+        text: c.text,
+        matches: c.matches,
+        decision: record,
+        jar,
+    };
+    core.record(vec![pb_store_api::Event::ChatFlagged(Box::new(chat.clone()))]);
+    if jar {
+        core.jar.update(|j| *j.entry((g, u)).or_insert(0) += 1);
+    }
+    let counts = counts(core, violations, g, u);
+    core.live.person(g, u, PersonDelta::Counts { counts });
+    if let Some((label, score, step_no, count)) = record.violation() {
+        let who = super::cells::who(core, g, u);
+        let (community, channel) = {
+            let gs = core.guilds();
+            (
+                gs.guild_name(g),
+                pb_live_proto::ChannelRef {
+                    id: chat.channel,
+                    name: gs.channel_name(g, chat.channel),
+                },
+            )
+        };
+        core.live.violation(ViolationItem {
+            sentence: chat.id,
+            guild: g,
+            community,
+            channel,
+            who,
+            label,
+            score,
+            step: step_no,
+            count,
+            decision: decision_view(&record),
+            at_ms: ms(chat.at),
+        });
+    }
+    if core
+        .enforcer
+        .send(EnforcerMsg::Follow(Box::new(Followup::Chat { record: chat, step })))
+        .is_err()
+    {
+        tracing::error!("what follows a flagged chat message was dropped: the enforcer has stopped");
+    }
 }

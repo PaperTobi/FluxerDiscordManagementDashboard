@@ -6654,6 +6654,7 @@ dependencies = [
  "pb-testkit",
  "pb-voice-api",
  "pb-voicelines",
+ "pb-wordlist",
  "secrecy",
  "serde_json",
  "tempfile",

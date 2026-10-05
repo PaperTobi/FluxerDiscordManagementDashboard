@@ -57,6 +57,7 @@ pub enum Section {
     Detection,
     Warning,
     Escalation,
+    Chat,
     Reporting,
     Recording,
     Commands,
@@ -64,11 +65,12 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Section; 8] = [
+    pub const ALL: [Section; 9] = [
         Section::Tracking,
         Section::Detection,
         Section::Warning,
         Section::Escalation,
+        Section::Chat,
         Section::Reporting,
         Section::Recording,
         Section::Commands,
@@ -82,6 +84,7 @@ impl Section {
             Section::Detection => "detection",
             Section::Warning => "warning",
             Section::Escalation => "escalation",
+            Section::Chat => "chat",
             Section::Reporting => "reporting",
             Section::Recording => "recording",
             Section::Commands => "commands",
@@ -116,6 +119,8 @@ pub enum FieldKind {
     Tz,
     Origin,
     Hosts,
+    /// Words and phrases, one per line.
+    Words,
     Prefix,
     Lang,
     Langs,
@@ -191,6 +196,9 @@ kind!(Tz => FieldKind::Tz);
 kind!(Origin => FieldKind::Origin);
 kind!(InstanceUrl => FieldKind::Origin);
 kind!(Vec<HostName> => FieldKind::Hosts);
+kind!(Vec<ChannelId> => FieldKind::Ids { of: "channel" });
+kind!(Vec<WordEntry> => FieldKind::Words);
+kind!(ChatWho => FieldKind::Choice { choices: ChatWho::ALL.iter().map(|c| c.as_str()).collect() });
 kind!(Prefix => FieldKind::Prefix);
 kind!(Lang => FieldKind::Lang);
 kind!(Vec<Lang> => FieldKind::Langs);
@@ -514,6 +522,14 @@ settings! {
         escalation(Escalation): Escalation = Escalation::default_steps(); ALL_SCOPES, Admins, Live;
         actions_enabled(ActionsEnabled): bool = false; ALL_SCOPES, Admins, Live;
     }
+    Chat {
+        chat_moderation(ChatModeration): bool = false; GS, Admins, Live;
+        chat_who(ChatWho): ChatWho = ChatWho::Tracked; GS, Admins, Live;
+        word_list(WordList): Vec<WordEntry> = Vec::new(); GS, Admins, Live;
+        chat_channels(ChatChannels): Vec<ChannelId> = Vec::new(); S, Admins, Live;
+        chat_delete(ChatDelete): bool = false; GS, Admins, Live;
+        chat_reply(ChatReply): bool = true; GS, Admins, Live;
+    }
     Reporting {
         modlog_channel(ModlogChannel): Option<ChannelId> = None; S, Admins, Live;
         modlog_audio(ModlogAudio): bool = true; GS, Owner, Live;
@@ -656,6 +672,14 @@ pub fn text_value(key: SettingKey, raw: &str) -> serde_json::Value {
                 .filter_map(|p| p.split_once(['=', ':']))
                 .map(|(l, v)| (l.trim().to_owned(), Value::String(v.trim().to_owned())))
                 .filter(|(l, v)| !l.is_empty() && v.as_str().is_some_and(|v| !v.is_empty()))
+                .collect(),
+        ),
+        // One word or phrase per line (or between commas): phrases keep their spaces.
+        FieldKind::Words => Value::Array(
+            raw.split([',', '\n'])
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| Value::String(s.to_owned()))
                 .collect(),
         ),
         FieldKind::Ids { .. } | FieldKind::Hosts | FieldKind::Langs => Value::Array(
@@ -822,6 +846,26 @@ mod tests {
             toml.line_voices.expect("set")[&LineKind::StrikeNotice],
             "piper:en_US-lessac-medium"
         );
+    }
+
+    #[test]
+    fn word_lists_keep_phrases_and_refuse_empty_entries() {
+        let mut l = Layer::default();
+        let v = text_value(SettingKey::WordList, "fuck*\n  shut   up , Arschloch\n\n");
+        l.set_json(SettingKey::WordList, v).expect("set");
+        let words: Vec<&str> = l
+            .word_list
+            .as_ref()
+            .expect("set")
+            .iter()
+            .map(WordEntry::as_str)
+            .collect();
+        assert_eq!(words, ["fuck*", "shut up", "Arschloch"]);
+        assert!(
+            l.set_json(SettingKey::WordList, serde_json::json!(["ok", "***"]))
+                .is_err()
+        );
+        assert_eq!(SettingKey::ChatChannels.scopes(), vec![ScopeKind::Server]);
     }
 
     #[test]

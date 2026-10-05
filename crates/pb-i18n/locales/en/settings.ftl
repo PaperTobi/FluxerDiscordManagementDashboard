@@ -7,6 +7,7 @@ section-tracking = Tracking
 section-detection = Detection
 section-warning = Warnings
 section-escalation = Escalation
+section-chat = Chat
 section-reporting = Mod log and reports
 section-recording = Recordings
 section-commands = Admins and chat commands
@@ -112,6 +113,21 @@ setting-escalation = Escalation steps
 setting-actions-enabled = Allow moderation actions
     .help = Mute, disconnect or time out people as the escalation steps say. Off: warn and tell only.
 
+## Chat
+
+setting-chat-moderation = Moderate the chat
+    .help = Read the community's text channels: a message with a word or phrase from the word list counts like a flagged sentence in a call (strikes, warnings, escalation, reports).
+setting-chat-who = Whose messages count
+    .help = Tracked people only (as in calls), or everyone except admins.
+setting-word-list = Word list
+    .help = One word or phrase per line. Whole words only: "ass" does not match "class". A * at a word's start or end leaves it open: "fuck*" matches "fucking". Disguises like f@ck, sh1t, fuuuck or f u c k are found too.
+setting-chat-channels = Channels
+    .help = Where messages are read. Empty: every text channel of the community.
+setting-chat-delete = Delete flagged messages
+    .help = Remove a flagged message from the chat (the bot needs Manage messages there).
+setting-chat-reply = Answer in the chat
+    .help = Reply to a flagged message with the warning, in the person's language.
+
 ## Greeting
 
 setting-greet-enabled = Greeting
@@ -174,6 +190,8 @@ setting-tts-threads = CPU threads for speech
 choice-audience-offender = Only the person who said it
 choice-audience-tracked = Tracked people
 choice-audience-channel = Everyone in the channel
+choice-chat-who-tracked = Tracked people
+choice-chat-who-everyone = Everyone except admins
 choice-no-speak-policy-text = Write it in the chat
 choice-no-speak-policy-log = Only log it
 choice-digest-off = Off
@@ -221,6 +239,7 @@ err-not-origin = “{ $value }” is not an http(s) address
 err-origin-with-path = “{ $value }” must be just the address, like http://192.168.1.50:8790 (no path)
 err-not-host = “{ $value }” is not a host name
 err-prefix-spaces = the prefix may not contain spaces
+err-not-word = “{ $value }” has no letters or digits to match
 err-not-lang = “{ $value }” is not a language tag (like de or en-US)
 err-not-line-kind = “{ $value }” is not a kind of line (warning, strike, action, greeting or say)
 err-not-id = “{ $value }” is not an ID

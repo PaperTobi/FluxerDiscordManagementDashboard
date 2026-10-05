@@ -119,6 +119,20 @@ modlog-flagged = 🔊 Markiert: { $user } in { $channel }: { $labels } · { $sec
         [strike] Strike { $strike } von { $of }
        *[other] protokolliert
     }
+modlog-chat-flagged = 💬 Markiert: { $user } in { $channel }: { $found } → { $decision ->
+        [warn] gewarnt
+        [observe] beobachtet (still)
+        [strike] Strike { $strike } von { $of }
+       *[other] protokolliert
+    }
+    > { $quote }
+violation-chat = 💬 **{ $user }** in { $community } / { $channel } schrieb { $found }; Verstoß { $count } in { $window }, Stufe { $step } ({ $decision ->
+        [warn] gewarnt
+       *[observe] nur beobachtet, still
+    })
+    > { $quote }
+chat-warning = bitte achte auf deine Sprache.
+chat-delete-reason = Profanity Watch: ein Wort aus der Wortliste
 modlog-label-score = { $label } **{ $score }** (Schwelle { $bar })
 upload-failed = (Hochladen der Aufnahme fehlgeschlagen: { $error })
 

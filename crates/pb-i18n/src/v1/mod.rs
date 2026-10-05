@@ -508,6 +508,7 @@ pub fn value_error(locale: Locale, e: &pb_settings::ValueError) -> String {
         E::OriginWithPath(x) => v("err-origin-with-path", x),
         E::NotHost(x) => v("err-not-host", x),
         E::PrefixSpaces => text(locale, "err-prefix-spaces", &[]),
+        E::NotWord(x) => v("err-not-word", x),
         E::NotLang(x) => v("err-not-lang", x),
         E::NotLineKind(x) => v("err-not-line-kind", x),
         E::NotId(x) => v("err-not-id", x),

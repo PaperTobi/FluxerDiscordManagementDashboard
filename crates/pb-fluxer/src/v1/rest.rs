@@ -134,6 +134,15 @@ fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
         .map(Duration::from_secs)
 }
 
+/// A reason as the X-Audit-Log-Reason header carries it (visible ASCII only).
+fn audit_header(reason: &str) -> String {
+    reason
+        .trim()
+        .chars()
+        .filter(|c| c.is_ascii() && !c.is_ascii_control())
+        .collect()
+}
+
 pub(crate) fn error(status: u16, body: &Value) -> FluxerError {
     // API errors are `{code, message}`; OAuth2 errors are `{error, error_description}`.
     let text = |k: &str| body.get(k).and_then(Value::as_str).map(str::to_owned);
@@ -168,6 +177,8 @@ enum Body<'a> {
     Json(&'a Value),
     /// JSON with the reason Fluxer's audit log shows for the change (ASCII; Fluxer stores it verbatim).
     Audited(&'a Value, &'a str),
+    /// No body, only the reason for the audit log.
+    Reason(&'a str),
     Form(&'a [(&'a str, &'a str)]),
     Multipart(&'a Value, &'a [Attachment]),
 }
@@ -264,6 +275,7 @@ impl Rest {
                 Body::None => req,
                 Body::Json(v) => req.json(v),
                 Body::Audited(v, reason) => req.json(v).header("X-Audit-Log-Reason", *reason),
+                Body::Reason(reason) => req.header("X-Audit-Log-Reason", *reason),
                 Body::Form(f) => req.form(f),
                 Body::Multipart(payload, files) => {
                     let mut form = reqwest::multipart::Form::new().text("payload_json", payload.to_string());
@@ -480,6 +492,20 @@ impl Rest {
             .map(|_| ())
     }
 
+    pub(crate) async fn delete_message(
+        &self,
+        channel: ChannelId,
+        message: MessageId,
+        reason: Option<&str>,
+    ) -> Result<(), FluxerError> {
+        let path = format!("/channels/{channel}/messages/{message}");
+        let reason = reason.map(audit_header).filter(|r| !r.is_empty());
+        let body = reason.as_deref().map_or(Body::None, Body::Reason);
+        self.api(reqwest::Method::DELETE, &path, body, Persistence::Attempts(3))
+            .await
+            .map(|_| ())
+    }
+
     pub(crate) async fn patch_member(&self, guild: GuildId, user: UserId, p: &MemberPatch) -> Result<(), FluxerError> {
         let mut body = serde_json::Map::new();
         if let Some(m) = p.mute {
@@ -502,7 +528,7 @@ impl Rest {
                 body.insert("timeout_reason".into(), json!(r));
                 None
             }
-            Some(r) => Some(r.chars().filter(|c| c.is_ascii() && !c.is_ascii_control()).collect()),
+            Some(r) => Some(audit_header(r)),
             None => None,
         };
         let body = Value::Object(body);

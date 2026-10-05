@@ -1,7 +1,7 @@
 # 0008 — Chat moderation: word lists in text channels, the same strikes and escalation as in calls
 
-Date: 2026-10-05. Status: planned (the user chose "text chat moderation" in the quiz of 2026-10-04); to be built after
-the voice UI (0005 step 3).
+Date: 2026-10-05. Status: steps 1–3 built (the user chose "text chat moderation" in the quiz of 2026-10-04); step 4
+(the web UI's lists of flagged messages) comes with the redesigned pages.
 
 ## What it does
 A message in a community's text channel that contains a word or phrase from the community's word list is a flagged
@@ -47,8 +47,9 @@ chat commands add and remove words.
   recorded (`message.sent` already is; a deletion is part of the chat record).
 
 ## Store
-- Event `chat.flagged` v1: `ChatRecord { id, guild, channel, message, user, at, text, matches, decision, deleted,
-  replied }` (the decision as for sentences). Indexed in a `messages` table; `violation_times` reads both tables, so
+- Event `chat.flagged` v1: `ChatRecord { id, guild, channel, message, user, at, text, matches, decision, jar }` (the
+  decision as for sentences; a match counts as profanity at score 1); `chat.deleted` v1 notes the deletion, and the
+  reply is a `message.sent` with the purpose `chat_reply`. Indexed in a `messages` table; `violation_times` reads both tables, so
   the counts seeded at start include chat.
 - The swear jar counts chat violations too (it counts violations, wherever they happen).
 

@@ -287,6 +287,9 @@ impl Session {
                 self.exec(acts);
             }
             GatewayEvent::Message(m) if core.running() => {
+                if let Some(heard) = super::chat::consider(&core, m) {
+                    let _ = core.moderation.send(super::moderation::ModMsg::Chat(Box::new(heard)));
+                }
                 let core2 = core.clone();
                 let m = m.clone();
                 core.sup

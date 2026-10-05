@@ -27,6 +27,7 @@ pb-settings.workspace = true
 pb-store-api.workspace = true
 pb-voice-api.workspace = true
 pb-voicelines.workspace = true
+pb-wordlist.workspace = true
 secrecy.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

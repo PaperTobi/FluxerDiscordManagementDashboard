@@ -6,7 +6,7 @@ use jiff::civil::Date;
 use pb_domain::{GuildId, Label, SentenceId, UserId};
 use serde::{Deserialize, Serialize};
 
-use super::events::{ActionRecord, ClipRecord, CommunitySeen, Event, SentenceRecord, VoiceRecord};
+use super::events::{ActionRecord, ChatRecord, ClipRecord, CommunitySeen, Event, SentenceRecord, VoiceRecord};
 use super::log::StoreError;
 
 /// Where the next page starts (pages go back in time).
@@ -122,6 +122,14 @@ pub struct ClipRow {
     pub record: ClipRecord,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChatRow {
+    pub seq: u64,
+    pub record: ChatRecord,
+    /// `Some(true)`: the bot removed it; `Some(false)`: it tried and could not.
+    pub deleted: Option<bool>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VoiceRow {
     pub seq: u64,
@@ -210,7 +218,7 @@ pub trait Index: Send + Sync + 'static {
     /// Swear jar counts (of a community, or all), highest first.
     async fn jar(&self, guild: Option<GuildId>) -> Result<Vec<JarRow>, StoreError>;
 
-    /// When each violation happened, oldest first (seeds the escalation counts at start).
+    /// When each violation happened, in calls and in chat, oldest first (seeds the escalation counts at start).
     async fn violation_times(&self) -> Result<Vec<(GuildId, UserId, Timestamp)>, StoreError>;
 
     /// Timed actions not undone yet (a mute to lift), by due time.
@@ -221,6 +229,14 @@ pub trait Index: Send + Sync + 'static {
 
     /// The clip library (removed clips left out), newest first.
     async fn clips(&self) -> Result<Vec<ClipRow>, StoreError>;
+
+    /// Flagged chat messages, newest first (of a community, or all).
+    async fn chat(
+        &self,
+        guild: Option<GuildId>,
+        cursor: Option<Cursor>,
+        page: u32,
+    ) -> Result<Page<ChatRow>, StoreError>;
 
     /// The voice library (removed voices left out), oldest first.
     async fn voices(&self) -> Result<Vec<VoiceRow>, StoreError>;

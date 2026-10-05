@@ -58,6 +58,8 @@ pub enum ValueError {
     NotHost(String),
     #[error("the prefix may not contain spaces")]
     PrefixSpaces,
+    #[error("{0:?} has no letters or digits to match")]
+    NotWord(String),
     #[error("{0:?} is not a language tag (like de or en-US)")]
     NotLang(String),
     #[error("{0:?} is not a kind of line (warning, strike, action, greeting or say)")]
@@ -726,6 +728,36 @@ impl fmt::Display for HostName {
 via_str!(HostName);
 text_from_json!(HostName);
 
+/// A word or phrase of a word list (`*` at a word's start or end leaves it open: `fuck*`).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct WordEntry(String);
+
+impl WordEntry {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromStr for WordEntry {
+    type Err = ValueError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let t = s.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.chars().any(char::is_alphanumeric) {
+            Ok(WordEntry(t))
+        } else {
+            Err(ValueError::NotWord(s.to_owned()))
+        }
+    }
+}
+
+impl fmt::Display for WordEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+via_str!(WordEntry);
+text_from_json!(WordEntry);
+
 /// The chat command prefix: any text without spaces (empty = only mentions of the bot work).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Prefix(String);
@@ -833,6 +865,10 @@ choice!(
 choice!(
     /// Who hears the bot.
     AudienceChoice { Offender = "offender", Tracked = "tracked", Channel = "channel" }
+);
+choice!(
+    /// Whose chat messages count.
+    ChatWho { Tracked = "tracked", Everyone = "everyone" }
 );
 choice!(
     /// The action of an escalation step.

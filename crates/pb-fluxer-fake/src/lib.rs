@@ -161,6 +161,8 @@ struct World {
     browser_user: Option<u64>,
     /// Messages people wrote (they can be replied to).
     said: Vec<u64>,
+    /// Messages the bot deleted: channel, message, the audit log's reason.
+    deleted: Vec<(u64, u64, Option<String>)>,
     /// The application's registered OAuth2 redirect addresses.
     redirect_uris: Vec<String>,
     /// The bot token and client secret accepted now (from the config; reset with `reset_credentials`).
@@ -485,6 +487,22 @@ async fn react(
 ) -> Response {
     guard!(sh, headers, format!("PUT /channels/{c}/messages/{m}/reactions"));
     sh.world().reactions.push((c, m, emoji));
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// Deleting a message someone wrote (the fake does not check Manage messages).
+async fn delete_message(State(sh): State<Arc<Shared>>, Path((c, m)): Path<(u64, u64)>, headers: HeaderMap) -> Response {
+    guard!(sh, headers, format!("DELETE /channels/{c}/messages/{m}"));
+    let reason = headers
+        .get("x-audit-log-reason")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let mut w = sh.world();
+    let Some(at) = w.said.iter().position(|x| *x == m) else {
+        return err(StatusCode::NOT_FOUND, "UNKNOWN_MESSAGE", "unknown message");
+    };
+    w.said.remove(at);
+    w.deleted.push((c, m, reason));
     StatusCode::NO_CONTENT.into_response()
 }
 
@@ -1021,6 +1039,7 @@ impl FakeFluxer {
             .route("/v1/users/@me", get(users_me))
             .route("/v1/channels/{c}/messages", post(create_message))
             .route("/v1/channels/{c}/messages/{m}/reactions/{e}/@me", put(react))
+            .route("/v1/channels/{c}/messages/{m}", axum::routing::delete(delete_message))
             .route("/v1/users/@me/channels", post(open_dm))
             .route("/v1/guilds/{g}/members/{u}", get(member_get).merge(patch(member_patch)))
             .route("/v1/oauth2/authorize", get(oauth_authorize))
@@ -1264,6 +1283,11 @@ impl FakeFluxer {
 
     pub fn reactions(&self) -> Vec<(u64, u64, String)> {
         self.world().reactions.clone()
+    }
+
+    /// Messages the bot deleted: channel, message, the audit log's reason.
+    pub fn deleted(&self) -> Vec<(u64, u64, Option<String>)> {
+        self.world().deleted.clone()
     }
 
     pub fn patches(&self) -> Vec<Patch> {

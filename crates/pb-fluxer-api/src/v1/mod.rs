@@ -83,6 +83,9 @@ pub trait FluxerCtl: Send + Sync {
 
     async fn react(&self, m: MessageRef, emoji: &str) -> Result<(), FluxerError>;
 
+    /// Deletes a message (someone else's needs Manage messages); `reason` goes to the audit log.
+    async fn delete_message(&self, m: MessageRef, reason: Option<&str>) -> Result<(), FluxerError>;
+
     async fn patch_member(&self, guild: GuildId, user: UserId, patch: MemberPatch) -> Result<(), FluxerError>;
 
     /// `None` when the person is not a member.

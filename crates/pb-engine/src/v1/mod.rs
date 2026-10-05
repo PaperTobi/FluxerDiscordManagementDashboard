@@ -3,6 +3,7 @@
 mod actions;
 mod audio_cache;
 mod cells;
+mod chat;
 mod commands;
 mod control;
 mod core;

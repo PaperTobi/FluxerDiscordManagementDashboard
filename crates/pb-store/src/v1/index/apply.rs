@@ -189,6 +189,32 @@ pub async fn apply(db: &Db, stored: &StoredEvent) -> Result<(), StoreError> {
             )
             .await?;
         }
+        Event::ChatFlagged(c) => {
+            let violation = c.decision.is_violation();
+            db.exec(
+                "INSERT INTO chat (seq, id, ts_ms, guild, user, violation, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                vec![
+                    seq.into(),
+                    c.id.to_string().into(),
+                    ms(c.at).into(),
+                    c.guild.to_string().into(),
+                    c.user.to_string().into(),
+                    i64::from(violation).into(),
+                    json(&*c).into(),
+                ],
+            )
+            .await?;
+            if c.jar && violation {
+                add_jar(db, c.guild.to_string(), c.user.to_string(), 1).await?;
+            }
+        }
+        Event::ChatDeleted(d) => {
+            db.exec(
+                "UPDATE chat SET deleted = ?2 WHERE id = ?1",
+                vec![d.id.to_string().into(), i64::from(d.ok).into()],
+            )
+            .await?;
+        }
         Event::VoiceSaved(v) => {
             // A rename keeps the time the voice was added.
             db.exec(

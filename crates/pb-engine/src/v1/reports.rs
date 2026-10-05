@@ -13,7 +13,7 @@ use pb_domain::GuildId;
 use pb_fluxer_api::{Attachment, Destination, OutgoingMessage};
 use pb_i18n::{Arg, Locale, duration, label_name, text};
 use pb_settings::{Digest, EscalationStep};
-use pb_store_api::{ActionRecord, DecisionRecord, Event, MessagePurpose, MessageSent, SentenceRecord};
+use pb_store_api::{ActionRecord, ChatRecord, DecisionRecord, Event, MessagePurpose, MessageSent, SentenceRecord};
 
 use super::core::Core;
 use super::mailbox::Mailbox;
@@ -33,8 +33,6 @@ pub async fn send(
     purpose: MessagePurpose,
     guild: Option<GuildId>,
 ) -> bool {
-    let Some(ctl) = core.ctl() else { return false };
-    let with_audio = file.is_some();
     let files = file
         .map(|(name, bytes)| {
             vec![Attachment {
@@ -50,6 +48,19 @@ pub async fn send(
         ping: vec![],
         files,
     };
+    send_with(core, to, m, purpose, guild).await
+}
+
+/// Sends a message as given and records it; `false` when it could not be sent.
+pub async fn send_with(
+    core: &Core,
+    to: Destination,
+    m: OutgoingMessage,
+    purpose: MessagePurpose,
+    guild: Option<GuildId>,
+) -> bool {
+    let Some(ctl) = core.ctl() else { return false };
+    let with_audio = !m.files.is_empty();
     let channel = match to {
         Destination::Channel(c) => Some(c),
         Destination::User(_) => None,
@@ -215,6 +226,102 @@ async fn owner_dm(core: &Arc<Core>, s: &SentenceRecord, action: Option<&ActionRe
         Some(s.guild),
     )
     .await;
+}
+
+/// Tells about a flagged chat message: a mod-log post with what was written and what was found, and for a violation
+/// whose step says so a direct message to the owner.
+pub async fn chat_flagged(
+    core: &Arc<Core>,
+    c: &ChatRecord,
+    step: Option<&EscalationStep>,
+    action: Option<&ActionRecord>,
+) {
+    let eff = core.settings.current().effective(Some(c.guild), None);
+    let loc = locale(core, Some(c.guild));
+    // What was written, quoted (Fluxer's messages are limited; the quote is cut, never the report).
+    let quote: String = c.text.chars().take(1500).collect::<String>().replace('\n', "\n> ");
+    let found = c.matches.join(", ");
+    let (strike, of) = match c.decision {
+        DecisionRecord::Strike { strike, of } => (strike, of),
+        _ => (0, 0),
+    };
+    let violation = chat_violation_args(core, c, loc);
+    if let Some(channel) = eff.modlog_channel.value {
+        let mut content = text(
+            loc,
+            "modlog-chat-flagged",
+            &[
+                ("user", c.user.mention().into()),
+                ("channel", c.channel.mention().into()),
+                ("found", found.clone().into()),
+                ("decision", decision_key(&c.decision).into()),
+                ("strike", strike.into()),
+                ("of", of.into()),
+                ("quote", quote.clone().into()),
+            ],
+        );
+        if let Some(args) = &violation {
+            content.push_str(&text(loc, "modlog-violation", args));
+        }
+        if let Some(a) = action {
+            content.push_str(&action_text(loc, a));
+        }
+        send(
+            core,
+            Destination::Channel(channel),
+            content,
+            None,
+            MessagePurpose::Modlog { sentence: c.id },
+            Some(c.guild),
+        )
+        .await;
+    }
+    if let (Some(owner), Some(mut args), true) = (core.owner(), violation, step.is_some_and(|st| st.notify_owner)) {
+        let loc = locale(core, None);
+        let (name, community, channel) = {
+            let gs = core.guilds();
+            (
+                gs.name(c.guild, c.user),
+                gs.guild_name(c.guild),
+                gs.channel_name(c.guild, c.channel),
+            )
+        };
+        args.extend([
+            ("user", name.into()),
+            ("community", community.into()),
+            ("channel", format!("#{channel}").into()),
+            ("found", found.into()),
+            ("quote", quote.into()),
+        ]);
+        let mut content = text(loc, "violation-chat", &args);
+        if let Some(a) = action {
+            content.push_str(&action_text(loc, a));
+        }
+        send(
+            core,
+            Destination::User(owner),
+            content,
+            None,
+            MessagePurpose::OwnerDm { sentence: c.id },
+            Some(c.guild),
+        )
+        .await;
+    }
+}
+
+/// A chat violation's count, window and step, for messages.
+fn chat_violation_args(core: &Core, c: &ChatRecord, loc: Locale) -> Option<Vec<(&'static str, Arg)>> {
+    let (_, _, step, count) = c.decision.violation()?;
+    let eff = core.settings.current().effective(Some(c.guild), Some(c.user));
+    Some(vec![
+        ("count", count.into()),
+        (
+            "window",
+            duration(loc, eff.violation_window.value.value().map(|d| d.get().get())).into(),
+        ),
+        ("step", step.into()),
+        ("decision", decision_key(&c.decision).into()),
+    ])
 }
 
 /// The text of an action's result.

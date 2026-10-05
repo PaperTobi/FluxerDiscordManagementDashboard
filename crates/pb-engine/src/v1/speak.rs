@@ -143,6 +143,54 @@ pub fn resolve_line(core: &Core, guild: GuildId, person: Option<UserId>, line: &
     resolve(line, &ctx)
 }
 
+/// What a voice line says, written (for the chat): in the person's first language that has a text for it (no voice
+/// needed), or the transcripts of its clips. `None` when it has neither.
+pub fn line_text(
+    core: &Core,
+    guild: GuildId,
+    person: UserId,
+    channel: Option<pb_domain::ChannelId>,
+    line: &Line,
+    label: Option<pb_domain::Label>,
+    base: &Fields,
+) -> Option<(Lang, String)> {
+    let tree = core.settings.current();
+    let langs = languages(&tree, guild, Some(person), None);
+    let shipped: Vec<BlobHash> = core.deps.shipped_clips.iter().map(|s| s.hash).collect();
+    let info = clip_info(core);
+    let ctx = ResolveCtx {
+        languages: &langs,
+        slots: tree.scoped_slots(guild, Some(person)),
+        clip: &info,
+        has_voice: &|_| true,
+        fallback_clips: &shipped,
+    };
+    let res = resolve(line, &ctx);
+    let lang = match &res {
+        Resolution::Text { lang, .. } => lang.clone(),
+        Resolution::Clips { lang, .. } => lang.clone().unwrap_or_else(|| langs[0].clone()),
+        Resolution::Silent => return None,
+    };
+    let fields = fields_for(core, guild, Some(person), channel, &lang, label, base);
+    let p = plan(&res, &fields, None, None, &mut |_| 0);
+    let said: Vec<String> = p
+        .parts
+        .iter()
+        .filter_map(|part| match part {
+            Part::Speak { text, .. } => Some(text.clone()),
+            Part::Clip(h) => core.clip(h).and_then(|c| c.transcript).or_else(|| {
+                core.deps
+                    .shipped_clips
+                    .iter()
+                    .find(|s| s.hash == *h)
+                    .map(|s| s.text.clone())
+            }),
+            Part::Silence { .. } => None,
+        })
+        .collect();
+    (!said.is_empty()).then(|| (lang, said.join(" ")))
+}
+
 /// A phrase's audio: from the cache, from a render already running (unless that one runs at a lower priority than
 /// this caller needs), or rendered now.
 async fn speech(

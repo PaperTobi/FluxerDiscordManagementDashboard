@@ -200,6 +200,7 @@ audit-voice-removed = { $by } hat die Stimme { $voice } entfernt
 audit-login = { $name } hat sich angemeldet
 audit-msg-modlog = Mod-Log-Beitrag
 audit-msg-dm = Nachricht an den Bot-Besitzer
+audit-msg-chat-reply = eine Warnung im Chat
 audit-msg-digest = Bericht
 audit-message-sent = { $what } gesendet
 audit-message-failed = { $what } konnte nicht gesendet werden: { $error }

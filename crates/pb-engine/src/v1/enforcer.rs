@@ -1,6 +1,7 @@
-//! What follows a flagged sentence: the escalation step's action (mute, disconnect, time-out), then the reports with
-//! its result. Per person in order (one person's mute is done and reported before their next one), different people
-//! at the same time. Fluxer may be slow: nobody waits for this.
+//! What follows a flagged sentence or chat message: the escalation step's action (mute, disconnect, time-out), then
+//! the reports with its result (for a chat message first its deletion and the reply). Per person in order (one
+//! person's mute is done and reported before their next one), different people at the same time. Fluxer may be slow:
+//! nobody waits for this.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -8,7 +9,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use pb_domain::{ClfLang, GuildId, UserId};
 use pb_settings::EscalationStep;
-use pb_store_api::SentenceRecord;
+use pb_store_api::{ChatRecord, SentenceRecord};
 use tokio::sync::oneshot;
 use tokio::task::{Id, JoinSet};
 
@@ -16,15 +17,30 @@ use super::core::{Core, RoomHandle};
 use super::mailbox::Mailbox;
 use super::supervise::{ActorError, Life, Policy, Supervised};
 
-/// The work for one flagged sentence.
+/// The work for one flagged sentence or chat message.
 #[derive(Debug)]
-pub(crate) struct Followup {
-    pub sentence: SentenceRecord,
-    pub step: Option<EscalationStep>,
-    pub room: RoomHandle,
-    pub heard: ClfLang,
-    /// The sentence's audio (attached to reports when the settings say so).
-    pub wav: Bytes,
+pub(crate) enum Followup {
+    Sentence {
+        sentence: SentenceRecord,
+        step: Option<EscalationStep>,
+        room: RoomHandle,
+        heard: ClfLang,
+        /// The sentence's audio (attached to reports when the settings say so).
+        wav: Bytes,
+    },
+    Chat {
+        record: ChatRecord,
+        step: Option<EscalationStep>,
+    },
+}
+
+impl Followup {
+    fn who(&self) -> Person {
+        match self {
+            Followup::Sentence { sentence, .. } => (sentence.guild, sentence.user),
+            Followup::Chat { record, .. } => (record.guild, record.user),
+        }
+    }
 }
 
 type Person = (GuildId, UserId);
@@ -91,7 +107,7 @@ impl Supervised for Enforcer {
 
 impl Enforcer {
     fn add(&mut self, core: &Arc<Core>, f: Followup) {
-        let who = (f.sentence.guild, f.sentence.user);
+        let who = f.who();
         if self.running.values().any(|p| *p == who) {
             self.waiting.entry(who).or_default().push_back(f);
         } else {
@@ -129,9 +145,22 @@ impl Enforcer {
 
 /// The step's action, then one report with its result.
 async fn follow_up(core: &Arc<Core>, f: Followup) {
-    let action = match f.step.as_ref().and_then(|st| st.action.kind().map(|k| (st, k))) {
-        Some((st, kind)) => Some(super::actions::step_action(core, &f.sentence, kind, st, f.room, Some(f.heard)).await),
-        None => None,
-    };
-    super::reports::flagged(core, &f.sentence, f.step.as_ref(), action.as_ref(), &f.wav).await;
+    match f {
+        Followup::Sentence {
+            sentence,
+            step,
+            room,
+            heard,
+            wav,
+        } => {
+            let action = match step.as_ref().and_then(|st| st.action.kind().map(|k| (st, k))) {
+                Some((st, kind)) => {
+                    Some(super::actions::step_action(core, (&sentence).into(), kind, st, Some(room), Some(heard)).await)
+                }
+                None => None,
+            };
+            super::reports::flagged(core, &sentence, step.as_ref(), action.as_ref(), &wav).await;
+        }
+        Followup::Chat { record, step } => super::chat::follow_up(core, record, step).await,
+    }
 }

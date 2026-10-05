@@ -119,6 +119,20 @@ modlog-flagged = 🔊 Flagged { $user } in { $channel }: { $labels } · { $secon
         [strike] strike { $strike } of { $of }
        *[other] logged
     }
+modlog-chat-flagged = 💬 Flagged { $user } in { $channel }: { $found } → { $decision ->
+        [warn] warned
+        [observe] observed (silent)
+        [strike] strike { $strike } of { $of }
+       *[other] logged
+    }
+    > { $quote }
+violation-chat = 💬 **{ $user }** in { $community } / { $channel } wrote { $found }; violation { $count } in { $window }, step { $step } ({ $decision ->
+        [warn] warned
+       *[observe] observe only, silent
+    })
+    > { $quote }
+chat-warning = please watch your language.
+chat-delete-reason = Profanity Watch: a word from the word list
 modlog-label-score = { $label } **{ $score }** (bar { $bar })
 upload-failed = (audio upload failed: { $error })
 

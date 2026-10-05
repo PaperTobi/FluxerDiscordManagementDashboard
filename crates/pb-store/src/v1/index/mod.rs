@@ -15,8 +15,8 @@ use jiff::Timestamp;
 use jiff::civil::Date;
 use pb_domain::{GuildId, SentenceId, UserId};
 use pb_store_api::{
-    ActionRecord, AuditFilter, AuditRow, ClipRow, CommunitySeen, Cursor, DayRow, DigestRow, EventLog, Index, JarRow,
-    LastDigest, Page, PersonName, SentenceFilter, SentenceRow, StoreError, StoredEvent, VoiceRow,
+    ActionRecord, AuditFilter, AuditRow, ChatRow, ClipRow, CommunitySeen, Cursor, DayRow, DigestRow, EventLog, Index,
+    JarRow, LastDigest, Page, PersonName, SentenceFilter, SentenceRow, StoreError, StoredEvent, VoiceRow,
 };
 use tokio::sync::{broadcast, mpsc, watch};
 
@@ -239,6 +239,15 @@ impl Index for TursoIndex {
 
     async fn clips(&self) -> Result<Vec<ClipRow>, StoreError> {
         call(&self.jobs, |db| Box::pin(query::clips(db))).await
+    }
+
+    async fn chat(
+        &self,
+        guild: Option<GuildId>,
+        cursor: Option<Cursor>,
+        page: u32,
+    ) -> Result<Page<ChatRow>, StoreError> {
+        call(&self.jobs, move |db| Box::pin(query::chat(db, guild, cursor, page))).await
     }
 
     async fn voices(&self) -> Result<Vec<VoiceRow>, StoreError> {

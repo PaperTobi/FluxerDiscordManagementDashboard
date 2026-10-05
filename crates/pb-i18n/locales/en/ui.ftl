@@ -200,6 +200,7 @@ audit-voice-removed = { $by } removed the voice { $voice }
 audit-login = { $name } logged in
 audit-msg-modlog = Mod-log post
 audit-msg-dm = Message to the owner
+audit-msg-chat-reply = a warning in the chat
 audit-msg-digest = Report
 audit-message-sent = { $what } sent
 audit-message-failed = { $what } could not be sent: { $error }

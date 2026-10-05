@@ -287,6 +287,10 @@ impl FluxerCtl for Ctl {
         self.rest.react(m.channel, m.message, emoji).await
     }
 
+    async fn delete_message(&self, m: MessageRef, reason: Option<&str>) -> Result<(), FluxerError> {
+        self.rest.delete_message(m.channel, m.message, reason).await
+    }
+
     async fn patch_member(&self, guild: GuildId, user: UserId, patch: MemberPatch) -> Result<(), FluxerError> {
         self.rest.patch_member(guild, user, &patch).await
     }

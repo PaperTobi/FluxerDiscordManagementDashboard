@@ -339,6 +339,14 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
             }
             .into_any()
         }
+        FieldKind::Words => {
+            let lines = value
+                .as_array()
+                .map(|a| a.iter().map(shown).collect::<Vec<_>>().join("\n"))
+                .unwrap_or_default();
+            view! { <textarea id=id name=name.clone() rows="6" spellcheck="false" disabled=disabled>{lines}</textarea> }
+                .into_any()
+        }
         FieldKind::Ids { .. } | FieldKind::Hosts | FieldKind::Langs | FieldKind::Prefix => view! {
             <input id=id name=name.clone() type="text" value=s disabled=disabled/>
         }

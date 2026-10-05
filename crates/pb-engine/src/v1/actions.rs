@@ -6,11 +6,11 @@ use std::time::Duration;
 
 use jiff::{SignedDuration, Timestamp};
 use pb_domain::PlayPurpose;
-use pb_domain::{ActionKind, ActionOutcome, ClfLang, SentenceId};
+use pb_domain::{ActionKind, ActionOutcome, ClfLang, GuildId, SentenceId, UserId};
 use pb_fluxer_api::{ErrorKind, FluxerError, MemberPatch};
 use pb_live_proto::{Activity, PersonDelta};
 use pb_settings::EscalationStep;
-use pb_store_api::{ActionRecord, Event, SentenceRecord};
+use pb_store_api::{ActionRecord, ChatRecord, Event, SentenceRecord};
 use pb_voicelines::{Field, Fields, Line, Sel};
 
 use super::core::{Core, PlayItem, RoomHandle};
@@ -39,13 +39,45 @@ fn outcome(kind: ActionKind, r: Result<(), FluxerError>) -> ActionOutcome {
     }
 }
 
-/// Runs a step's action for a violation and records it. Announces it when the settings say so.
+/// What an action is for: a violation in a call (a sentence) or in the chat.
+#[derive(Debug, Clone, Copy)]
+pub struct ActionFor {
+    pub guild: GuildId,
+    pub user: UserId,
+    /// The sentence or chat message record.
+    pub id: SentenceId,
+    pub step: Option<u32>,
+}
+
+impl From<&SentenceRecord> for ActionFor {
+    fn from(s: &SentenceRecord) -> Self {
+        ActionFor {
+            guild: s.guild,
+            user: s.user,
+            id: s.id,
+            step: s.decision.violation().map(|v| v.2),
+        }
+    }
+}
+
+impl From<&ChatRecord> for ActionFor {
+    fn from(c: &ChatRecord) -> Self {
+        ActionFor {
+            guild: c.guild,
+            user: c.user,
+            id: c.id,
+            step: c.decision.violation().map(|v| v.2),
+        }
+    }
+}
+
+/// Runs a step's action for a violation and records it. Announces it in `room` when the settings say so.
 pub async fn step_action(
     core: &Arc<Core>,
-    s: &SentenceRecord,
+    s: ActionFor,
     kind: ActionKind,
     step: &EscalationStep,
-    room: RoomHandle,
+    room: Option<RoomHandle>,
     heard: Option<ClfLang>,
 ) -> ActionRecord {
     let (g, u) = (s.guild, s.user);
@@ -60,7 +92,7 @@ pub async fn step_action(
         kind,
         secs: if kind == ActionKind::Disconnect { None } else { secs },
         sentence: Some(s.id),
-        step: s.decision.violation().map(|v| v.2),
+        step: s.step,
         outcome: ActionOutcome::Done,
         undo_at: None,
         undoes: None,
@@ -115,7 +147,9 @@ pub async fn step_action(
         let _ = core.undo.send(record.clone());
     }
     show(core, &record);
-    announce(core, &room, &record, heard);
+    if let Some(room) = room {
+        announce(core, &room, &record, heard);
+    }
     record
 }
 

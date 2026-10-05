@@ -7,6 +7,7 @@ section-tracking = Verfolgen
 section-detection = Erkennung
 section-warning = Warnungen
 section-escalation = Eskalation
+section-chat = Chat
 section-reporting = Mod-Log und Berichte
 section-recording = Aufnahmen
 section-commands = Admins und Chat-Befehle
@@ -112,6 +113,21 @@ setting-escalation = Eskalationsstufen
 setting-actions-enabled = Moderationsmaßnahmen erlauben
     .help = Personen stummschalten, trennen oder in den Timeout schicken, wie die Stufen es sagen. Aus: nur warnen und benachrichtigen.
 
+## Chat
+
+setting-chat-moderation = Chat moderieren
+    .help = Die Textkanäle der Community lesen: Eine Nachricht mit einem Wort oder Ausdruck aus der Wortliste zählt wie ein markierter Satz im Anruf (Strikes, Warnungen, Eskalation, Berichte).
+setting-chat-who = Wessen Nachrichten zählen
+    .help = Nur beobachtete Personen (wie in Anrufen) oder alle außer Admins.
+setting-word-list = Wortliste
+    .help = Ein Wort oder Ausdruck pro Zeile. Nur ganze Wörter: „Arsch“ trifft nicht „Arschbombe“ … außer mit *: Ein * am Anfang oder Ende eines Wortes lässt es offen („Arsch*“). Tarnungen wie f@ck, sh1t, fuuuck oder f u c k werden auch erkannt.
+setting-chat-channels = Kanäle
+    .help = Wo Nachrichten gelesen werden. Leer: alle Textkanäle der Community.
+setting-chat-delete = Markierte Nachrichten löschen
+    .help = Eine markierte Nachricht aus dem Chat entfernen (der Bot braucht dort „Nachrichten verwalten“).
+setting-chat-reply = Im Chat antworten
+    .help = Auf eine markierte Nachricht mit der Warnung antworten, in der Sprache der Person.
+
 ## Begrüßung
 
 setting-greet-enabled = Begrüßung
@@ -174,6 +190,8 @@ setting-tts-threads = CPU-Threads für die Sprachausgabe
 choice-audience-offender = Nur die Person, die es gesagt hat
 choice-audience-tracked = Verfolgte Personen
 choice-audience-channel = Alle im Kanal
+choice-chat-who-tracked = Beobachtete Personen
+choice-chat-who-everyone = Alle außer Admins
 choice-no-speak-policy-text = In den Chat schreiben
 choice-no-speak-policy-log = Nur protokollieren
 choice-digest-off = Aus
@@ -221,6 +239,7 @@ err-not-origin = „{ $value }“ ist keine http(s)-Adresse
 err-origin-with-path = „{ $value }“ darf nur die Adresse sein, wie http://192.168.1.50:8790 (ohne Pfad)
 err-not-host = „{ $value }“ ist kein Hostname
 err-prefix-spaces = das Präfix darf keine Leerzeichen enthalten
+err-not-word = „{ $value }“ enthält keine Buchstaben oder Ziffern
 err-not-lang = „{ $value }“ ist kein Sprachkürzel (wie de oder en-US)
 err-not-line-kind = „{ $value }“ ist keine Art von Ansage (warning, strike, action, greeting oder say)
 err-not-id = „{ $value }“ ist keine ID

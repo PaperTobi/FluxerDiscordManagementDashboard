@@ -3,8 +3,8 @@
 
 use jiff::Timestamp;
 use pb_domain::{
-    ActionKind, ActionOutcome, Audience, BlobHash, ChannelId, ClfLang, GuildId, Label, Lang, PlayPurpose, SentenceId,
-    UserId,
+    ActionKind, ActionOutcome, Audience, BlobHash, ChannelId, ClfLang, GuildId, Label, Lang, MessageId, PlayPurpose,
+    SentenceId, UserId,
 };
 use pb_settings::Change;
 use serde::de::DeserializeOwned;
@@ -421,6 +421,34 @@ pub struct VoiceRemoved {
     pub by: Actor,
 }
 
+/// `chat.flagged` v1: a chat message with a word or phrase of the word list, and what was decided (as for a sentence:
+/// strikes, warnings and escalation count both together). A word-list match counts as profanity at score 1.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChatRecord {
+    /// The record's own id (actions and reports refer to it as to a sentence).
+    pub id: SentenceId,
+    pub guild: GuildId,
+    pub channel: ChannelId,
+    pub message: MessageId,
+    pub user: UserId,
+    pub at: Timestamp,
+    pub text: String,
+    /// The entries of the word list that were found.
+    pub matches: Vec<String>,
+    pub decision: DecisionRecord,
+    /// It went into the swear jar.
+    pub jar: bool,
+}
+
+/// `chat.deleted` v1: the bot removed (or failed to remove) a flagged message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatDeleted {
+    pub id: SentenceId,
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 /// `person.seen` v1: a person's names and avatar as Fluxer reported them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonSeen {
@@ -449,9 +477,20 @@ pub struct CommunitySeen {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum MessagePurpose {
-    Modlog { sentence: SentenceId },
-    OwnerDm { sentence: SentenceId },
-    Digest { from: Timestamp, until: Timestamp },
+    Modlog {
+        sentence: SentenceId,
+    },
+    OwnerDm {
+        sentence: SentenceId,
+    },
+    Digest {
+        from: Timestamp,
+        until: Timestamp,
+    },
+    /// The warning, as a reply to a flagged chat message.
+    ChatReply {
+        record: SentenceId,
+    },
 }
 
 /// `message.sent` v1: a mod-log post, a direct message or a report.
@@ -529,6 +568,8 @@ pub enum Event {
     ClipRemoved(ClipRemoved),
     VoiceSaved(Box<VoiceSaved>),
     VoiceRemoved(VoiceRemoved),
+    ChatFlagged(Box<ChatRecord>),
+    ChatDeleted(ChatDeleted),
     PersonSeen(PersonSeen),
     CommunitySeen(CommunitySeen),
     MessageSent(MessageSent),
@@ -652,6 +693,8 @@ kinds! {
     ClipRemoved(ClipRemoved) = "clip.removed" v 1;
     VoiceSaved(VoiceSaved) = "voice.saved" v 1 boxed x;
     VoiceRemoved(VoiceRemoved) = "voice.removed" v 1;
+    ChatFlagged(ChatRecord) = "chat.flagged" v 1 boxed x;
+    ChatDeleted(ChatDeleted) = "chat.deleted" v 1;
     PersonSeen(PersonSeen) = "person.seen" v 1;
     CommunitySeen(CommunitySeen) = "community.seen" v 1;
     MessageSent(MessageSent) = "message.sent" v 1;
