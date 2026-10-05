@@ -617,8 +617,9 @@ async fn a_listed_word_in_the_chat_counts_like_a_flagged_sentence() {
         ..Setup::default()
     })
     .await;
-    wait("the bot is online", 10, || {
-        rig.engine.connection() == pb_engine::Connection::Ready
+    // Online, and the community loaded (its messages reach the bot from then on).
+    wait("the bot is online in the community", 10, || {
+        rig.engine.connection() == pb_engine::Connection::Ready && rig.engine.guilds().available().contains(&GuildId(G))
     })
     .await;
     // Someone who is not tracked, and a command, are left alone.
