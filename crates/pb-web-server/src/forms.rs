@@ -189,11 +189,17 @@ fn escalation_json(f: &Fields) -> Value {
     Value::Array(rows)
 }
 
-/// The voice per language or per kind of line (`voice.<lang>` / `voice.<kind>` fields; empty = none chosen).
-fn voices_json(f: &Fields) -> Value {
+/// The voice per language or per kind of line (`voice.<lang>` / `line-voice.<kind>` fields: both can be in one
+/// section's form; empty = none chosen).
+fn voices_json(f: &Fields, key: SettingKey) -> Value {
+    let prefix = if key == SettingKey::LineVoices {
+        "line-voice."
+    } else {
+        "voice."
+    };
     Value::Object(
         f.iter()
-            .filter_map(|(k, v)| Some((k.strip_prefix("voice.")?.to_owned(), v.trim().to_owned())))
+            .filter_map(|(k, v)| Some((k.strip_prefix(prefix)?.to_owned(), v.trim().to_owned())))
             .filter(|(_, v)| !v.is_empty())
             .map(|(k, v)| (k, Value::String(v)))
             .collect(),
@@ -233,7 +239,7 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
     }
     let value = match key.meta().kind {
         FieldKind::Escalation => escalation_json(&f),
-        FieldKind::Voices | FieldKind::LineVoices => voices_json(&f),
+        FieldKind::Voices | FieldKind::LineVoices => voices_json(&f, key),
         _ => pb_settings::text_value(key, field(&f, "value").unwrap_or_default()),
     };
     let by_owner = s.access.owner;
@@ -287,7 +293,7 @@ pub async fn settings(State(st): State<WebState>, headers: HeaderMap, Form(f): F
 fn form_value(f: &Fields, key: SettingKey) -> (Value, Option<String>) {
     match key.meta().kind {
         FieldKind::Escalation => (escalation_json(f), None),
-        FieldKind::Voices => (voices_json(f), None),
+        FieldKind::Voices | FieldKind::LineVoices => (voices_json(f, key), None),
         _ => {
             let raw = field(f, &pb_web::pages::settings::input_name(key)).unwrap_or_default();
             (pb_settings::text_value(key, raw), Some(raw.to_owned()))
@@ -782,11 +788,19 @@ mod tests {
 
     #[test]
     fn voices() {
-        let v = voices_json(&f(&[
+        let form = f(&[
             ("voice.de", "de_DE-thorsten-high"),
             ("voice.en", ""),
+            ("line-voice.warning", "piper:en_US-amy-low"),
             ("csrf", "x"),
-        ]));
-        assert_eq!(v, serde_json::json!({"de": "de_DE-thorsten-high"}));
+        ]);
+        assert_eq!(
+            voices_json(&form, SettingKey::TtsVoices),
+            serde_json::json!({"de": "de_DE-thorsten-high"})
+        );
+        assert_eq!(
+            voices_json(&form, SettingKey::LineVoices),
+            serde_json::json!({"warning": "piper:en_US-amy-low"})
+        );
     }
 }

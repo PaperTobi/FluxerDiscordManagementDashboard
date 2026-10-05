@@ -309,7 +309,7 @@ fn input(key: SettingKey, scope: Scope, value: &Value, locale: Locale, disabled:
                             view! {
                                 <label class="inline">
                                     {line_kind_name(locale, k)}
-                                    <select name=format!("voice.{}", k.as_str()) disabled=disabled>
+                                    <select name=format!("line-voice.{}", k.as_str()) disabled=disabled>
                                         <option value="" selected=chosen.is_empty()>{text(locale, "ui-voice-by-language", &[])}</option>
                                         {installed
                                             .iter()
@@ -443,6 +443,7 @@ pub fn advanced(key: SettingKey) -> bool {
             | K::VolumeDb
             | K::FallbackLanguages
             | K::TtsVoices
+            | K::LineVoices
             | K::SpeechRate
             | K::NoSpeakPolicy
             | K::CommandPrefix

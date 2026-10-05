@@ -493,7 +493,6 @@ table.mini tr.flagged td { font-weight: 600; color: var(--bad); }
 
 /* ---------------------------------------------------------------- the whole bot paused */
 
-.notice.warn { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
 .pause-everywhere h2 { margin-bottom: 4px; }
 .pause-everywhere p { margin: 0; }
 .pause-everywhere.paused { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
@@ -615,3 +614,4 @@ details.advanced > summary h3 { display: inline; margin: 0; }
 .changed-in { margin: 4px 0 0; }
 .section-list .changes { list-style: none; margin: 4px 0 0; padding: 0; flex-basis: 100%; }
 .section-list li { flex-wrap: wrap; }
+.section-list .changes li { display: block; padding: 2px 0; border: 0; }
