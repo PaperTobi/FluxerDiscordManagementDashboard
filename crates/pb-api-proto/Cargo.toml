@@ -1,0 +1,23 @@
+[package]
+name = "pb-api-proto"
+description = "The bot's read API, version 1: request and response types, scopes, event kinds, webhook signatures (pure)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+hmac.workspace = true
+jiff = { workspace = true, features = ["serde"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+utoipa = { version = "6", optional = true, features = ["jiff_0_2"] }
+
+[features]
+# The OpenAPI document's schemas (only the bot's server needs them).
+openapi = ["dep:utoipa"]
+
+[lints]
+workspace = true

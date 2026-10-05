@@ -70,6 +70,8 @@ impl VoiceTransport for NoVoice {
 pub struct Web {
     pub fake: FakeFluxer,
     pub engine: Arc<Engine>,
+    pub api: Arc<pb_api::Api>,
+    pub index: Arc<TursoIndex>,
     pub base: String,
     pub dir: tempfile::TempDir,
     pub http: reqwest::Client,
@@ -191,6 +193,10 @@ impl Web {
         fake.add_redirect(&format!("{scheme}://{addr}/auth/callback"));
         let cert = std::fs::read(pb_testkit::fixture("tls/cert.pem")).unwrap();
         let key = std::fs::read(pb_testkit::fixture("tls/key.pem")).unwrap();
+        let index_handle = index.clone();
+        let api = pb_api::Api::load(engine.clone(), index.clone(), Arc::new(pb_store::FsApiFile::new(&d)))
+            .await
+            .unwrap();
         let state = pb_web_server::WebState::new(
             pb_web_server::WebConfig {
                 bind: addr,
@@ -202,6 +208,7 @@ impl Web {
                 tls: https.then(|| pb_tls::server_config(&cert, &key).unwrap()),
             },
             pb_web_server::WebParts {
+                api: api.clone(),
                 engine: engine.clone(),
                 index,
                 blobs,
@@ -223,6 +230,8 @@ impl Web {
         let web = Web {
             fake,
             engine,
+            api,
+            index: index_handle,
             base: format!("{scheme}://{addr}"),
             dir,
             http,

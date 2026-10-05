@@ -268,6 +268,12 @@ impl Engine {
         super::cells::communities(&self.core).contains(&guild)
     }
 
+    /// A community's icon on the instance's media server.
+    pub fn icon_url(&self, guild: GuildId) -> Option<String> {
+        let icon = self.core.guilds().get(guild).and_then(|i| i.icon.clone());
+        self.core.icon_url(guild, icon.as_deref())
+    }
+
     /// A person's name and picture as pages show them.
     pub fn who(&self, guild: GuildId, user: UserId) -> pb_live_proto::Who {
         super::cells::who(&self.core, guild, user)

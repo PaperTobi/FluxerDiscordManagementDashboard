@@ -212,6 +212,13 @@ async fn run(data: &Path, cfg: Config) -> Result<(), Fail> {
             None => None,
         },
     };
+    let api = pb_api::Api::load(
+        engine.clone(),
+        index.clone(),
+        Arc::new(pb_store::FsApiFile::new(data)),
+    )
+    .await
+    .map_err(|e| Fail(Exit::Config, format!("api.json: {e}")))?;
     let parts = pb_web_server::WebParts {
         engine: engine.clone(),
         index: index.clone(),
@@ -219,6 +226,7 @@ async fn run(data: &Path, cfg: Config) -> Result<(), Fail> {
         log: log.clone(),
         secrets,
         sessions,
+        api,
         version: env!("CARGO_PKG_VERSION").to_owned(),
         shutdown: stop_rx,
     };

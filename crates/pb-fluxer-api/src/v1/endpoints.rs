@@ -1,6 +1,6 @@
 //! Where an instance's services are (from `/.well-known/fluxer`).
 
-use pb_domain::UserId;
+use pb_domain::{GuildId, UserId};
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +40,12 @@ impl Endpoints {
     pub fn avatar_url(&self, user: UserId, hash: Option<&str>, size: u32) -> Option<String> {
         let (media, hash) = (self.media.as_ref()?, hash.filter(|h| !h.is_empty())?);
         Some(join(media, &format!("/avatars/{user}/{hash}.webp?size={size}")))
+    }
+
+    /// A community's icon (Fluxer's media proxy: `/icons/{guild_id}/{hash}.{ext}`).
+    pub fn icon_url(&self, guild: GuildId, hash: Option<&str>, size: u32) -> Option<String> {
+        let (media, hash) = (self.media.as_ref()?, hash.filter(|h| !h.is_empty())?);
+        Some(join(media, &format!("/icons/{guild}/{hash}.webp?size={size}")))
     }
 
     /// The link that adds the bot to a community with `permissions`.

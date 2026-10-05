@@ -8,6 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+pb-api.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 clap.workspace = true

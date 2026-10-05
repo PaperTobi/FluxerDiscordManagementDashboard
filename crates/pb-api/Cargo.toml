@@ -1,0 +1,27 @@
+[package]
+name = "pb-api"
+description = "The bot's read API (/api/v1): tokens and scopes, the read routes, the OpenAPI document"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum.workspace = true
+getrandom.workspace = true
+http.workspace = true
+jiff.workspace = true
+pb-api-proto = { workspace = true, features = ["openapi"] }
+pb-domain.workspace = true
+pb-engine.workspace = true
+pb-store-api.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+utoipa = { version = "6", features = ["jiff_0_2"] }
+
+[lints]
+workspace = true

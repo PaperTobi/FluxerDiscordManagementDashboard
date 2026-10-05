@@ -1,10 +1,11 @@
-//! The files beside the log: settings (TOML, hand-editable), secrets and login sessions.
+//! The files beside the log: settings (TOML, hand-editable), secrets, login sessions, and the API's tokens and
+//! webhooks.
 
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use jiff::Timestamp;
-use pb_domain::UserId;
+use pb_domain::{GuildId, UserId};
 use pb_settings::{Change, FileError, SettingsTree};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -72,4 +73,59 @@ pub trait SessionsFile: Send + Sync + 'static {
     async fn load(&self) -> Result<BTreeMap<String, SessionRecord>, StoreError>;
     /// Replaces the file atomically (mode 0600).
     async fn save(&self, sessions: &BTreeMap<String, SessionRecord>) -> Result<(), StoreError>;
+}
+
+/// An API token: only the SHA-256 of the token itself is kept.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApiToken {
+    /// Shown in lists (not secret).
+    pub id: String,
+    pub name: String,
+    /// Hex SHA-256 of the token.
+    pub hash: String,
+    /// What it may read (`pb_api_proto::v1::Scope` names).
+    pub scopes: Vec<String>,
+    /// Only these communities (empty: all).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub communities: Vec<GuildId>,
+    pub created: Timestamp,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<UserId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_used: Option<Timestamp>,
+}
+
+/// A webhook: where events go, signed with its secret.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Webhook {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+    pub secret: String,
+    /// The kinds of events it receives (`pb_api_proto::v1::EventKind` names).
+    pub events: Vec<String>,
+    /// Only these communities (empty: all).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub communities: Vec<GuildId>,
+    /// Every event up to this number was delivered (or did not concern it).
+    pub delivered: u64,
+    pub created: Timestamp,
+    #[serde(default)]
+    pub paused: bool,
+}
+
+/// `api.json` (mode 0600): the API's tokens and webhooks.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApiConfig {
+    #[serde(default)]
+    pub tokens: Vec<ApiToken>,
+    #[serde(default)]
+    pub webhooks: Vec<Webhook>,
+}
+
+#[async_trait]
+pub trait ApiFile: Send + Sync + 'static {
+    async fn load(&self) -> Result<ApiConfig, StoreError>;
+    /// Replaces the file atomically (mode 0600).
+    async fn save(&self, config: &ApiConfig) -> Result<(), StoreError>;
 }

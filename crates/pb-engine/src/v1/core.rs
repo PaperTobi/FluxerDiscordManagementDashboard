@@ -248,6 +248,12 @@ impl Core {
         self.ctl().and_then(|c| c.endpoints().avatar_url(user, Some(hash), 64))
     }
 
+    /// A community's icon on the instance's media server.
+    pub fn icon_url(&self, guild: GuildId, hash: Option<&str>) -> Option<String> {
+        let hash = hash?;
+        self.ctl().and_then(|c| c.endpoints().icon_url(guild, Some(hash), 64))
+    }
+
     pub fn set_ctl(&self, ctl: Option<Arc<dyn FluxerCtl>>) {
         if let Ok(mut r) = self.redirects.lock() {
             *r = (None, Vec::new());

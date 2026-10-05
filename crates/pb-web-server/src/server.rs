@@ -54,6 +54,8 @@ pub struct WebParts {
     pub log: Arc<dyn EventLog>,
     pub secrets: Arc<dyn SecretsFile>,
     pub sessions: Arc<dyn SessionsFile>,
+    /// The read API, served at `/api/v1`.
+    pub api: Arc<pb_api::Api>,
     pub version: String,
     /// Becomes `true` when the bot stops.
     pub shutdown: watch::Receiver<bool>,
@@ -113,6 +115,7 @@ pub struct WebState {
     pub notices: Notices,
     pub(crate) secrets: Arc<SecretsCache>,
     pub(crate) wizard: Arc<Mutex<Wizard>>,
+    pub api: Arc<pb_api::Api>,
     /// Fluxer refused the saved client secret at the last login (it was reset, or is wrong).
     pub(crate) client_rejected: Arc<std::sync::atomic::AtomicBool>,
     pub(crate) logins: Arc<Mutex<HashMap<String, PendingLogin>>>,
@@ -184,6 +187,7 @@ impl WebState {
             notices: Notices::default(),
             secrets,
             wizard: Arc::new(Mutex::new(wizard)),
+            api: parts.api,
             client_rejected: Arc::default(),
             logins: Arc::new(Mutex::new(HashMap::new())),
             cfg: Arc::new(cfg),
@@ -300,6 +304,7 @@ pub fn router(st: WebState) -> Router {
         .route("/media/sentence/{id}", get(super::media::sentence))
         .route("/media/preview", get(super::media::preview))
         .route("/api/members", get(super::media::members))
+        .nest(pb_api_proto::v1::BASE, st.api.router())
         .nest(
             "/pkg",
             Router::new()

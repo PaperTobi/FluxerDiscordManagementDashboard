@@ -9,7 +9,9 @@ use pb_domain::GuildId;
 use pb_settings::{
     Change, FileError, SettingsTree, apply_to_document, file_of, new_document, parse_global, parse_server,
 };
-use pb_store_api::{Secrets, SecretsFile, SessionRecord, SessionsFile, SettingsFiles, SetupState, StoreError};
+use pb_store_api::{
+    ApiConfig, ApiFile, Secrets, SecretsFile, SessionRecord, SessionsFile, SettingsFiles, SetupState, StoreError,
+};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 
@@ -296,6 +298,40 @@ impl SessionsFile for FsSessionsFile {
 
     async fn save(&self, sessions: &BTreeMap<String, SessionRecord>) -> Result<(), StoreError> {
         let text = serde_json::to_vec_pretty(sessions).map_err(|e| StoreError::Invalid(e.to_string()))?;
+        let path = self.path.clone();
+        blocking(move || Ok(write_atomic(&path, &text, 0o600)?)).await
+    }
+}
+
+/// `api.json` in the data directory.
+#[derive(Debug)]
+pub struct FsApiFile {
+    path: PathBuf,
+}
+
+impl FsApiFile {
+    pub fn new(data_dir: &Path) -> FsApiFile {
+        FsApiFile {
+            path: data_dir.join("api.json"),
+        }
+    }
+}
+
+#[async_trait]
+impl ApiFile for FsApiFile {
+    async fn load(&self) -> Result<ApiConfig, StoreError> {
+        let path = self.path.clone();
+        blocking(move || {
+            let Some(text) = read_optional(&path)? else {
+                return Ok(ApiConfig::default());
+            };
+            serde_json::from_str(&text).map_err(|e| StoreError::Invalid(format!("api.json: {e}")))
+        })
+        .await
+    }
+
+    async fn save(&self, config: &ApiConfig) -> Result<(), StoreError> {
+        let text = serde_json::to_vec_pretty(config).map_err(|e| StoreError::Invalid(e.to_string()))?;
         let path = self.path.clone();
         blocking(move || Ok(write_atomic(&path, &text, 0o600)?)).await
     }
