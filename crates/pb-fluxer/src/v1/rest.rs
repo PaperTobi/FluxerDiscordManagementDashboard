@@ -1,6 +1,6 @@
 //! REST: `{api_public}/v1`, `Authorization: Bot <token>`, Fluxer's rate-limit headers and 429 answers honoured.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -12,6 +12,7 @@ use reqwest::header::{AUTHORIZATION, HeaderValue};
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::{Value, json};
 
+use super::pace::{Pace, backoff};
 use super::wire;
 
 /// The one HTTP client of every Fluxer call (connections and TLS sessions are shared).
@@ -46,12 +47,23 @@ pub(crate) enum Persistence {
 /// Global requests per second (Fluxer: 50).
 const GLOBAL_PER_SECOND: usize = 50;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Limits {
     /// Per route: requests left and when the bucket refills.
     buckets: HashMap<String, (u32, Instant)>,
     global_until: Option<Instant>,
-    recent: VecDeque<Instant>,
+    /// Fluxer's global limit, per second.
+    global: Pace,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Limits {
+            buckets: HashMap::new(),
+            global_until: None,
+            global: Pace::new(GLOBAL_PER_SECOND, Duration::from_secs(1)),
+        }
+    }
 }
 
 /// The REST client.
@@ -122,13 +134,6 @@ fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
         .map(Duration::from_secs)
 }
 
-fn backoff(attempt: u32) -> Duration {
-    let base = Duration::from_millis(500)
-        .saturating_mul(1 << attempt.min(7))
-        .min(Duration::from_secs(60));
-    base.mul_f64(0.75 + fastrand::f64() * 0.5)
-}
-
 pub(crate) fn error(status: u16, body: &Value) -> FluxerError {
     // API errors are `{code, message}`; OAuth2 errors are `{error, error_description}`.
     let text = |k: &str| body.get(k).and_then(Value::as_str).map(str::to_owned);
@@ -193,22 +198,11 @@ impl Rest {
         {
             until = until.max(Some(reset));
         }
-        while l
-            .recent
-            .front()
-            .is_some_and(|t| now.duration_since(*t) >= Duration::from_secs(1))
-        {
-            l.recent.pop_front();
-        }
-        if l.recent.len() >= GLOBAL_PER_SECOND
-            && let Some(first) = l.recent.front()
-        {
-            until = until.max(Some(*first + Duration::from_secs(1)));
-        }
+        until = until.max(l.global.next());
         match until {
             Some(t) => t.duration_since(now),
             None => {
-                l.recent.push_back(now);
+                l.global.record();
                 Duration::ZERO
             }
         }
@@ -222,13 +216,12 @@ impl Rest {
                 .and_then(|v| v.parse::<f64>().ok())
         };
         if let (Some(remaining), Some(after)) = (num("x-ratelimit-remaining"), num("x-ratelimit-reset-after")) {
-            let reset = Instant::now() + wait_secs(after);
+            let now = Instant::now();
             let left = remaining.max(0.0) as u32;
-            self.limits
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .buckets
-                .insert(route.to_owned(), (left, reset));
+            let mut l = self.limits.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            // Buckets that refilled say nothing any more (routes name channels and people: they would pile up).
+            l.buckets.retain(|_, (_, reset)| *reset > now);
+            l.buckets.insert(route.to_owned(), (left, now + wait_secs(after)));
         }
     }
 
@@ -293,7 +286,7 @@ impl Rest {
                 Err(e) => {
                     if retry_network(attempt) {
                         tracing::warn!(error = %e, route, "Fluxer could not be reached; trying again");
-                        tokio::time::sleep(backoff(attempt)).await;
+                        tokio::time::sleep(backoff(Duration::from_millis(500), Duration::from_secs(60), attempt)).await;
                         attempt += 1;
                         continue;
                     }
@@ -335,7 +328,11 @@ impl Rest {
             }
             if status >= 500 {
                 if retry_network(attempt) {
-                    tokio::time::sleep(retry_after(&headers).unwrap_or_else(|| backoff(attempt))).await;
+                    tokio::time::sleep(
+                        retry_after(&headers)
+                            .unwrap_or_else(|| backoff(Duration::from_millis(500), Duration::from_secs(60), attempt)),
+                    )
+                    .await;
                     attempt += 1;
                     continue;
                 }
@@ -367,17 +364,7 @@ impl Rest {
                 Persistence::Attempts(3),
             )
             .await?;
-        Ok(Application {
-            id: wire::id(v.get("id"))
-                .ok_or_else(|| FluxerError::new(ErrorKind::Server, "the application has no id"))?,
-            name: v.get("name").and_then(Value::as_str).unwrap_or_default().to_owned(),
-            owner: v.get("owner").and_then(wire::user),
-            redirect_uris: v
-                .get("redirect_uris")
-                .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_str).map(str::to_owned).collect())
-                .unwrap_or_default(),
-        })
+        wire::application(&v).ok_or_else(|| FluxerError::new(ErrorKind::Server, "the application has no id"))
     }
 
     pub(crate) async fn me(&self) -> Result<User, FluxerError> {
@@ -671,6 +658,21 @@ mod tests {
         );
         assert_eq!(parts.concat(), text);
         assert_eq!(split("short", 4000), vec!["short"]);
+    }
+
+    #[test]
+    fn oauth_errors_keep_their_code() {
+        let e = error(
+            400,
+            &json!({"error": "invalid_client", "error_description": "Invalid client_secret"}),
+        );
+        assert!(e.is_code("invalid_client"));
+        assert_eq!(e.message, "Invalid client_secret");
+        let e = error(400, &json!({"code": "MISSING_PERMISSIONS", "message": "no"}));
+        assert_eq!(
+            (e.kind, e.code.as_deref()),
+            (ErrorKind::Forbidden, Some("MISSING_PERMISSIONS"))
+        );
     }
 
     #[test]

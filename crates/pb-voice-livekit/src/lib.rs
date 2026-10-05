@@ -79,10 +79,14 @@ impl VoiceTransport for LiveKitTransport {
     }
 }
 
+/// Where a subscribed track is delivered (or why it will not be).
+type Delivery = oneshot::Sender<Result<RemoteTrack, String>>;
+
 struct Shared {
     room: Room,
     /// Subscriptions asked for and not yet delivered, by track sid.
-    waiting: Mutex<HashMap<String, oneshot::Sender<RemoteTrack>>>,
+    /// Who waits for a track to be delivered (several can ask for the same one).
+    waiting: Mutex<HashMap<String, Vec<Delivery>>>,
 }
 
 struct LiveKitRoom {
@@ -161,8 +165,19 @@ async fn pump_events(
                 participant,
             } => audio_track(&participant, &publication).map(|t| RoomEvent::TrackUnpublished(t.key)),
             LkEvent::TrackSubscribed { track, publication, .. } => {
-                if let Some(waiter) = lock(&shared.waiting).remove(&publication.sid().to_string()) {
-                    let _ = waiter.send(track);
+                for waiter in lock(&shared.waiting)
+                    .remove(&publication.sid().to_string())
+                    .unwrap_or_default()
+                {
+                    let _ = waiter.send(Ok(track.clone()));
+                }
+                None
+            }
+            // Those waiting hear at once that it will not come (instead of after the wait).
+            LkEvent::TrackSubscriptionFailed { track_sid, error, .. } => {
+                warn!(track = %track_sid, %error, "a track could not be subscribed to");
+                for waiter in lock(&shared.waiting).remove(&track_sid.to_string()).unwrap_or_default() {
+                    let _ = waiter.send(Err(error.to_string()));
                 }
                 None
             }
@@ -226,10 +241,14 @@ impl VoiceRoom for LiveKitRoom {
             Some(track) => track,
             None => {
                 let (tx, rx) = oneshot::channel();
-                lock(&self.shared.waiting).insert(key.track_sid.clone(), tx);
+                lock(&self.shared.waiting)
+                    .entry(key.track_sid.clone())
+                    .or_default()
+                    .push(tx);
                 publication.set_subscribed(true);
                 match tokio::time::timeout(SUBSCRIBE_WAIT, rx).await {
-                    Ok(Ok(track)) => track,
+                    Ok(Ok(Ok(track))) => track,
+                    Ok(Ok(Err(e))) => return Err(TransportError::Other(format!("subscribing failed: {e}"))),
                     Ok(Err(_)) => return Err(TransportError::Closed),
                     Err(_) => {
                         lock(&self.shared.waiting).remove(&key.track_sid);

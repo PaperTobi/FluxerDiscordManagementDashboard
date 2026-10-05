@@ -1,6 +1,7 @@
 //! Version 1.
 
 mod gateway;
+mod pace;
 mod rest;
 mod wire;
 
@@ -153,21 +154,7 @@ impl Fluxer for FluxerClient {
             )
             .await?;
         let v = rest.oauth_userinfo(&token).await?;
-        let id = wire::id(v.get("id"))
-            .or_else(|| wire::id(v.get("sub")))
-            .ok_or_else(|| FluxerError::new(ErrorKind::Server, "userinfo has no id"))?;
-        let s = |k: &str| {
-            v.get(k)
-                .and_then(Value::as_str)
-                .filter(|s| !s.is_empty())
-                .map(str::to_owned)
-        };
-        Ok(OAuthUser {
-            id: UserId(id),
-            username: s("username").unwrap_or_default(),
-            global_name: s("global_name"),
-            avatar: s("avatar"),
-        })
+        wire::oauth_user(&v).ok_or_else(|| FluxerError::new(ErrorKind::Server, "userinfo has no id"))
     }
 
     async fn client_secret_ok(
@@ -203,6 +190,13 @@ struct Ctl {
     identity: BotIdentity,
     dms: Mutex<HashMap<UserId, ChannelId>>,
     connected: watch::Receiver<bool>,
+}
+
+impl Ctl {
+    /// The direct-message channels opened so far (a poisoned lock is still a good cache).
+    fn dms(&self) -> std::sync::MutexGuard<'_, HashMap<UserId, ChannelId>> {
+        self.dms.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 }
 
 impl std::fmt::Debug for Ctl {
@@ -268,14 +262,12 @@ impl FluxerCtl for Ctl {
         let channel = match to {
             Destination::Channel(c) => c,
             Destination::User(u) => {
-                let known = self.dms.lock().ok().and_then(|d| d.get(&u).copied());
+                let known = self.dms().get(&u).copied();
                 match known {
                     Some(c) => c,
                     None => {
                         let c = self.rest.open_dm(u).await?;
-                        if let Ok(mut d) = self.dms.lock() {
-                            d.insert(u, c);
-                        }
+                        self.dms().insert(u, c);
                         c
                     }
                 }
@@ -286,9 +278,7 @@ impl FluxerCtl for Ctl {
             && e.kind == ErrorKind::NotFound
         {
             // The direct-message channel is gone: open it again next time.
-            if let Ok(mut d) = self.dms.lock() {
-                d.remove(&u);
-            }
+            self.dms().remove(&u);
         }
         result
     }

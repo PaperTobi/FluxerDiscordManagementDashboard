@@ -4,7 +4,8 @@
 use jiff::Timestamp;
 use pb_domain::{ChannelId, ConnectionId, GuildId, MessageId, RoleId, UserId, VoiceState};
 use pb_fluxer_api::{
-    Channel, ChannelKind, Guild, IncomingMessage, Member, Overwrite, OverwriteKind, Role, User, VoiceGrant,
+    Application, Channel, ChannelKind, Guild, IncomingMessage, Member, OAuthUser, Overwrite, OverwriteKind, Role, User,
+    VoiceGrant,
 };
 use secrecy::SecretString;
 use serde_json::Value;
@@ -54,6 +55,40 @@ pub(crate) fn user(v: &Value) -> Option<User> {
     })
 }
 
+/// A list of role ids.
+fn role_ids(v: Option<&Value>) -> Vec<RoleId> {
+    v.and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|r| id(Some(r)).map(RoleId))
+        .collect()
+}
+
+/// The person an OAuth2 `userinfo` answer names (`id`, or `sub`); empty names count as none.
+pub(crate) fn oauth_user(v: &Value) -> Option<OAuthUser> {
+    let text = |k: &str| s(v.get(k)).filter(|t| !t.is_empty());
+    Some(OAuthUser {
+        id: UserId(id(v.get("id")).or_else(|| id(v.get("sub")))?),
+        username: text("username").unwrap_or_default(),
+        global_name: text("global_name"),
+        avatar: text("avatar"),
+    })
+}
+
+/// `GET /applications/@me`.
+pub(crate) fn application(v: &Value) -> Option<Application> {
+    Some(Application {
+        id: id(v.get("id"))?,
+        name: s(v.get("name")).unwrap_or_default(),
+        owner: v.get("owner").and_then(user),
+        redirect_uris: v
+            .get("redirect_uris")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+            .unwrap_or_default(),
+    })
+}
+
 pub(crate) fn role(v: &Value) -> Option<Role> {
     Some(Role {
         id: RoleId(id(v.get("id"))?),
@@ -100,13 +135,7 @@ pub(crate) fn member(v: &Value) -> Option<Member> {
         user: full,
         id: UserId(uid),
         nick: s(v.get("nick")),
-        roles: v
-            .get("roles")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|r| id(Some(r)).map(RoleId))
-            .collect(),
+        roles: role_ids(v.get("roles")),
         mute: b(v.get("mute")),
         deaf: b(v.get("deaf")),
         timed_out_until: ts(v.get("communication_disabled_until")),
@@ -169,13 +198,7 @@ pub(crate) fn message(v: &Value) -> Option<IncomingMessage> {
         channel: ChannelId(id(v.get("channel_id"))?),
         guild: id(v.get("guild_id")).map(GuildId),
         author: user(v.get("author")?)?,
-        author_roles: m
-            .and_then(|m| m.get("roles"))
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|r| id(Some(r)).map(RoleId))
-            .collect(),
+        author_roles: role_ids(m.and_then(|m| m.get("roles"))),
         author_nick: m.and_then(|m| s(m.get("nick"))),
         content: s(v.get("content")).unwrap_or_default(),
         webhook: v.get("webhook_id").is_some_and(|w| !w.is_null()),
@@ -274,5 +297,19 @@ mod tests {
             voice_state(&json!({"user_id": "7", "channel_id": "5", "connection_id": "x"}), None).is_none(),
             "a DM call"
         );
+    }
+
+    #[test]
+    fn reads_oauth_users_and_applications() {
+        let u = oauth_user(&json!({"sub": "7", "username": "seven", "global_name": ""})).unwrap();
+        assert_eq!((u.id, u.username.as_str(), u.global_name), (UserId(7), "seven", None));
+        assert!(oauth_user(&json!({"username": "nobody"})).is_none());
+        let a = application(
+            &json!({"id": "1000", "name": "watch", "owner": {"id": "3", "username": "o"},
+                                    "redirect_uris": ["https://bot.example/auth/callback"]}),
+        )
+        .unwrap();
+        assert_eq!((a.id, a.owner.map(|o| o.id)), (1000, Some(UserId(3))));
+        assert_eq!(a.redirect_uris, ["https://bot.example/auth/callback"]);
     }
 }

@@ -17,6 +17,7 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use url::Url;
 
+use super::pace::{Pace, backoff};
 use super::wire;
 
 /// Dispatches the bot never reads (fewer frames for Fluxer and for us).
@@ -119,40 +120,6 @@ pub(crate) struct Gateway {
     pub tx: mpsc::UnboundedSender<Command>,
 }
 
-/// Rolling-window pacing.
-struct Pace {
-    sent: VecDeque<Instant>,
-    n: usize,
-    window: Duration,
-}
-
-impl Pace {
-    fn new(n: usize, window: Duration) -> Pace {
-        Pace {
-            sent: VecDeque::new(),
-            n: n.max(1),
-            window,
-        }
-    }
-
-    /// When the next send may go (`None` = now).
-    fn next(&mut self) -> Option<Instant> {
-        let now = Instant::now();
-        while self.sent.front().is_some_and(|t| now.duration_since(*t) >= self.window) {
-            self.sent.pop_front();
-        }
-        if self.sent.len() < self.n {
-            None
-        } else {
-            self.sent.front().map(|t| *t + self.window)
-        }
-    }
-
-    fn record(&mut self) {
-        self.sent.push_back(Instant::now());
-    }
-}
-
 /// What the gateway carries across connections.
 struct Session {
     id: Option<String>,
@@ -226,14 +193,6 @@ async fn offline<F: std::future::Future>(
             },
         }
     }
-}
-
-fn backoff(cfg: &GatewayConfig, failures: u32) -> Duration {
-    let base = cfg
-        .backoff_base
-        .saturating_mul(1 << failures.saturating_sub(1).min(10))
-        .min(cfg.backoff_max);
-    base.mul_f64(0.75 + fastrand::f64() * 0.5)
 }
 
 async fn run(
@@ -321,7 +280,7 @@ async fn run(
         } else {
             failures + 1
         };
-        let mut delay = backoff(&cfg, failures);
+        let mut delay = backoff(cfg.backoff_base, cfg.backoff_max, failures.saturating_sub(1));
         match code {
             Some(4008) => delay = delay.max(cfg.rate_limit_backoff),
             Some(4003 | 4007) => {
@@ -495,9 +454,12 @@ impl Conn<'_> {
                 if session.presence_dirty && paces.op3.next().is_none() {
                     paces.op3.record();
                     session.presence_dirty = false;
+                    // No text is no custom status (`null`), not an empty one.
                     let custom = session
                         .presence
-                        .as_ref()
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|t| !t.is_empty())
                         .map(|t| json!({"text": t.chars().take(128).collect::<String>()}));
                     let v = json!({"op": 3, "d": {"status": "online", "afk": false, "mobile": false, "custom_status": custom}});
                     if !self.send(&v).await {
