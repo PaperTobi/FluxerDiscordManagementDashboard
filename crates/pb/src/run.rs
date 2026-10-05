@@ -229,7 +229,14 @@ async fn run(data: &Path, cfg: Config) -> Result<(), Fail> {
     let state = pb_web_server::WebState::new(web_cfg, parts)
         .await
         .map_err(|e| Fail(Exit::Internal, e.to_string()))?;
-    tracing::info!(addr = %cfg.web.bind, https = cfg.web.tls.is_some(), "web UI listening");
+    // 0.0.0.0 is where it listens, not an address to open.
+    let open = if cfg.web.bind.ip().is_unspecified() {
+        format!("localhost:{}", cfg.web.bind.port())
+    } else {
+        cfg.web.bind.to_string()
+    };
+    let scheme = if cfg.web.tls.is_some() { "https" } else { "http" };
+    tracing::info!(addr = %cfg.web.bind, open = %format!("{scheme}://{open}"), "web UI listening");
     let web = tokio::spawn(pb_web_server::serve(state, listener));
 
     let fatal = tokio::select! {

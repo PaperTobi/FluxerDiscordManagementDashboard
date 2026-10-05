@@ -53,11 +53,12 @@ pub(crate) fn request_origin(headers: &HeaderMap) -> String {
     format!("{scheme}://{host}")
 }
 
-/// The web UI's address: the setting, or the address of this request when none is set.
+/// The web UI's address: the setting, or the address of this request when none is set (or the setting names 0.0.0.0
+/// or [::], which older versions saved when the setup was opened there).
 pub(crate) fn ui_origin(st: &WebState, headers: &HeaderMap) -> String {
     match &st.engine.settings().current().effective(None, None).ui_url.value {
-        Some(o) => o.to_string(),
-        None => request_origin(headers),
+        Some(o) if !o.is_unspecified() => o.to_string(),
+        _ => request_origin(headers),
     }
 }
 

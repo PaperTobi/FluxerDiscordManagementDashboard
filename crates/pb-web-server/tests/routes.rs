@@ -85,6 +85,30 @@ async fn unknown_host_names_are_refused() {
     assert_eq!(evil.status, 421);
     let local = w.send(w.http.get(w.url("/")).header(HOST, "localhost:1"), None).await;
     assert_eq!(local.status, 200);
+    // 0.0.0.0 is where the bot listens: the same page on localhost.
+    let any = w
+        .send(w.http.get(w.url("/setup?x=1")).header(HOST, "0.0.0.0:8800"), None)
+        .await;
+    assert_eq!(any.status, 307);
+    assert_eq!(any.location.as_deref(), Some("http://localhost:8800/setup?x=1"));
+    // A Web UI address of 0.0.0.0 (saved by older versions) is not where logins go.
+    w.engine
+        .settings()
+        .change(pb_store_api::Actor::system(), |t| {
+            Ok(t.set(
+                pb_domain::Scope::Global,
+                pb_settings::SettingKey::UiUrl,
+                serde_json::json!("http://0.0.0.0:8800"),
+                true,
+            )?
+            .into_iter()
+            .collect())
+        })
+        .await
+        .unwrap();
+    let login = w.send(w.http.get(w.url("/login")), None).await;
+    let to = login.location.unwrap_or_default();
+    assert!(!to.contains("0.0.0.0"), "{to}");
     w.stop().await;
 }
 

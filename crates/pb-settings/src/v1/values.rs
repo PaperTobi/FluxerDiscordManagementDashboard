@@ -669,6 +669,14 @@ impl Origin {
     pub fn host(&self) -> Option<&str> {
         self.0.host_str()
     }
+    /// 0.0.0.0 or [::]: where a server listens, not an address a browser can open.
+    pub fn is_unspecified(&self) -> bool {
+        match self.0.host() {
+            Some(url::Host::Ipv4(ip)) => ip.is_unspecified(),
+            Some(url::Host::Ipv6(ip)) => ip.is_unspecified(),
+            _ => false,
+        }
+    }
 }
 
 impl FromStr for Origin {

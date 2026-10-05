@@ -219,7 +219,7 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
             let audio = tree.effective(Some(g), None).modlog_audio.value;
             let mut t = text(loc, "cmd-help", &[("prefix", prefix.into()), ("audio", audio.into())]);
             t.push('\n');
-            t.push_str(&match global.ui_url.value.as_ref() {
+            t.push_str(&match global.ui_url.value.as_ref().filter(|u| !u.is_unspecified()) {
                 Some(url) => text(loc, "cmd-help-ui", &[("url", url.to_string().into())]),
                 None => text(loc, "cmd-help-no-ui", &[]),
             });
