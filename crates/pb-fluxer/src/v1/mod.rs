@@ -169,6 +169,31 @@ impl Fluxer for FluxerClient {
             avatar: s("avatar"),
         })
     }
+
+    async fn client_secret_ok(
+        &self,
+        ep: &Endpoints,
+        client_id: u64,
+        secret: &SecretString,
+    ) -> Result<bool, FluxerError> {
+        let rest = Rest::new(ep.clone(), None)?;
+        let code = format!("pb-check-{}", fastrand::u64(..));
+        match rest
+            .oauth_token(
+                client_id,
+                secret.expose_secret(),
+                &code,
+                "pb-check",
+                "https://pb-check.invalid/",
+            )
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(e) if e.is_code("invalid_client") => Ok(false),
+            Err(e) if e.is_code("invalid_grant") => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 /// A logged-in bot.

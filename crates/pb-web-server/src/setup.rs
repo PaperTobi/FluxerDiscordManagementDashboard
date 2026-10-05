@@ -1,9 +1,14 @@
 //! The setup wizard's steps (the page is `pb_web::pages::setup`). The setup code proves access to the server; it
 //! opens a wizard session (1 h) in which the instance, the bot token and the client secret are set, and ends with an
 //! owner login.
+//!
+//! The wizard opens again after setup when Fluxer no longer accepts the bot token or the client secret (both reset in
+//! Fluxer, say): nobody can log in then, so a new code from the bot's log lets the token and the secret be replaced
+//! (the owner and every setting stay).
 
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use axum::Form;
@@ -16,10 +21,10 @@ use pb_i18n::{Locale, text};
 use pb_settings::{InstanceUrl, SettingKey};
 use pb_store_api::{Actor, Via};
 use pb_web::app::{SetupStep, SetupView};
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 
-use super::auth::{SETUP_COOKIE, code_matches, cookie, https, random_token, set_cookie, sha256_hex};
+use super::auth::{SETUP_COOKIE, code_matches, cookie, https, new_setup_code, random_token, set_cookie, sha256_hex};
 use super::login::{redirect_uri, request_origin};
 use super::server::{WebState, redirect_with};
 use super::util::{locale_of, same_origin};
@@ -85,6 +90,51 @@ impl WebState {
             .map(|_| key)
     }
 
+    /// Fluxer rejects the saved bot token (or there is none), or refused the client secret at the last login.
+    pub(crate) fn credentials_broken(&self) -> bool {
+        matches!(
+            self.engine.connection(),
+            Connection::TokenRejected | Connection::NoToken
+        ) || self.client_rejected.load(Ordering::Relaxed)
+    }
+
+    /// Setup is finished but Fluxer no longer accepts the bot's credentials: the wizard is open again to replace them.
+    pub(crate) fn repairing(&self) -> bool {
+        self.secrets.get().setup.done && self.credentials_broken()
+    }
+
+    /// Makes a code while the wizard is open (setup unfinished, or repairing) and drops it once it is not.
+    pub(crate) async fn refresh_code(&self) {
+        let open = !self.secrets.get().setup.done || self.repairing();
+        let (made, dropped) = {
+            let mut w = self.wizard();
+            match (open, w.code.is_some()) {
+                (true, false) => {
+                    let code = new_setup_code();
+                    w.code = Some(code.clone());
+                    (Some(code), false)
+                }
+                (false, true) => {
+                    w.finish();
+                    (None, true)
+                }
+                _ => (None, false),
+            }
+        };
+        if let Some(code) = made {
+            if let Err(e) = self.secrets.file.write_setup_code(Some(&code)).await {
+                tracing::warn!(error = %e, "the setup code file could not be written");
+            }
+            tracing::warn!(
+                "Fluxer does not accept the bot token or the client secret: open /setup in the web UI and enter the \
+                 code {code} (it is also in {}) to replace them",
+                self.cfg.setup_code_file
+            );
+        } else if dropped && let Err(e) = self.secrets.file.write_setup_code(None).await {
+            tracing::warn!(error = %e, "the setup code file could not be removed");
+        }
+    }
+
     pub(crate) fn setup_view(&self, headers: &HeaderMap, ip: Option<IpAddr>) -> SetupView {
         let secrets = self.secrets.get();
         let key = self.wizard_session(headers);
@@ -98,7 +148,8 @@ impl WebState {
                 w.wait(ip),
             )
         };
-        let reached = if secrets.setup.done {
+        let repair = secrets.setup.done && self.credentials_broken();
+        let reached = if secrets.setup.done && !repair {
             SetupStep::Done
         } else if key.is_none() {
             SetupStep::Code
@@ -111,7 +162,7 @@ impl WebState {
             )
         {
             SetupStep::Token
-        } else if secrets.client_secret.is_none() {
+        } else if secrets.client_secret.is_none() || self.client_rejected.load(Ordering::Relaxed) {
             SetupStep::ClientSecret
         } else {
             SetupStep::Owner
@@ -136,6 +187,7 @@ impl WebState {
             secret_from_env: self.cfg.client_secret_from_env,
             has_token: secrets.bot_token.is_some(),
             has_secret: secrets.client_secret.is_some(),
+            repair,
         }
     }
 }
@@ -173,7 +225,7 @@ pub async fn submit(
         }
         redirect_with("/setup", cookies)
     };
-    if st.secrets.get().setup.done {
+    if st.secrets.get().setup.done && !st.repairing() {
         return redirect_with("/", vec![]);
     }
     if !same_origin(&headers) {
@@ -202,7 +254,8 @@ pub async fn submit(
             sha256_hex(&id),
             WizardSession {
                 started: Instant::now(),
-                instance_ok: false,
+                // Repairing: the instance is known (and can be opened again).
+                instance_ok: st.secrets.get().setup.done,
                 revisit: None,
                 typed_instance: None,
             },
@@ -288,6 +341,14 @@ pub async fn submit(
         "token" => match use_token(&st, value, loc).await {
             Ok(()) => {
                 revisit(None);
+                // Repairing: whether the saved client secret still works decides if that step comes next.
+                if st.secrets.get().setup.done
+                    && let Some(secret) = st.secrets.get().client_secret
+                    && let Ok(ok) = secret_accepted(&st, &secret, loc).await
+                {
+                    st.client_rejected.store(!ok, Ordering::Relaxed);
+                }
+                st.refresh_code().await;
                 back(None, None)
             }
             Err(e) => back(Some((false, e)), None),
@@ -299,12 +360,8 @@ pub async fn submit(
             if st.cfg.client_secret_from_env {
                 return back(Some((false, text(loc, "ui-secret-from-env", &[]))), None);
             }
-            if let Err(e) = st
-                .secrets
-                .update(|s| s.client_secret = Some(SecretString::from(value)))
-                .await
-            {
-                return back(Some((false, pb_web::fmt::store_error(loc, &e))), None);
+            if let Err(e) = use_client_secret(&st, SecretString::from(value), loc).await {
+                return back(Some((false, e)), None);
             }
             // The redirect address shown is the one logins will use: keep it.
             if st
@@ -339,7 +396,8 @@ pub async fn submit(
     }
 }
 
-/// Saves a bot token and logs in with it; the reason (in words) when that fails.
+/// Saves a bot token and logs in with it; the reason (in words) when that fails. A token Fluxer rejects is not kept:
+/// the one before it is put back (a typo does not take the bot offline).
 pub(crate) async fn use_token(st: &WebState, token: String, loc: Locale) -> Result<(), String> {
     let well_formed = token
         .split_once('.')
@@ -347,11 +405,77 @@ pub(crate) async fn use_token(st: &WebState, token: String, loc: Locale) -> Resu
     if !well_formed {
         return Err(text(loc, "setup-token-format", &[]));
     }
+    let before = st.secrets.get().bot_token.filter(|b| b.expose_secret() != token);
     st.secrets
         .update(|s| s.bot_token = Some(SecretString::from(token)))
         .await
         .map_err(|e| pb_web::fmt::store_error(loc, &e))?;
-    log_in(st, loc).await
+    let outcome = log_in(st, loc).await;
+    if outcome.is_err()
+        && st.engine.connection() == Connection::TokenRejected
+        && let Some(before) = before
+    {
+        st.secrets
+            .update(|s| s.bot_token = Some(before))
+            .await
+            .map_err(|e| pb_web::fmt::store_error(loc, &e))?;
+        st.engine.reconnect();
+    }
+    outcome
+}
+
+/// Saves a client secret once Fluxer accepts it; the reason (in words) when it does not, or cannot be asked.
+pub(crate) async fn use_client_secret(st: &WebState, secret: SecretString, loc: Locale) -> Result<(), String> {
+    if !secret_accepted(st, &secret, loc).await? {
+        return Err(text(loc, "setup-secret-rejected", &[]));
+    }
+    st.secrets
+        .update(|s| s.client_secret = Some(secret))
+        .await
+        .map_err(|e| pb_web::fmt::store_error(loc, &e))?;
+    st.client_rejected.store(false, Ordering::Relaxed);
+    st.refresh_code().await;
+    Ok(())
+}
+
+/// Whether Fluxer accepts `secret` for the bot's application (the one the bot token names).
+async fn secret_accepted(st: &WebState, secret: &SecretString, loc: Locale) -> Result<bool, String> {
+    let Some(client_id) = st.secrets.client_id() else {
+        return Err(text(
+            loc,
+            "login-not-ready",
+            &[("reason", text(loc, "login-no-token", &[]).into())],
+        ));
+    };
+    let instance = st
+        .engine
+        .settings()
+        .current()
+        .effective(None, None)
+        .instance
+        .value
+        .clone();
+    let ep = st
+        .engine
+        .discover(instance.url())
+        .await
+        .map_err(|e| pb_web::fmt::engine_error(loc, &e))?;
+    st.engine
+        .client_secret_ok(&ep, client_id, secret)
+        .await
+        .map_err(|e| text(loc, "login-unreachable", &[("error", e.to_string().into())]))
+}
+
+/// Keeps the setup code in step with the bot's credentials: one is made (and logged) as soon as Fluxer rejects the
+/// bot token, and dropped once the credentials work again.
+pub(crate) async fn watch_credentials(st: WebState) {
+    let mut connection = st.engine.watch_connection();
+    loop {
+        st.refresh_code().await;
+        if connection.changed().await.is_none() {
+            return;
+        }
+    }
 }
 
 /// Connects to Fluxer again and waits for the outcome; the reason (in words) when it fails.

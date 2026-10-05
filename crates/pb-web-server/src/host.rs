@@ -44,6 +44,10 @@ impl Host for PageHost {
         (self.st.cfg.token_from_env, self.st.cfg.client_secret_from_env)
     }
 
+    fn repairing(&self) -> bool {
+        self.st.repairing()
+    }
+
     fn setup(&self, parts: &Parts) -> SetupView {
         let ip = parts
             .extensions

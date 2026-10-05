@@ -85,6 +85,16 @@ impl WebState {
         Ok(s)
     }
 
+    /// The owner, for replacing the bot token or client secret: with a recent login, unless Fluxer rejects the saved
+    /// ones (then nobody can log in again, so the login the owner has must do).
+    pub(crate) fn owner_for_credentials(&self, headers: &HeaderMap, f: &Fields) -> Result<Sender, Box<Response>> {
+        if self.credentials_broken() {
+            self.owner(headers, f)
+        } else {
+            self.fresh_owner(headers, f)
+        }
+    }
+
     /// Checks a form's login, token and origin; on failure the response to send instead.
     pub(crate) fn sender(&self, headers: &HeaderMap, f: &Fields) -> Result<Sender, Box<Response>> {
         let locale = locale_of(headers);

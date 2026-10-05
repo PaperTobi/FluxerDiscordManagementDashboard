@@ -130,11 +130,12 @@ fn backoff(attempt: u32) -> Duration {
 }
 
 pub(crate) fn error(status: u16, body: &Value) -> FluxerError {
-    let code = body.get("code").and_then(Value::as_str).map(str::to_owned);
-    let message = body
-        .get("message")
-        .and_then(Value::as_str)
-        .map_or_else(|| body.to_string(), str::to_owned);
+    // API errors are `{code, message}`; OAuth2 errors are `{error, error_description}`.
+    let text = |k: &str| body.get(k).and_then(Value::as_str).map(str::to_owned);
+    let code = text("code").or_else(|| text("error"));
+    let message = text("message")
+        .or_else(|| text("error_description"))
+        .unwrap_or_else(|| body.to_string());
     let kind = match status {
         401 => ErrorKind::Unauthorized,
         403 => ErrorKind::Forbidden,

@@ -88,6 +88,10 @@ OR assigned roles, ADMINISTRATOR = all; channel overwrites: @everyone, then the 
 `GET /v1/oauth2/authorize` (PKCE S256), `POST /v1/oauth2/token` (form; `authorization_code`, `refresh_token`),
 `GET /v1/oauth2/userinfo` (Bearer, scope `identify`) → `{id, username, global_name, avatar, …}`,
 `POST /v1/oauth2/token/revoke`. `redirect_uri` must match a registered one exactly; codes live 10 min.
+Errors are `400 {error, error_description}`. The token endpoint checks the client before the grant
+(`OAuth2Service.tokenExchange`): a wrong or reset client secret is `invalid_client` ("Invalid client_secret"), whatever
+the code; so exchanging a code that does not exist tells whether a secret is right (`invalid_grant` then). There is no
+client-credentials grant.
 The API's `GET /v1/oauth2/authorize` redirects the browser to the web app's consent page (`OAuth2Controller.ts`), so the
 API endpoint alone is enough to start a login. A bot token is `<application id>.<secret>` (`BotAuthService.parseBotToken`);
 the application id is the OAuth2 client id, so a web login needs no gateway connection.

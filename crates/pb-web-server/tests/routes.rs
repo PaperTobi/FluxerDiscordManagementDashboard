@@ -750,6 +750,7 @@ async fn the_setup_wizard_from_code_to_owner() {
         "{}",
         page.body
     );
+    // A mistyped secret: Fluxer is asked before it is saved.
     let r = w
         .post(
             "/setup",
@@ -757,13 +758,9 @@ async fn the_setup_wizard_from_code_to_owner() {
             &[("step", "secret"), ("csrf", &csrf), ("value", "a-mistyped-secret")],
         )
         .await;
-    assert!(r.cookie("pb_notice").is_none(), "{r:?}");
-    // The owner logs in; with a mistyped secret Fluxer refuses, and the secret can be entered again.
-    let page = w.get("/setup", Some(&setup)).await;
-    assert!(page.body.contains("The bot is online as watchbot"), "{}", page.body);
-    assert!(w.login_with(OWNER, Some(&setup)).await.is_err());
-    let page = w.get("/setup", Some(&setup)).await;
-    assert!(page.body.contains("Enter the client secret again"), "{}", page.body);
+    let n = r.cookie("pb_notice").expect("a wrong secret is refused");
+    let page = w.get("/setup", Some(&format!("{setup}; pb_notice={n}"))).await.body;
+    assert!(page.contains("does not accept this client secret"), "{page}");
     let secret = w.fake.config().client_secret.clone();
     let r = w
         .post(
@@ -773,6 +770,8 @@ async fn the_setup_wizard_from_code_to_owner() {
         )
         .await;
     assert!(r.cookie("pb_notice").is_none(), "{r:?}");
+    let page = w.get("/setup", Some(&setup)).await;
+    assert!(page.body.contains("The bot is online as watchbot"), "{}", page.body);
     // A done step can be opened again: the client secret, kept as it is …
     let step = |name: &'static str, value: &'static str| [("step", name), ("csrf", csrf.as_str()), ("value", value)];
     w.post("/setup", Some(&setup), &step("goto", "secret")).await;
@@ -799,6 +798,83 @@ async fn the_setup_wizard_from_code_to_owner() {
     assert!(w.get("/", Some(&owner)).await.body.contains("class=\"sidebar\""));
     assert!(!w.dir.path().join("setup-code").exists());
     assert!(w.get("/setup", None).await.body.contains("Setup is finished"));
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_reset_token_and_client_secret_are_replaced_with_a_code_from_the_log() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    assert!(!w.dir.path().join("setup-code").exists());
+    // Both are reset in Fluxer: the bot is thrown out, and nobody can log in any more.
+    w.fake.reset_credentials("1000.new-secret", "new-client-secret");
+    let code_file = w.dir.path().join("setup-code");
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(20);
+    while !(w.engine.connection() == pb_engine::Connection::TokenRejected && code_file.exists()) {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the rejected token is noticed and a code is made"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let refused = w.login(ADA).await.unwrap_err();
+    assert!(refused.contains("refused the bot's client secret"), "{refused}");
+    assert!(w.get("/", None).await.body.contains("href=\"/setup\""));
+    // The owner still logged in may replace them on the System page without logging in again (it could not); a
+    // secret Fluxer does not take is not saved.
+    let csrf = w.page_csrf(&owner).await;
+    let r = w
+        .post(
+            "/system/client-secret",
+            Some(&owner),
+            &[("csrf", &csrf), ("value", "nope"), ("back", "/system")],
+        )
+        .await;
+    let n = r.cookie("pb_notice").expect("told");
+    let page = w.get("/system", Some(&format!("{owner}; pb_notice={n}"))).await.body;
+    assert!(page.contains("does not accept this client secret"), "{page}");
+
+    // Whoever has the server's log: the code opens the wizard at the token.
+    let code = std::fs::read_to_string(&code_file).unwrap();
+    let ok = w
+        .post("/setup", None, &[("step", "code"), ("value", code.trim())])
+        .await;
+    let setup = format!("pb_setup={}", ok.cookie("pb_setup").expect("a wizard session"));
+    let page = w.get("/setup", Some(&setup)).await.body;
+    assert!(page.contains("no longer accepts the bot token"), "{page}");
+    assert!(page.contains("Bot token"), "{page}");
+    assert!(!page.contains("Owner login"), "{page}");
+    let csrf = Web::csrf(&page);
+    let step = |name: &'static str, value: &str| {
+        let value = value.to_owned();
+        let (setup, csrf) = (setup.clone(), csrf.clone());
+        let w = &w;
+        async move {
+            w.post(
+                "/setup",
+                Some(&setup),
+                &[("step", name), ("csrf", csrf.as_str()), ("value", value.as_str())],
+            )
+            .await
+        }
+    };
+    // A wrong token is not kept; the new one connects, and the old secret is found refused.
+    assert!(step("token", "1000.wrong").await.cookie("pb_notice").is_some());
+    let saved = std::fs::read_to_string(w.dir.path().join("secrets.toml")).unwrap();
+    assert!(
+        saved.contains("1000.secret") && !saved.contains("1000.wrong"),
+        "{saved}"
+    );
+    assert!(step("token", "1000.new-secret").await.cookie("pb_notice").is_none());
+    let page = w.get("/setup", Some(&setup)).await.body;
+    assert!(page.contains("Client secret"), "{page}");
+    assert!(step("secret", "client-secret").await.cookie("pb_notice").is_some());
+    assert!(step("secret", "new-client-secret").await.cookie("pb_notice").is_none());
+    // Repaired: the code is gone, the owner is who it was and logs in again.
+    assert!(!code_file.exists());
+    assert!(w.get("/setup", None).await.body.contains("Setup is finished"));
+    let owner = w.login(OWNER).await.unwrap();
+    assert!(w.get("/system", Some(&owner)).await.body.contains("class=\"sidebar\""));
     w.stop().await;
 }
 

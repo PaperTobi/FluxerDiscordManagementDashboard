@@ -52,6 +52,9 @@ pub fn LoginNeeded() -> impl IntoView {
             <h1>"Profanity Watch"</h1>
             <NoticeBar/>
             <a class="button primary" href=crate::app::login_href()>{t("ui-log-in")}</a>
+            {crate::app::app().host.repairing().then(|| view! {
+                <p class="muted">{t("login-repair")} " " <a href="/setup">{t("login-repair-link")}</a></p>
+            })}
             <crate::app::SourceLink/>
         </main>
     }

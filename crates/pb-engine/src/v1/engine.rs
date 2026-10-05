@@ -327,6 +327,11 @@ impl Engine {
         attempt
     }
 
+    /// Follows the connection state.
+    pub fn watch_connection(&self) -> ConnectionWatch {
+        ConnectionWatch(self.core.connection.subscribe())
+    }
+
     /// Waits until login attempt `attempt` (from [`Engine::reconnect`]) has an outcome or `timeout` passed; returns the
     /// connection state then.
     pub async fn login_outcome(&self, attempt: u64, timeout: Duration) -> Connection {
@@ -494,6 +499,16 @@ impl Engine {
         verifier: &str,
     ) -> Result<pb_fluxer_api::OAuthUser, EngineError> {
         Ok(self.core.deps.fluxer.oauth_user(ep, client, code, verifier).await?)
+    }
+
+    /// Whether Fluxer accepts `secret` as the client secret of application `client_id`.
+    pub async fn client_secret_ok(
+        &self,
+        ep: &pb_fluxer_api::Endpoints,
+        client_id: u64,
+        secret: &secrecy::SecretString,
+    ) -> Result<bool, EngineError> {
+        Ok(self.core.deps.fluxer.client_secret_ok(ep, client_id, secret).await?)
     }
 
     /// Whether `user` is the bot owner (the application's owner or one of the extra bot owners).
@@ -970,5 +985,17 @@ async fn follow_threads(core: Arc<Core>, life: Life) {
             tracing::warn!(error = %e, "text-to-speech could not restart with {tts} threads");
         }
         applied = (cpu, tts);
+    }
+}
+
+/// The connection state as it changes (from [`Engine::watch_connection`]).
+#[derive(Debug)]
+pub struct ConnectionWatch(watch::Receiver<super::core::Login>);
+
+impl ConnectionWatch {
+    /// Waits for the next change; `None` once the engine is gone.
+    pub async fn changed(&mut self) -> Option<Connection> {
+        self.0.changed().await.ok()?;
+        Some(self.0.borrow_and_update().state.clone())
     }
 }

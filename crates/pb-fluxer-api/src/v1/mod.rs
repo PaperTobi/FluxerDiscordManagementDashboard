@@ -42,7 +42,8 @@ pub trait Fluxer: Send + Sync + 'static {
         token: &SecretString,
     ) -> Result<(Arc<dyn FluxerCtl>, mpsc::UnboundedReceiver<GatewayEvent>), LoginError>;
 
-    /// Finishes a web login: exchanges the code and reads who logged in.
+    /// Finishes a web login: exchanges the code and reads who logged in. A client secret Fluxer does not accept fails
+    /// with the code `invalid_client`.
     async fn oauth_user(
         &self,
         ep: &Endpoints,
@@ -50,6 +51,16 @@ pub trait Fluxer: Send + Sync + 'static {
         code: &str,
         verifier: &str,
     ) -> Result<OAuthUser, FluxerError>;
+
+    /// Whether Fluxer accepts `secret` as the client secret of application `client_id`. (Fluxer checks the client
+    /// before the code, so exchanging a code that does not exist answers `invalid_client` for a wrong secret and
+    /// `invalid_grant` for a right one.)
+    async fn client_secret_ok(
+        &self,
+        ep: &Endpoints,
+        client_id: u64,
+        secret: &SecretString,
+    ) -> Result<bool, FluxerError>;
 }
 
 /// A logged-in bot.

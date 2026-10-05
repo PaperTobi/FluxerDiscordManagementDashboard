@@ -1,5 +1,6 @@
 //! `/setup`: the first-start wizard (setup code → instance → bot token → client secret → owner login). Each step is a
-//! plain form; the server keeps the progress.
+//! plain form; the server keeps the progress. It opens again when Fluxer no longer accepts the bot's credentials
+//! (without the owner login: the owner stays).
 
 use leptos::prelude::*;
 use pb_i18n::text;
@@ -152,13 +153,14 @@ pub fn SetupPage() -> impl IntoView {
         }
         .into_any(),
     };
-    let (current, reached, csrf) = (s.step, s.reached, s.csrf.clone());
+    let (current, reached, csrf, repair) = (s.step, s.reached, s.csrf.clone(), s.repair);
     view! {
         <main class="center setup">
             <h1>"Profanity Watch"</h1>
             <ol class="steps">
                 {STEPS
                     .iter()
+                    .filter(|(st, _, _)| !(repair && *st == SetupStep::Owner))
                     .map(|(st, id, name)| {
                         // A done step (before the furthest reached) can be opened again.
                         let open = name.filter(|_| *st < reached && *st != current && reached != SetupStep::Done);
@@ -182,6 +184,7 @@ pub fn SetupPage() -> impl IntoView {
                     .collect_view()}
             </ol>
             <NoticeBar/>
+            {repair.then(|| view! { <p>{tt("setup-repair-help")}</p> })}
             {body}
             {nav}
         </main>

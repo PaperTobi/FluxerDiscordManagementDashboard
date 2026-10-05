@@ -1,5 +1,5 @@
-//! The System page's forms (bot owners): replacing the bot token or client secret (with a recent login), reconnecting,
-//! reading the settings files again.
+//! The System page's forms (bot owners): replacing the bot token or client secret (with a recent login, or any login
+//! while Fluxer rejects the saved ones), reconnecting, reading the settings files again.
 
 use axum::Form;
 use axum::extract::State;
@@ -13,7 +13,7 @@ use super::server::WebState;
 
 /// `POST /system/token`
 pub async fn token(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
-    let s = match st.fresh_owner(&headers, &f) {
+    let s = match st.owner_for_credentials(&headers, &f) {
         Ok(s) => s,
         Err(r) => return *r,
     };
@@ -30,7 +30,7 @@ pub async fn token(State(st): State<WebState>, headers: HeaderMap, Form(f): Form
 
 /// `POST /system/client-secret`
 pub async fn client_secret(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
-    let s = match st.fresh_owner(&headers, &f) {
+    let s = match st.owner_for_credentials(&headers, &f) {
         Ok(s) => s,
         Err(r) => return *r,
     };
@@ -41,13 +41,9 @@ pub async fn client_secret(State(st): State<WebState>, headers: HeaderMap, Form(
     if value.is_empty() {
         return st.done(&s, &f, false, text(s.locale, "form-expired", &[]));
     }
-    match st
-        .secrets
-        .update(|x| x.client_secret = Some(SecretString::from(value)))
-        .await
-    {
+    match super::setup::use_client_secret(&st, SecretString::from(value), s.locale).await {
         Ok(()) => st.done(&s, &f, true, text(s.locale, "ui-saved", &[])),
-        Err(e) => st.done(&s, &f, false, pb_web::fmt::store_error(s.locale, &e)),
+        Err(e) => st.done(&s, &f, false, e),
     }
 }
 

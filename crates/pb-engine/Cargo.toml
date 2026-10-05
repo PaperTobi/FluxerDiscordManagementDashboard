@@ -27,6 +27,7 @@ pb-settings.workspace = true
 pb-store-api.workspace = true
 pb-voice-api.workspace = true
 pb-voicelines.workspace = true
+secrecy.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
@@ -40,7 +41,6 @@ pb-fluxer.workspace = true
 pb-fluxer-fake.workspace = true
 pb-store.workspace = true
 pb-testkit = { workspace = true, features = ["fakemodels", "memvoice"] }
-secrecy.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }
 tracing-subscriber.workspace = true

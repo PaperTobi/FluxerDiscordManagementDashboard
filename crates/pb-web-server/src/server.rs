@@ -113,6 +113,8 @@ pub struct WebState {
     pub notices: Notices,
     pub(crate) secrets: Arc<SecretsCache>,
     pub(crate) wizard: Arc<Mutex<Wizard>>,
+    /// Fluxer refused the saved client secret at the last login (it was reset, or is wrong).
+    pub(crate) client_rejected: Arc<std::sync::atomic::AtomicBool>,
     pub(crate) logins: Arc<Mutex<HashMap<String, PendingLogin>>>,
     pub cfg: Arc<WebConfig>,
     pub version: String,
@@ -182,6 +184,7 @@ impl WebState {
             notices: Notices::default(),
             secrets,
             wizard: Arc::new(Mutex::new(wizard)),
+            client_rejected: Arc::default(),
             logins: Arc::new(Mutex::new(HashMap::new())),
             cfg: Arc::new(cfg),
             version: parts.version,
@@ -333,6 +336,7 @@ pub fn router(st: WebState) -> Router {
 /// expired sessions and the sessions file.
 pub async fn serve(st: WebState, listener: tokio::net::TcpListener) -> std::io::Result<()> {
     let upkeep = tokio::spawn(upkeep(st.clone()));
+    let repair = tokio::spawn(super::setup::watch_credentials(st.clone()));
     let mut stop = st.shutdown.clone();
     let app = router(st.clone());
     let stopped = async move {
@@ -360,6 +364,7 @@ pub async fn serve(st: WebState, listener: tokio::net::TcpListener) -> std::io::
         }
     };
     upkeep.abort();
+    repair.abort();
     st.sessions.flush().await;
     res
 }

@@ -216,7 +216,22 @@ pub async fn callback(State(st): State<WebState>, headers: HeaderMap, Query(q): 
         redirect_uri: p.redirect_uri.clone(),
     };
     let user = match st.engine.oauth_user(&p.ep, &client, &code, &p.verifier).await {
-        Ok(u) => u,
+        Ok(u) => {
+            st.client_rejected.store(false, std::sync::atomic::Ordering::Relaxed);
+            u
+        }
+        // The client secret was reset in Fluxer (or is wrong): nobody can log in until it is replaced, so the wizard
+        // opens again with a code from the bot's log.
+        Err(pb_engine::EngineError::Fluxer(e)) if e.is_code("invalid_client") => {
+            st.client_rejected.store(true, std::sync::atomic::Ordering::Relaxed);
+            st.refresh_code().await;
+            let notice = text(
+                loc,
+                "login-client-rejected",
+                &[("file", st.cfg.setup_code_file.clone().into())],
+            );
+            return redirect_with("/setup", vec![clear, st.notices.put(false, notice, secure)]);
+        }
         Err(e) => return fail(text(loc, "login-failed", &[("error", e.to_string().into())])),
     };
     let name = user

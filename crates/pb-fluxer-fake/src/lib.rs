@@ -163,6 +163,9 @@ struct World {
     said: Vec<u64>,
     /// The application's registered OAuth2 redirect addresses.
     redirect_uris: Vec<String>,
+    /// The bot token and client secret accepted now (from the config; reset with `reset_credentials`).
+    token: String,
+    client_secret: String,
 }
 
 struct Shared {
@@ -323,7 +326,8 @@ fn err(status: StatusCode, code: &str, message: &str) -> Response {
 }
 
 fn authorized(shared: &Shared, headers: &HeaderMap) -> bool {
-    headers.get("authorization").and_then(|v| v.to_str().ok()) == Some(&format!("Bot {}", shared.cfg.token))
+    let want = format!("Bot {}", shared.world().token);
+    headers.get("authorization").and_then(|v| v.to_str().ok()) == Some(want.as_str())
 }
 
 /// Answers 429 when a rate limit was injected for this route.
@@ -676,9 +680,14 @@ async fn oauth_authorize(
 async fn oauth_token(State(sh): State<Arc<Shared>>, axum::Form(form): axum::Form<HashMap<String, String>>) -> Response {
     let invalid = |error: &str| (StatusCode::BAD_REQUEST, axum::Json(json!({"error": error}))).into_response();
     if form.get("client_id") != Some(&sh.cfg.app_id.to_string())
-        || form.get("client_secret") != Some(&sh.cfg.client_secret)
+        || form.get("client_secret") != Some(&sh.world().client_secret)
     {
-        return (StatusCode::UNAUTHORIZED, axum::Json(json!({"error": "invalid_client"}))).into_response();
+        // Fluxer answers a wrong client with 400 (`InvalidClientSecretError`), like every OAuth2 error.
+        return (
+            StatusCode::BAD_REQUEST,
+            axum::Json(json!({"error": "invalid_client", "error_description": "Invalid client_secret"})),
+        )
+            .into_response();
     }
     let Some(code) = form.get("code").and_then(|c| sh.world().oauth_codes.remove(c)) else {
         return invalid("invalid_grant");
@@ -782,7 +791,7 @@ async fn socket_task(sh: Arc<Shared>, socket: WebSocket, version_ok: bool) {
                 let _ = tx.send(Out::Frame(json!({"op": 11})));
             }
             Some(2) => {
-                if d.get("token").and_then(Value::as_str) != Some(sh.cfg.token.as_str()) {
+                if d.get("token").and_then(Value::as_str) != Some(sh.world().token.as_str()) {
                     let _ = tx.send(Out::Close(4004));
                     break;
                 }
@@ -840,7 +849,7 @@ async fn socket_task(sh: Arc<Shared>, socket: WebSocket, version_ok: bool) {
                     .to_owned();
                 let seq = d.get("seq").and_then(Value::as_u64).unwrap_or(0);
                 let mut w = sh.world();
-                let token_ok = d.get("token").and_then(Value::as_str) == Some(sh.cfg.token.as_str());
+                let token_ok = d.get("token").and_then(Value::as_str) == Some(w.token.as_str());
                 // As Fluxer: a wrong token closes 4004; an unknown session is op 9; RESUMED carries the current sequence.
                 if !token_ok {
                     let _ = tx.send(Out::Close(4004));
@@ -989,6 +998,8 @@ impl FakeFluxer {
             cfg: cfg.clone(),
             world: Mutex::new(World {
                 next_id: 9_000_000,
+                token: cfg.token.clone(),
+                client_secret: cfg.client_secret.clone(),
                 ..World::default()
             }),
             base: format!("http://{shown}"),
@@ -1165,6 +1176,19 @@ impl FakeFluxer {
             if let Some(tx) = sess.tx.take() {
                 let _ = tx.send(Out::Close(code));
                 sess.detached = Some(Instant::now());
+            }
+        }
+    }
+
+    /// "Reset token" and "Reset secret" in Fluxer's application settings: only the new ones work from now on, and the
+    /// bot's sessions end (their sockets close with 4004, authentication failed).
+    pub fn reset_credentials(&self, token: &str, client_secret: &str) {
+        let mut w = self.world();
+        w.token = token.to_owned();
+        w.client_secret = client_secret.to_owned();
+        for (_, sess) in w.sessions.drain() {
+            if let Some(tx) = sess.tx {
+                let _ = tx.send(Out::Close(4004));
             }
         }
     }

@@ -40,6 +40,8 @@ pub trait Host: Send + Sync {
     fn take_notice(&self, parts: &http::request::Parts) -> Option<Notice>;
     /// The setup wizard as this browser sees it.
     fn setup(&self, parts: &http::request::Parts) -> SetupView;
+    /// Fluxer no longer accepts the bot token or client secret (the setup page replaces them).
+    fn repairing(&self) -> bool;
     /// The link that invites the bot to a community with these permissions (`None` until the bot token is known and
     /// the bot has found its instance).
     fn invite_url(&self, permissions: u64) -> Option<String>;
@@ -131,6 +133,8 @@ pub struct SetupView {
     pub has_token: bool,
     /// A client secret is saved.
     pub has_secret: bool,
+    /// Setup is finished, but Fluxer no longer accepts the bot token or client secret: they are replaced here.
+    pub repair: bool,
 }
 
 /// The person looking at the page.

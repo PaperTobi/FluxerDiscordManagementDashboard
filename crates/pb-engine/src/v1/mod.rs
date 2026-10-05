@@ -29,7 +29,7 @@ mod voices;
 pub use cells::Cells;
 pub use core::Connection;
 pub use deps::{Clock, Deps, ShippedClip, SystemClock};
-pub use engine::Engine;
+pub use engine::{ConnectionWatch, Engine};
 pub use error::{EngineError, RenderError, VoiceError};
 pub use guilds::{GuildInfo, Guilds, Person};
 pub use health::{ActorHealth, ActorState, EngineHealth, FatalError};
