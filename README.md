@@ -236,6 +236,13 @@ level = "info"            # RUST_LOG wins when set
 threshold = 0.6
 ```
 
+### GPU
+
+With `device = "auto"` the classifier runs on a GPU through Vulkan when it finds one, else on the CPU (the log says
+which). Natively that needs the Vulkan driver of the GPU (Mesa's RADV for AMD, ANV for Intel, or NVIDIA's). The image
+has Mesa's drivers; give the container the GPU with the drop-in shown in `deploy/quadlet/profanity-watch.container`
+(or `--device /dev/dri --group-add keep-groups` with `podman run`).
+
 ## HTTPS
 
 Browsers record from the microphone only on secure pages, and logins are safer over HTTPS. Give the bot a certificate

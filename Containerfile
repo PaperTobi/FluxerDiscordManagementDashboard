@@ -58,9 +58,14 @@ LABEL org.opencontainers.image.title="profanity-watch" \
       org.opencontainers.image.description="Follows chosen Fluxer users into voice, scores what they say with the Roblox voice-safety model and warns them" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later; models: Roblox model licence (classifier), MIT (Silero VAD), voices: see /opt/pb/weights"
 
-# ca-certificates: the system's trusted roots for TLS (Mozilla's are built in as well)
-RUN apt-get -o APT::Sandbox::User=$APT_SANDBOX_USER update \
+# ca-certificates: the system's trusted roots for TLS (Mozilla's are built in as well). The Vulkan loader and Mesa's
+# drivers let the classifier use a GPU passed in (see deploy/quadlet); Mesa from bookworm-backports (25.x) knows
+# current GPUs, such as AMD's RDNA 4.
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main" > /etc/apt/sources.list.d/backports.list \
+ && apt-get -o APT::Sandbox::User=$APT_SANDBOX_USER update \
  && apt-get -o APT::Sandbox::User=$APT_SANDBOX_USER install -y --no-install-recommends ca-certificates \
+ && apt-get -o APT::Sandbox::User=$APT_SANDBOX_USER install -y --no-install-recommends -t bookworm-backports \
+      libvulkan1 mesa-vulkan-drivers \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --system --gid 10001 pb \
  && useradd --system --uid 10001 --gid 10001 --home-dir /data --no-create-home --shell /usr/sbin/nologin pb \

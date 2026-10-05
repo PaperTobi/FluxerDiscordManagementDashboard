@@ -27,6 +27,12 @@ ContainerName=profanity-watch
 #   Secret=profanity-watch-tls-key,type=mount,target=/run/secrets/tls-key,uid=10001,mode=0400
 #   Environment=PB__WEB__TLS__CERT=/run/secrets/tls-cert
 #   Environment=PB__WEB__TLS__KEY=/run/secrets/tls-key
+# The GPU (optional: the classifier uses it when it can, the CPU otherwise), in a drop-in
+# profanity-watch.container.d/gpu.conf:
+#   [Container]
+#   AddDevice=/dev/dri
+#   # rootless: keep your user's render/video groups (rootful: GroupAdd=<GID of the host's render group>)
+#   GroupAdd=keep-groups
 # :U hands the volume to the image's user (uid 10001 inside the container) on every start, rootless or not
 Volume=profanity-watch-data.volume:/data:U
 # the web UI on the LAN; the bot itself only makes outgoing connections (including UDP for voice)
