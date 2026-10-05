@@ -482,14 +482,14 @@ settings! {
         paused(Paused): bool = false; ALL_SCOPES, Admins, Live;
         guild_allowlist(GuildAllowlist): Vec<GuildId> = Vec::new(); G, Owner, Live;
         tracked_everywhere(TrackedEverywhere): Vec<UserId> = Vec::new(); G, Owner, Live;
-        allow_e2ee_downgrade(AllowE2eeDowngrade): bool = false; GS, Admins, Live;
+        allow_e2ee_downgrade(AllowE2eeDowngrade): bool = true; GS, Admins, Live;
         join_settle(JoinSettle): Dur = Dur::from_millis(1500); G, Owner, Live;
         leave_grace(LeaveGrace): Dur = Dur::from_millis(5000); G, Owner, Live;
     }
     Detection {
-        threshold(Threshold): Probability = Probability::new(0.5).unwrap_or_else(|_| unreachable!()); ALL_SCOPES, Admins, Live;
+        threshold(Threshold): Probability = Probability::new(0.3).unwrap_or_else(|_| unreachable!()); ALL_SCOPES, Admins, Live;
         strikes(Strikes): Count = Count::new(1).unwrap_or_else(|_| unreachable!()); ALL_SCOPES, Admins, Live;
-        strike_window(StrikeWindow): Limit<PosDur> = Limit::Value(PosDur::from_millis(20_000)); ALL_SCOPES, Admins, Live;
+        strike_window(StrikeWindow): Limit<PosDur> = Limit::Unlimited; ALL_SCOPES, Admins, Live;
         end_silence(EndSilence): FrameDur = FrameDur::from_millis(600); ALL_SCOPES, Admins, Live;
         max_sentence(MaxSentence): PosDur = PosDur::from_millis(10_000); ALL_SCOPES, Admins, Live;
         min_voiced(MinVoiced): FrameDur = FrameDur::from_millis(300); ALL_SCOPES, Admins, Live;
@@ -497,17 +497,17 @@ settings! {
     }
     Warning {
         observe_only(ObserveOnly): bool = false; ALL_SCOPES, Admins, Live;
-        audience(Audience): AudienceChoice = AudienceChoice::Tracked; ALL_SCOPES, Admins, Live;
+        audience(Audience): AudienceChoice = AudienceChoice::Channel; ALL_SCOPES, Admins, Live;
         volume_db(VolumeDb): Finite = Finite::new(0.0).unwrap_or_else(|_| unreachable!()); ALL_SCOPES, Admins, Live;
-        voice_language(VoiceLanguage): VoiceLang = VoiceLang::Fixed(lang("en")); ALL_SCOPES, Admins, Live;
+        voice_language(VoiceLanguage): VoiceLang = VoiceLang::Fixed(lang("de")); ALL_SCOPES, Admins, Live;
         fallback_languages(FallbackLanguages): Vec<Lang> = vec![lang("en")]; ALL_SCOPES, Admins, Live;
-        tts_voices(TtsVoices): BTreeMap<Lang, String> = BTreeMap::new(); ALL_SCOPES, Admins, Live;
+        tts_voices(TtsVoices): BTreeMap<Lang, String> = BTreeMap::from([(lang("de"), "de_DE-thorsten-medium".to_owned())]); ALL_SCOPES, Admins, Live;
         line_voices(LineVoices): BTreeMap<LineKind, String> = BTreeMap::new(); ALL_SCOPES, Admins, Live;
-        speech_rate(SpeechRate): Rate = Rate::new(1.0).unwrap_or_else(|_| unreachable!()); ALL_SCOPES, Admins, Live;
+        speech_rate(SpeechRate): Rate = Rate::new(1.1).unwrap_or_else(|_| unreachable!()); ALL_SCOPES, Admins, Live;
         no_speak_policy(NoSpeakPolicy): NoSpeakPolicy = NoSpeakPolicy::Text; ALL_SCOPES, Admins, Live;
         strike_notice(StrikeNotice): bool = false; ALL_SCOPES, Admins, Live;
-        announce_actions(AnnounceActions): bool = false; ALL_SCOPES, Admins, Live;
-        greet_enabled(GreetEnabled): bool = false; ALL_SCOPES, Admins, Live;
+        announce_actions(AnnounceActions): bool = true; ALL_SCOPES, Admins, Live;
+        greet_enabled(GreetEnabled): bool = true; ALL_SCOPES, Admins, Live;
     }
     Escalation {
         violation_window(ViolationWindow): Limit<PosDur> = Limit::Value(PosDur::from_millis(3_600_000)); ALL_SCOPES, Admins, Live;
@@ -516,8 +516,8 @@ settings! {
     }
     Reporting {
         modlog_channel(ModlogChannel): Option<ChannelId> = None; S, Admins, Live;
-        modlog_audio(ModlogAudio): bool = false; GS, Owner, Live;
-        owner_dm_audio(OwnerDmAudio): bool = true; ALL_SCOPES, Owner, Live;
+        modlog_audio(ModlogAudio): bool = true; GS, Owner, Live;
+        owner_dm_audio(OwnerDmAudio): bool = false; ALL_SCOPES, Owner, Live;
         digest(Digest): Digest = Digest::Off; G, Owner, Live;
         digest_time(DigestTime): TimeOfDay = TimeOfDay { hour: 9, minute: 0 }; G, Owner, Live;
         digest_weekday(DigestWeekday): Weekday = Weekday::Monday; G, Owner, Live;
@@ -576,9 +576,9 @@ pub struct ResolvedLabel {
     pub threshold: Resolved<f64>,
 }
 
-/// The detection types that are on unless a setting says otherwise: profanity only.
-fn enabled_by_default(label: Label) -> bool {
-    label == Label::Profanity
+/// The detection types that are on unless a setting says otherwise: all of them.
+fn enabled_by_default(_label: Label) -> bool {
+    true
 }
 
 fn resolve_labels(order: &[(Source, &Layer)]) -> BTreeMap<Label, ResolvedLabel> {
@@ -737,7 +737,7 @@ mod tests {
             .set_json(SettingKey::LabelThreshold(Label::Profanity), serde_json::json!(0.9))
             .expect("set");
         person
-            .set_json(SettingKey::Threshold, serde_json::json!(0.3))
+            .set_json(SettingKey::Threshold, serde_json::json!(0.25))
             .expect("set");
         let e = resolve(&Layers {
             person: Some(&person),
@@ -746,7 +746,7 @@ mod tests {
         });
         assert_eq!(
             e.threshold_for(Label::Profanity),
-            0.3,
+            0.25,
             "the person's general threshold is more specific"
         );
         let e = resolve(&Layers {
@@ -754,8 +754,8 @@ mod tests {
             ..Layers::default()
         });
         assert_eq!(e.threshold_for(Label::Profanity), 0.9);
-        assert_eq!(e.threshold_for(Label::Harassment), 0.5);
-        assert_eq!(e.enabled_labels(), vec![Label::Profanity]);
+        assert_eq!(e.threshold_for(Label::Harassment), 0.3);
+        assert_eq!(e.enabled_labels(), Label::ALL.to_vec());
     }
 
     #[test]

@@ -57,11 +57,11 @@ async fn follows_hears_warns_records_and_reports() {
     .await
     .unwrap();
     assert_eq!(rows.items.len(), 1, "the flagged sentence's recording was kept");
-    // The owner gets a direct message with the recording.
+    // The owner gets a direct message (without the recording: the default).
     wait("the owner's direct message", 10, || {
         rig.fake
             .dm_channel(OWNER)
-            .is_some_and(|c| rig.fake.sent().iter().any(|m| m.channel == c && m.files.len() == 1))
+            .is_some_and(|c| rig.fake.sent().iter().any(|m| m.channel == c && m.files.is_empty()))
     })
     .await;
     // Alice leaves voice; the bot leaves too, after the leave delay (5 s).

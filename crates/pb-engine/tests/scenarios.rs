@@ -69,20 +69,20 @@ async fn a_profane_sentence_is_warned_in_the_call_recorded_and_reported() {
     assert!(s.jar, "a violation goes into the swear jar");
     assert!(s.audio.is_some(), "a flagged sentence's recording is kept");
 
-    // The warning, in Alice's language, to the tracked people in the call.
+    // The warning, in Alice's language, to everyone in the channel (the default audience).
     let p = rig.wait_played("the warning", |p| p.sentence == Some(s.id)).await;
     assert_eq!(p.outcome, PlayOutcome::Played);
     assert_eq!(p.purpose, PlayPurpose::Warning);
     assert_eq!(p.person, Some(UserId(ALICE)));
-    assert_eq!(p.audience, Audience::Tracked);
+    assert_eq!(p.audience, Audience::Channel);
     assert_eq!(p.lang.as_ref().map(ToString::to_string).as_deref(), Some("en"));
     assert!(p.text.as_deref().is_some_and(|t| t.contains("Alice")), "{p:?}");
     let items = rig.voice.played_items(GuildId(G), ChannelId(VOICE));
     assert_eq!(items.len(), 1);
     assert!(loud(&items[0].samples) > 4800, "the warning is audible");
     assert!(
-        matches!(&items[0].audience, Some(AudienceSet::Only(who)) if who.len() == 1 && who[0].user() == Some(UserId(ALICE))),
-        "only Alice hears it: {:?}",
+        matches!(&items[0].audience, Some(AudienceSet::All)),
+        "everyone in the channel hears it: {:?}",
         items[0].audience
     );
     let events = rig.events().await;
@@ -109,7 +109,7 @@ async fn a_profane_sentence_is_warned_in_the_call_recorded_and_reported() {
     let jar = rig.index.jar(Some(GuildId(G))).await.unwrap();
     assert!(jar.iter().any(|j| j.user == UserId(ALICE) && j.count == 1), "{jar:?}");
 
-    // One post in the mod log, and the owner's direct message with the recording.
+    // One post in the mod log with the recording, and the owner's direct message without it (the defaults).
     rig.wait_event(
         "the mod log post",
         10,
@@ -117,7 +117,7 @@ async fn a_profane_sentence_is_warned_in_the_call_recorded_and_reported() {
     )
     .await;
     rig.wait_event("the owner's direct message", 10, |e| {
-        matches!(e, Event::MessageSent(m) if m.purpose == MessagePurpose::OwnerDm { sentence: s.id } && m.ok && m.with_audio)
+        matches!(e, Event::MessageSent(m) if m.purpose == MessagePurpose::OwnerDm { sentence: s.id } && m.ok && !m.with_audio)
     })
     .await;
     let events = rig.events().await;
@@ -131,8 +131,9 @@ async fn a_profane_sentence_is_warned_in_the_call_recorded_and_reported() {
     let modlog: Vec<_> = rig.fake.sent().into_iter().filter(|m| m.channel == TEXT).collect();
     assert_eq!(modlog.len(), 1);
     assert!(modlog[0].content().contains(&format!("<@{ALICE}>")), "{:?}", modlog[0]);
+    assert_eq!(modlog[0].files.len(), 1);
     let dm = rig.fake.dm_channel(OWNER).expect("a direct message to the owner");
-    assert!(rig.fake.sent().iter().any(|m| m.channel == dm && m.files.len() == 1));
+    assert!(rig.fake.sent().iter().any(|m| m.channel == dm && m.files.is_empty()));
 
     // Alice leaves the call; the bot leaves too, after the leave grace.
     rig.fake.voice_leave(&rig.alice_connection());

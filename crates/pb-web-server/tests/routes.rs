@@ -2313,7 +2313,7 @@ async fn each_setting_says_where_its_value_comes_from() {
     // For every community: changed, with the default to go back to, and the community that has its own value.
     let global = row(&w.get("/settings/detection", Some(&owner)).await.body, "threshold");
     assert!(
-        global.contains("Changed · default: 0.5") && global.contains("Back to the default"),
+        global.contains("Changed · default: 0.3") && global.contains("Back to the default"),
         "{global}"
     );
     assert!(

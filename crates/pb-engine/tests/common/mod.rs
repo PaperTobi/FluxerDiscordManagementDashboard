@@ -267,6 +267,9 @@ impl Rig {
         let (mut tree, _) = settings_files.load().await.unwrap();
         let mut changes = set(&mut tree, Scope::Global, SettingKey::Instance, json!(fake.url()));
         changes.extend(set(&mut tree, Scope::Global, SettingKey::JoinSettle, json!(0.0)));
+        // The scenarios' community speaks English and is not greeted (a scenario that greets says so).
+        changes.extend(set(&mut tree, Scope::Global, SettingKey::VoiceLanguage, json!("en")));
+        changes.extend(set(&mut tree, Scope::Global, SettingKey::GreetEnabled, json!(false)));
         changes.extend(set(
             &mut tree,
             community(),
