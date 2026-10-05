@@ -25,7 +25,7 @@ Layers (enforced by `cargo xtask deps`):
 
 | Layer | Crates | May depend on | Must not depend on |
 |---|---|---|---|
-| L0 pure core (sync, no I/O, wasm-safe) | pb-domain, pb-settings, pb-segment, pb-policy, pb-voicelines, pb-commands, pb-i18n, pb-live-proto | each other (DAG), serde, jiff, toml_edit, fluent, thiserror | tokio, futures, `async fn`, axum, burn, livekit, rten, turso |
+| L0 pure core (sync, no I/O, wasm-safe) | pb-domain, pb-settings, pb-segment, pb-policy, pb-voicelines, pb-commands, pb-i18n, pb-live-proto, pb-wordlist | each other (DAG), serde, jiff, toml_edit, fluent, thiserror | tokio, futures, `async fn`, axum, burn, livekit, rten, turso |
 | L1 interfaces | pb-models-api, pb-fluxer-api, pb-voice-api, pb-store-api | L0, `tokio::sync`, async-trait | concrete adapters |
 | L2 adapters / compute | pb-audio, pb-vad-silero, pb-classifier-roblox, pb-tts-piper, pb-infer, pb-fluxer, pb-voice-livekit, pb-store, pb-import, pb-weights | L0, L1, own third-party crates | pb-engine, web crates |
 | L3 application | pb-live, pb-engine | L0, L1, pb-infer, pb-audio | concrete adapters (pb-fluxer, pb-voice-livekit, pb-store) |
@@ -42,6 +42,7 @@ pb-import; only `pb` wires concrete implementations.
 | pb-settings | typed schema (one declaration), value newtypes, validation, layered resolution with source, TOML parse/edit (toml_edit, never `fmt()`), migrations, generated `SettingKey`, docs generator |
 | pb-segment | `FrameAssembler` (512-sample frames), `PcmRing`, hysteresis `Segmenter` (exact port of `vendor/roblox_vc/app/segmenter.py`), `EchoGuard`, 30 s windowing |
 | pb-policy | `Decider` (strikes, observe-only, late decisions, escalation step), `FollowMachine` (port of `follow.py`), desired-channel policy, action planning |
+| pb-wordlist | `WordList`: listed words and phrases in a text despite case, look-alikes, invisible, stretched and spaced-out letters |
 | pb-voicelines | line catalogue, slots, resolution, templates, `UtterancePlan`, no-repeat picker, next-utterance prediction |
 | pb-commands | `!pb` parser and permission levels → `CommandPlan` |
 | pb-i18n | Fluent bundles de/en compiled in, for bot text and UI |

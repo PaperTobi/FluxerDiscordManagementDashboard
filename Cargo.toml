@@ -26,6 +26,7 @@ pb-domain = { path = "crates/pb-domain" }
 pb-espeak = { path = "crates/pb-espeak" }
 pb-settings = { path = "crates/pb-settings" }
 pb-segment = { path = "crates/pb-segment" }
+pb-wordlist = { path = "crates/pb-wordlist" }
 pb-policy = { path = "crates/pb-policy" }
 pb-voicelines = { path = "crates/pb-voicelines" }
 pb-commands = { path = "crates/pb-commands" }

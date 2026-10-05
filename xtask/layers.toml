@@ -1,7 +1,7 @@
 # Architecture rules checked by `cargo xtask deps` (see docs/design.md §1).
 
 [layers]
-L0 = ["pb-domain", "pb-settings", "pb-segment", "pb-policy", "pb-voicelines", "pb-commands", "pb-i18n", "pb-live-proto"]
+L0 = ["pb-domain", "pb-settings", "pb-segment", "pb-policy", "pb-voicelines", "pb-commands", "pb-i18n", "pb-live-proto", "pb-wordlist"]
 L1 = ["pb-models-api", "pb-fluxer-api", "pb-voice-api", "pb-store-api"]
 L2 = ["pb-tls", "pb-audio", "pb-espeak", "pb-vad-silero", "pb-classifier-roblox", "pb-tts-piper", "pb-infer", "pb-fluxer", "pb-voice-livekit",
       "pb-store", "pb-import", "pb-weights"]
