@@ -166,6 +166,13 @@ impl Rig {
             tree.set(Scope::Global, SettingKey::JoinSettle, serde_json::json!(0.0), true)
                 .unwrap(),
         );
+        // The scenarios' community speaks English and is not greeted (a scenario that greets says so).
+        for (key, value) in [
+            (SettingKey::VoiceLanguage, serde_json::json!("en")),
+            (SettingKey::GreetEnabled, serde_json::json!(false)),
+        ] {
+            changes.extend(tree.set(Scope::Global, key, value, true).unwrap());
+        }
         changes.extend(
             tree.set(
                 Scope::Server { guild: GuildId(G) },
