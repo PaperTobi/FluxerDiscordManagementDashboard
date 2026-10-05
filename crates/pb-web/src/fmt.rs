@@ -212,7 +212,6 @@ pub fn engine_error(loc: Locale, e: &pb_engine::EngineError) -> String {
         E::NotConnected => text(loc, "err-not-connected", &[]),
         E::NotInCall => text(loc, "err-not-in-call", &[]),
         E::BotNotInCall => text(loc, "err-bot-not-in-call", &[]),
-        E::NoLanguage => text(loc, "err-no-language", &[]),
         E::NotSaid(P::TooLate) => text(loc, "err-said-too-late", &[]),
         E::NotSaid(P::NotSpoken) => text(loc, "err-said-not-spoken", &[]),
         E::NotSaid(P::Failed { error }) => with("err-said-failed", error),

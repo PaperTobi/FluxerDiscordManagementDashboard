@@ -4,10 +4,10 @@
 use std::sync::Arc;
 
 use pb_commands::{Author, Command, CommandError, Level, ResetWhat, level, parse, strip_prefix};
-use pb_domain::{GuildId, Scope, UserId};
+use pb_domain::{GuildId, RoleId, Scope, UserId};
 use pb_fluxer_api::{Destination, IncomingMessage, MessageRef, OutgoingMessage, perms};
 use pb_i18n::{Arg, Locale, duration, setting_name, text};
-use pb_settings::{SettingError, SettingKey};
+use pb_settings::{SettingError, SettingKey, SettingsTree};
 use pb_store_api::{Actor, Event, JarReset, Via};
 
 use super::core::Core;
@@ -41,12 +41,8 @@ pub fn presence_text(core: &Core) -> String {
     )
 }
 
-fn mention(u: UserId) -> String {
-    format!("<@{u}>")
-}
-
 fn mentions(us: &[UserId]) -> String {
-    us.iter().map(|u| mention(*u)).collect::<Vec<_>>().join(", ")
+    us.iter().map(|u| u.mention()).collect::<Vec<_>>().join(", ")
 }
 
 /// A settings edit made by a command.
@@ -105,6 +101,23 @@ fn setting_error(loc: Locale, e: &SettingError) -> String {
     }
 }
 
+/// What decides someone's command level in a community (their roles there given).
+pub(super) fn author_in(core: &Core, tree: &SettingsTree, g: GuildId, user: UserId, roles: &[RoleId]) -> Author {
+    let gs = core.guilds();
+    Author {
+        operator: core.owner() == Some(user) || tree.effective(None, None).admin_user_ids.value.contains(&user),
+        community_owner: gs.get(g).and_then(|i| i.owner) == Some(user),
+        admin_role: tree
+            .effective(Some(g), None)
+            .admin_role_ids
+            .value
+            .iter()
+            .any(|r| roles.contains(r)),
+        manages: gs.permissions(g, user, roles, None) & (perms::ADMINISTRATOR | perms::MANAGE_GUILD) != 0,
+        tracked_here: tree.listed_for(g).contains(&user),
+    }
+}
+
 /// Handles a message that may be a command.
 pub async fn on_message(core: &Arc<Core>, m: &IncomingMessage) {
     let tree = core.settings.current();
@@ -123,7 +136,7 @@ pub async fn on_message(core: &Arc<Core>, m: &IncomingMessage) {
     let Some(ctl) = core.ctl() else { return };
     let loc = Locale::for_lang(&tree.effective(m.guild, None).chat_language.value);
     let shown_prefix = if prefix.is_empty() {
-        bot.map_or_else(|| "@bot".to_owned(), mention)
+        bot.map_or_else(|| "@bot".to_owned(), UserId::mention)
     } else {
         prefix.clone()
     };
@@ -169,20 +182,7 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
     let global = tree.effective(None, None);
     let author = m.author.id;
     let known = core.guilds().get(g).is_some_and(|i| !i.roles.is_empty());
-    let who = Author {
-        operator: core.owner() == Some(author) || global.admin_user_ids.value.contains(&author),
-        community_owner: core.guilds().get(g).and_then(|i| i.owner) == Some(author),
-        admin_role: tree
-            .effective(Some(g), None)
-            .admin_role_ids
-            .value
-            .iter()
-            .any(|r| m.author_roles.contains(r)),
-        manages: core.guilds().permissions(g, author, &m.author_roles, None)
-            & (perms::ADMINISTRATOR | perms::MANAGE_GUILD)
-            != 0,
-        tracked_here: tree.listed_for(g).contains(&author),
-    };
+    let who = author_in(core, &tree, g, author, &m.author_roles);
     let lvl = level(who);
     if cmd.required() > Level::User {
         if lvl < Level::Operator && !known {
@@ -242,9 +242,9 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
             )];
             for u in listed.iter() {
                 let mut l = if everywhere.contains(u) {
-                    text(loc, "cmd-list-everywhere", &[("user", mention(*u).into())])
+                    text(loc, "cmd-list-everywhere", &[("user", u.mention().into())])
                 } else {
-                    text(loc, "cmd-list-person", &[("user", mention(*u).into())])
+                    text(loc, "cmd-list-person", &[("user", u.mention().into())])
                 };
                 if let Some(t) = tree
                     .overrides(Scope::Person { guild: g, user: *u })
@@ -269,7 +269,7 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
                 return info(text(
                     loc,
                     "cmd-jar-person",
-                    &[("user", mention(u).into()), ("count", core.jar(g, u).into())],
+                    &[("user", u.mention().into()), ("count", core.jar(g, u).into())],
                 ));
             }
             let rows = core.deps.index.jar(Some(g)).await.unwrap_or_default();
@@ -283,7 +283,7 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
                     "cmd-jar-line",
                     &[
                         ("rank", (i + 1).into()),
-                        ("user", mention(r.user).into()),
+                        ("user", r.user.mention().into()),
                         ("count", r.count.into()),
                     ],
                 ));
@@ -380,7 +380,7 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
                     &[
                         ("setting", name.into()),
                         ("value", pb_i18n::setting_value(loc, key, &after).into()),
-                        ("user", mention(u).into()),
+                        ("user", u.mention().into()),
                     ],
                 ),
                 None => text(
@@ -397,12 +397,12 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
         Command::Reset { what, user } => {
             let scope = scope_of(user);
             let done = match (&what, user) {
-                (ResetWhat::All, Some(u)) => text(loc, "cmd-reset-all-person", &[("user", mention(u).into())]),
+                (ResetWhat::All, Some(u)) => text(loc, "cmd-reset-all-person", &[("user", u.mention().into())]),
                 (ResetWhat::All, None) => text(loc, "cmd-reset-all-community", &[]),
                 (ResetWhat::Key(k), Some(u)) => text(
                     loc,
                     "cmd-reset-person",
-                    &[("setting", setting_name(loc, *k).into()), ("user", mention(u).into())],
+                    &[("setting", setting_name(loc, *k).into()), ("user", u.mention().into())],
                 ),
                 (ResetWhat::Key(k), None) => {
                     text(loc, "cmd-reset-community", &[("setting", setting_name(loc, *k).into())])
@@ -449,7 +449,7 @@ async fn run(core: &Arc<Core>, m: &IncomingMessage, g: GuildId, loc: Locale, pre
             let mut done = text(
                 loc,
                 "cmd-modlog-set",
-                &[("channel", format!("<#{c}>").into()), ("audio", audio.into())],
+                &[("channel", c.mention().into()), ("audio", audio.into())],
             );
             let need = perms::VIEW_CHANNEL | perms::SEND_MESSAGES | if audio { perms::ATTACH_FILES } else { 0 };
             let missing = perms::missing(core.guilds().bot_permissions(g, Some(c)), need);
@@ -518,7 +518,7 @@ fn status(core: &Core, g: GuildId, loc: Locale) -> String {
             loc,
             "cmd-status-modlog",
             &[
-                ("channel", format!("<#{c}>").into()),
+                ("channel", c.mention().into()),
                 ("audio", eff.modlog_audio.value.into()),
             ],
         ),
@@ -539,10 +539,7 @@ fn status(core: &Core, g: GuildId, loc: Locale) -> String {
         lines.push(text(
             loc,
             "cmd-status-room",
-            &[
-                ("channel", format!("<#{}>", r.chan.channel).into()),
-                ("people", people.into()),
-            ],
+            &[("channel", r.chan.channel.mention().into()), ("people", people.into())],
         ));
     }
     let info = core.deps.inference.classifier_info();

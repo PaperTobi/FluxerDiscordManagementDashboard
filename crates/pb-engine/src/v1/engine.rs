@@ -9,7 +9,6 @@ use pb_domain::PlayPurpose;
 use pb_domain::{Audience, ChannelId, GuildId, Lang, UserId};
 use pb_fluxer_api::{Fatal, LoginError};
 use pb_live_proto::FluxerState;
-use pb_policy::{Chan, VoiceWorld};
 use pb_settings::SettingsTree;
 use pb_store_api::{Actor, Event, PlayRecord, Started, Stopped, StoreError};
 use pb_voicelines::{Fields, Line};
@@ -155,13 +154,11 @@ impl Engine {
                     gs.remember(
                         g,
                         super::guilds::Person {
-                            user: p.user,
                             username: p.username,
                             display_name: p.display_name,
                             nick: p.nick,
                             avatar: p.avatar,
-                            roles: Vec::new(),
-                            bot: false,
+                            ..super::guilds::Person::new(p.user)
                         },
                     );
                 });
@@ -353,10 +350,6 @@ impl Engine {
         self.core.guilds()
     }
 
-    pub fn voice(&self) -> Arc<VoiceWorld> {
-        self.core.voice()
-    }
-
     /// The bot's own user and the application owner, once logged in.
     pub fn identity(&self) -> Option<pb_fluxer_api::BotIdentity> {
         self.core.ctl().map(|c| c.me())
@@ -369,11 +362,6 @@ impl Engine {
     /// The installed text-to-speech voices.
     pub fn voices(&self) -> Vec<pb_models_api::VoiceInfo> {
         self.core.deps.inference.voices()
-    }
-
-    /// Rooms the bot is in.
-    pub fn rooms(&self) -> Vec<Chan> {
-        self.core.rooms().into_iter().map(|r| r.chan).collect()
     }
 
     /// Says something now in a call ("Say now"). `person`: who it is for (their voice and name); `text` exactly (a
@@ -551,16 +539,7 @@ impl Engine {
                     None => continue,
                 },
             };
-            let admin_roles = tree.effective(Some(g), None).admin_role_ids.value.clone();
-            let who = pb_commands::Author {
-                operator: false,
-                community_owner: owner == Some(user),
-                admin_role: roles.iter().any(|r| admin_roles.contains(r)),
-                manages: self.core.guilds().permissions(g, user, &roles, None)
-                    & (pb_fluxer_api::perms::ADMINISTRATOR | pb_fluxer_api::perms::MANAGE_GUILD)
-                    != 0,
-                tracked_here: tree.listed_for(g).contains(&user),
-            };
+            let who = super::commands::author_in(&self.core, &tree, g, user, &roles);
             if pb_commands::level(who) >= pb_commands::Level::Admin {
                 out.insert(g);
             }

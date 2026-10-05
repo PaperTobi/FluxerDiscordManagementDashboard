@@ -15,8 +15,6 @@ pub enum EngineError {
     NotInCall,
     #[error("the bot is not in that call")]
     BotNotInCall,
-    #[error("no language is set for them")]
-    NoLanguage,
     /// Nothing was said (too late, nothing to say, the bot may not speak there, or it failed).
     #[error("nothing was said: {0:?}")]
     NotSaid(PlayOutcome),

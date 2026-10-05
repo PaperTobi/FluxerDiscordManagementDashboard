@@ -100,15 +100,8 @@ pub(crate) async fn learn_person(core: &Core, guild: GuildId, user: UserId) {
     match ctl.member(guild, user).await {
         Ok(Some(m)) => {
             if let Some(u) = &m.user {
-                let p = super::guilds::Person {
-                    user,
-                    username: u.username.clone(),
-                    display_name: u.global_name.clone(),
-                    nick: m.nick.clone(),
-                    avatar: u.avatar.clone(),
-                    roles: m.roles.clone(),
-                    bot: u.bot,
-                };
+                let mut p = super::guilds::Person::new(user);
+                p.learn(&m);
                 core.update_guilds(|gs| gs.remember(guild, p));
                 core.record(vec![Event::PersonSeen(PersonSeen {
                     user,

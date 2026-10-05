@@ -243,7 +243,7 @@ fn handle(
                         ..Stamps::default()
                     },
                 };
-                core.live.sentence(g, u, &card_of(&card, None));
+                core.live.sentence(g, u, &card_of(&card));
                 open.insert(o.id, card);
             }
             SegEvent::Drop(d) => {
@@ -254,7 +254,7 @@ fn handle(
                         u,
                         &SentenceCard {
                             dropped: Some(DropWhy::TooLittleSpeech),
-                            ..card_of(&c, None)
+                            ..card_of(&c)
                         },
                     );
                 }
@@ -289,7 +289,7 @@ fn handle(
                                 &SentenceCard {
                                     cut: Some(why),
                                     dropped: Some(DropWhy::OwnPlayback),
-                                    ..card_of(&card, None)
+                                    ..card_of(&card)
                                 },
                             );
                             continue;
@@ -307,7 +307,7 @@ fn handle(
                     cut: Some(why),
                     dur_ms: Some(dur_ms),
                     level_db: Some(level_db),
-                    ..card_of(&card, None)
+                    ..card_of(&card)
                 };
                 core.live.sentence(g, u, &partial);
                 let started = Timestamp::from_millisecond(card.stamps.opened).unwrap_or(now);
@@ -353,14 +353,14 @@ fn handle(
 }
 
 /// A conveyor card for a sentence so far.
-fn card_of(c: &Open, cut: Option<CutWhy>) -> SentenceCard {
+fn card_of(c: &Open) -> SentenceCard {
     SentenceCard {
         id: c.id,
         no: c.no,
         stamps: c.stamps,
         dur_ms: None,
         level_db: None,
-        cut,
+        cut: None,
         dropped: None,
         error: None,
         verdict: None,

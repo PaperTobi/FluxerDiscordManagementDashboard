@@ -19,19 +19,32 @@ pub struct Person {
 }
 
 impl Person {
-    /// Nickname, else display name, else user name.
+    /// Someone known by id only so far.
+    pub fn new(user: UserId) -> Person {
+        Person {
+            user,
+            username: String::new(),
+            display_name: None,
+            nick: None,
+            avatar: None,
+            roles: Vec::new(),
+            bot: false,
+        }
+    }
+
+    /// What Fluxer says of them as a member (their names where it sent them, nickname and roles).
+    pub fn learn(&mut self, m: &Member) {
+        if let Some(u) = &m.user {
+            merge_user(self, u);
+        }
+        self.nick.clone_from(&m.nick);
+        self.roles.clone_from(&m.roles);
+    }
+
+    /// Nickname, else display name, else user name, else the id (empty names count as none).
     pub fn shown(&self) -> String {
-        self.nick
-            .clone()
-            .or_else(|| self.display_name.clone())
-            .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| {
-                if self.username.is_empty() {
-                    self.user.to_string()
-                } else {
-                    self.username.clone()
-                }
-            })
+        pb_domain::first_name([self.nick.as_deref(), self.display_name.as_deref(), Some(&self.username)])
+            .map_or_else(|| self.user.to_string(), str::to_owned)
     }
 }
 
@@ -73,28 +86,11 @@ fn merge_user(p: &mut Person, u: &User) {
 
 impl GuildInfo {
     fn put_member(&mut self, m: &Member) {
-        let p = self.people.entry(m.id).or_insert_with(|| Person {
-            user: m.id,
-            username: String::new(),
-            display_name: None,
-            nick: None,
-            avatar: None,
-            roles: Vec::new(),
-            bot: false,
-        });
-        if let Some(u) = &m.user {
-            merge_user(p, u);
-        }
-        p.nick.clone_from(&m.nick);
-        p.roles.clone_from(&m.roles);
+        self.people.entry(m.id).or_insert_with(|| Person::new(m.id)).learn(m);
     }
 }
 
 impl Guilds {
-    pub fn clear(&mut self) {
-        self.guilds.clear();
-    }
-
     pub fn get(&self, g: GuildId) -> Option<&GuildInfo> {
         self.guilds.get(&g)
     }
@@ -195,15 +191,10 @@ impl Guilds {
             GatewayEvent::Message(m) => {
                 let g = m.guild?;
                 let info = self.guilds.entry(g).or_default();
-                let p = info.people.entry(m.author.id).or_insert_with(|| Person {
-                    user: m.author.id,
-                    username: String::new(),
-                    display_name: None,
-                    nick: None,
-                    avatar: None,
-                    roles: Vec::new(),
-                    bot: false,
-                });
+                let p = info
+                    .people
+                    .entry(m.author.id)
+                    .or_insert_with(|| Person::new(m.author.id));
                 merge_user(p, &m.author);
                 if m.author_nick.is_some() {
                     p.nick.clone_from(&m.author_nick);

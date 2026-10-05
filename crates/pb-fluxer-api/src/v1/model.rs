@@ -18,10 +18,7 @@ pub struct User {
 impl User {
     /// Display name, else user name.
     pub fn shown(&self) -> &str {
-        self.global_name
-            .as_deref()
-            .filter(|n| !n.is_empty())
-            .unwrap_or(&self.username)
+        pb_domain::first_name([self.global_name.as_deref()]).unwrap_or(&self.username)
     }
 }
 
@@ -41,11 +38,8 @@ pub struct Member {
 impl Member {
     /// Nickname, else display name, else user name, else the id.
     pub fn shown(&self) -> String {
-        self.nick
-            .clone()
-            .filter(|n| !n.is_empty())
-            .or_else(|| self.user.as_ref().map(|u| u.shown().to_owned()))
-            .unwrap_or_else(|| self.id.to_string())
+        pb_domain::first_name([self.nick.as_deref(), self.user.as_ref().map(User::shown)])
+            .map_or_else(|| self.id.to_string(), str::to_owned)
     }
 }
 

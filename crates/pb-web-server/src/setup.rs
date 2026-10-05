@@ -447,17 +447,9 @@ async fn secret_accepted(st: &WebState, secret: &SecretString, loc: Locale) -> R
             &[("reason", text(loc, "login-no-token", &[]).into())],
         ));
     };
-    let instance = st
-        .engine
-        .settings()
-        .current()
-        .effective(None, None)
-        .instance
-        .value
-        .clone();
     let ep = st
         .engine
-        .discover(instance.url())
+        .login_endpoints()
         .await
         .map_err(|e| pb_web::fmt::engine_error(loc, &e))?;
     st.engine

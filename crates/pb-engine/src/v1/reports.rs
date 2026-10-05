@@ -149,8 +149,8 @@ async fn modlog(core: &Arc<Core>, s: &SentenceRecord, action: Option<&ActionReco
         loc,
         "modlog-flagged",
         &[
-            ("user", format!("<@{}>", s.user).into()),
-            ("channel", format!("<#{}>", s.channel).into()),
+            ("user", s.user.mention().into()),
+            ("channel", s.channel.mention().into()),
             ("labels", labels.join(" · ").into()),
             ("seconds", loc.decimal(f64::from(s.dur_ms) / 1000.0, 1).into()),
             ("language", s.language.code().into()),

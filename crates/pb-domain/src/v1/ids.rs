@@ -101,7 +101,17 @@ pub fn unmention(s: &str) -> &str {
         .unwrap_or(t)
 }
 
+/// The name to show: the first that is not empty (nickname, display name, user name …).
+pub fn first_name<'a>(names: impl IntoIterator<Item = Option<&'a str>>) -> Option<&'a str> {
+    names.into_iter().flatten().find(|n| !n.trim().is_empty())
+}
+
 impl UserId {
+    /// How Fluxer writes a mention of this person (`<@1>`).
+    pub fn mention(self) -> String {
+        format!("<@{self}>")
+    }
+
     /// An id, or a user mention (`<@1>`, `<@!1>`).
     pub fn from_mention(s: &str) -> Option<UserId> {
         let t = s.trim();
@@ -115,6 +125,11 @@ impl UserId {
 }
 
 impl ChannelId {
+    /// How Fluxer writes a link to this channel (`<#1>`).
+    pub fn mention(self) -> String {
+        format!("<#{self}>")
+    }
+
     /// An id, or a channel mention (`<#1>`).
     pub fn from_mention(s: &str) -> Option<ChannelId> {
         let t = s.trim();

@@ -360,15 +360,7 @@ impl Room {
         core.set_listening(chan.guild, user, true);
         tracing::info!(?chan, %user, "listening");
         let eff = core.settings.current().effective(Some(chan.guild), Some(user));
-        let gs = core.guilds();
-        let who = pb_live_proto::Who {
-            user,
-            name: gs.name(chan.guild, user),
-            avatar: core.avatar_url(
-                user,
-                gs.person(chan.guild, user).and_then(|p| p.avatar.clone()).as_deref(),
-            ),
-        };
+        let who = super::cells::who(&core, chan.guild, user);
         core.live.ensure_person(chan.guild, who, super::live::summary(&eff));
         let _ = core.moderation.send(super::moderation::ModMsg::Listening {
             guild: chan.guild,
@@ -590,7 +582,7 @@ async fn no_speak(core: &Core, chan: Chan, item: &PlayItem, said: Option<&str>, 
             .chat_language
             .value,
     );
-    let user = item.person.map_or_else(String::new, |u| format!("<@{u}>"));
+    let user = item.person.map_or_else(String::new, UserId::mention);
     let content = text(loc, "no-speak", &[("user", user.into()), ("text", said.into())]);
     let ping = item.person.into_iter().collect();
     match ctl

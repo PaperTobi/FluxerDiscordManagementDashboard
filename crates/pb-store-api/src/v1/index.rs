@@ -144,12 +144,9 @@ pub struct PersonName {
 }
 
 impl PersonName {
-    /// Nickname, else display name, else user name.
+    /// Nickname, else display name, else user name (empty names count as none).
     pub fn shown(&self) -> &str {
-        self.nick
-            .as_deref()
-            .or(self.display_name.as_deref())
-            .unwrap_or(&self.username)
+        pb_domain::first_name([self.nick.as_deref(), self.display_name.as_deref()]).unwrap_or(&self.username)
     }
 }
 

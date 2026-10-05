@@ -136,16 +136,7 @@ impl Engine {
             .classify(Arc::from(at16), Priority::Check)
             .await
         {
-            Ok(s) => {
-                let lang = s
-                    .raw
-                    .languages
-                    .iter()
-                    .enumerate()
-                    .max_by(|a, b| a.1.total_cmp(b.1))
-                    .and_then(|(i, _)| ClfLang::ALL.get(i).copied());
-                (Some(s.raw.labels), lang)
-            }
+            Ok(s) => (Some(s.raw.labels), Some(s.raw.top_language())),
             Err(e) => {
                 tracing::warn!(error = %e, "a clip could not be checked");
                 (None, None)
@@ -255,18 +246,11 @@ impl Engine {
                 (now(), Some(Exact::Clip(h)))
             }
             SayWhat::Text { text, lang } => {
-                let lang = match lang {
-                    Some(l) => l,
-                    None => match &eff.voice_language.value {
-                        pb_settings::VoiceLang::Fixed(l) => l.clone(),
-                        pb_settings::VoiceLang::Auto => eff
-                            .fallback_languages
-                            .value
-                            .first()
-                            .cloned()
-                            .ok_or(EngineError::NoLanguage)?,
-                    },
-                };
+                // Their first language (as for a voice line, without one heard).
+                let lang = lang.unwrap_or_else(|| {
+                    let tree = self.core.settings.current();
+                    super::speak::languages(&tree, guild, Some(user), None).swap_remove(0)
+                });
                 (now(), Some(Exact::Text(lang, text)))
             }
         };

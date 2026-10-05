@@ -7,7 +7,7 @@ mod misc;
 mod voice;
 
 pub use audio::{FRAME, FRAME_MS, LISTEN_RATE, PLAY_RATE};
-pub use ids::{ChannelId, ConnectionId, GuildId, IdError, MessageId, RoleId, UserId, unmention};
+pub use ids::{ChannelId, ConnectionId, GuildId, IdError, MessageId, RoleId, UserId, first_name, unmention};
 pub use labels::{ClfLang, Label, UnknownLabel};
 pub use misc::{
     ActionKind, ActionOutcome, Audience, BlobHash, HashError, Lang, LangError, PlayPurpose, Scope, ScopeKind,

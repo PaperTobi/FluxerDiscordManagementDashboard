@@ -9,7 +9,7 @@ use jiff::Timestamp;
 use pb_domain::PlayPurpose;
 use pb_domain::{Audience, ClfLang, GuildId, Label, SentenceId, UserId};
 use pb_infer::Scored;
-use pb_live_proto::{CutWhy, DecisionView, PersonDelta, SentenceCard, Stamps, VerdictView, ViolationItem, Who};
+use pb_live_proto::{CutWhy, DecisionView, PersonDelta, SentenceCard, Stamps, VerdictView, ViolationItem};
 use pb_policy::{Chan, ClearReason, DecideInput, Decider, Decision, Violations};
 use pb_settings::Recordings;
 use pb_store_api::{CutCause, DecisionRecord, SentenceRecord, SentenceSource};
@@ -358,15 +358,10 @@ fn decide(core: &Arc<Core>, decider: &mut Decider, violations: &mut Violations, 
     let counts = counts(core, violations, g, u);
     core.live.person(g, u, PersonDelta::Counts { counts });
     if let Some((label, score, step, count)) = record.violation() {
-        let (who, community, channel) = {
+        let who = super::cells::who(core, g, u);
+        let (community, channel) = {
             let gs = core.guilds();
-            let p = gs.person(g, u);
             (
-                Who {
-                    user: u,
-                    name: gs.name(g, u),
-                    avatar: core.avatar_url(u, p.and_then(|p| p.avatar.as_deref())),
-                },
                 gs.guild_name(g),
                 pb_live_proto::ChannelRef {
                     id: h.chan.channel,

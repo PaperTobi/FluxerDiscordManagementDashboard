@@ -316,7 +316,6 @@ ui-resume-here = Hier fortsetzen
 err-not-connected = Der Bot ist gerade nicht mit Fluxer verbunden.
 err-not-in-call = Die Person ist in keinem Anruf.
 err-bot-not-in-call = Der Bot ist nicht im Anruf der Person.
-err-no-language = Für die Person ist keine Sprache eingestellt; wähle eine.
 err-said-too-late = Es hat zu lange gewartet und wurde nicht gesagt.
 err-said-not-spoken = Der Bot darf in diesem Anruf nicht sprechen, deshalb wurde es nicht gesagt.
 err-said-nothing = Es gab nichts zu sagen: kein Clip, kein Text und keine Stimme für die Sprache der Person.
