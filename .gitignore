@@ -1,5 +1,5 @@
 # Rust build output (also the espeak-ng build, the browser bundle and downloaded weights)
-target/
+/target
 *.rs.bk
 *.profraw
 lcov.info
