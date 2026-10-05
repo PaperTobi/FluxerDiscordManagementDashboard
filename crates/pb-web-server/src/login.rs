@@ -339,6 +339,92 @@ pub async fn logout(State(st): State<WebState>, headers: HeaderMap, Form(f): For
     }
 }
 
+/// How long a code from `pb login-link` works.
+pub const LOGIN_LINK_FOR: Duration = Duration::from_secs(600);
+
+/// Makes a one-time code that logs the bot's owner in without Fluxer (for `pb login-link`: whoever can write the data
+/// directory runs the bot anyway). It replaces the one before.
+pub async fn new_login_code(file: &dyn pb_store_api::SecretsFile) -> Result<String, pb_store_api::StoreError> {
+    let code = random_token(32);
+    let expires = jiff::Timestamp::now()
+        .checked_add(LOGIN_LINK_FOR)
+        .unwrap_or_else(|_| jiff::Timestamp::now());
+    file.write_login_code(&code, expires).await?;
+    Ok(code)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LinkQuery {
+    code: Option<String>,
+}
+
+/// `GET /login/link?code=…`: the bot's owner, logged in with a code from `pb login-link` (when logging in with
+/// Fluxer does not work, for example while its redirect address is not registered).
+pub async fn link(State(st): State<WebState>, headers: HeaderMap, Query(q): Query<LinkQuery>) -> Response {
+    let loc = locale_of(&headers);
+    let secure = https(&headers);
+    let Some(owner) = st.secrets.get().setup.owner else {
+        return redirect_with("/setup", vec![]);
+    };
+    // Taken whatever happens next: each code is tried once.
+    let saved = match st.secrets.file.take_login_code().await {
+        Ok(c) => c,
+        Err(e) => {
+            return redirect_with(
+                "/",
+                vec![st.notices.put(false, pb_web::fmt::store_error(loc, &e), secure)],
+            );
+        }
+    };
+    let typed = q.code.unwrap_or_default();
+    let same = saved.is_some_and(|c| {
+        c.len() == typed.len() && c.bytes().zip(typed.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
+    });
+    if !same {
+        tracing::warn!("a login link was used that is wrong, used before or expired");
+        return redirect_with(
+            "/",
+            vec![st.notices.put(false, text(loc, "login-link-wrong", &[]), secure)],
+        );
+    }
+    let name = {
+        let gs = st.engine.guilds();
+        gs.available()
+            .into_iter()
+            .map(|g| gs.name(g, owner))
+            .find(|n| *n != owner.to_string())
+            .unwrap_or_else(|| owner.to_string())
+    };
+    let value = st
+        .sessions
+        .create(
+            record(owner, name.clone(), None, true),
+            UserAccess {
+                owner: true,
+                guilds: BTreeSet::new(),
+                epoch: 0,
+            },
+        )
+        .await;
+    st.engine
+        .record(vec![Event::Login(pb_store_api::Login {
+            user: owner,
+            name,
+            owner: true,
+        })])
+        .await;
+    tracing::info!(user = %owner, "the owner logged in with a login link");
+    redirect_with(
+        "/",
+        vec![set_cookie(
+            SESSION_COOKIE,
+            &value,
+            Some(OWNER_LIFETIME.unsigned_abs()),
+            secure,
+        )],
+    )
+}
+
 /// Drops logins that never came back.
 pub(crate) fn forget_stale(st: &WebState) {
     st.logins

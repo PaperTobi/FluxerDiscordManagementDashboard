@@ -32,6 +32,9 @@ enum Cmd {
     Run,
     /// Prints the setup code (only while setup is unfinished).
     SetupCode,
+    /// Can't log in with Fluxer? Prints a link that logs the bot's owner in once, within 10 minutes (the bot keeps
+    /// running).
+    LoginLink,
     /// Lost access to the web UI? Makes the next start ask for a new setup code (logins end; the token, the client
     /// secret, the settings and all data stay).
     ResetSetup,
@@ -123,6 +126,7 @@ fn main() -> ExitCode {
                 Exit::Config
             }
         },
+        Cmd::LoginLink => tools::login_link(&data, &file),
         Cmd::ResetSetup => tools::reset_setup(&data),
         Cmd::FetchWeights { dest, check } => tools::fetch_weights(&file, dest.as_deref(), check),
         Cmd::Import { from } => tools::import(&data, &file, &from),

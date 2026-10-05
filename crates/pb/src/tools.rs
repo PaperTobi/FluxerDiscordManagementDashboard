@@ -64,6 +64,53 @@ pub fn reset_setup(data: &Path) -> Exit {
     })
 }
 
+/// `pb login-link`: a link that logs the bot's owner in once (the running bot takes the code from the data directory).
+pub fn login_link(data: &Path, file: &Path) -> Exit {
+    let cfg = match config::load(file) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("pb: {e}");
+            return Exit::Config;
+        }
+    };
+    let Some(rt) = runtime() else { return Exit::Internal };
+    rt.block_on(async {
+        use pb_store_api::SecretsFile;
+        let secrets = FsSecretsFile::new(data);
+        match secrets.load().await {
+            Ok(s) if s.setup.owner.is_some() => {}
+            Ok(_) => {
+                eprintln!("Setup is not finished: open the web UI and enter the setup code (pb setup-code).");
+                return Exit::Config;
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                return Exit::Config;
+            }
+        }
+        let code = match pb_web_server::new_login_code(&secrets).await {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{e}");
+                return Exit::Internal;
+            }
+        };
+        let bind = cfg.web.bind;
+        let host = if bind.ip().is_unspecified() {
+            format!("localhost:{}", bind.port())
+        } else {
+            bind.to_string()
+        };
+        let scheme = if cfg.web.tls.is_some() { "https" } else { "http" };
+        println!(
+            "Open this within {} minutes to log in as the bot's owner (it works once; from another computer, put the \
+             bot machine's IP address in place of localhost):\n{scheme}://{host}/login/link?code={code}",
+            pb_web_server::LOGIN_LINK_FOR.as_secs() / 60
+        );
+        Exit::Ok
+    })
+}
+
 /// `pb fetch-weights`: downloads the pinned model weights and voices (or with `check`, only verifies them).
 pub fn fetch_weights(file: &Path, dest: Option<&Path>, check: bool) -> Exit {
     let cfg = match load_config(file) {

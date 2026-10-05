@@ -51,6 +51,12 @@ pub trait SecretsFile: Send + Sync + 'static {
     async fn save(&self, secrets: &Secrets) -> Result<(), StoreError>;
     /// The current setup code (written while setup is unfinished, so the operator can read it).
     async fn write_setup_code(&self, code: Option<&str>) -> Result<(), StoreError>;
+    /// A one-time code that logs the owner in without Fluxer (`pb login-link`, run where the data is); it replaces
+    /// the one before.
+    async fn write_login_code(&self, code: &str, expires: Timestamp) -> Result<(), StoreError>;
+    /// Takes the login code: it is removed whatever comes next (each one is tried once). `None`: there is none, or it
+    /// expired.
+    async fn take_login_code(&self) -> Result<Option<String>, StoreError>;
 }
 
 /// A login session (keyed by the SHA-256 of its id; the id itself is only in the cookie).

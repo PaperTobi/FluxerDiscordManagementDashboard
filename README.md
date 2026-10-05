@@ -308,6 +308,7 @@ and which old settings no longer exist (the old caps).
 | The page does not open | container running (`podman ps`)? same network? firewall (`8790/tcp`)? open it by IP |
 | "This address is not one of the bot's web UI addresses" | open it by IP, then set *System → Web UI address* or *Extra host names* |
 | Login fails at Fluxer | the redirect address is not registered exactly (setup step 4; the login names the address), or the client secret is wrong (enter it again on the setup's last step, or *System → Client secret*) |
+| Can't log in at all (any reason) | run `pb login-link` on the bot's machine (`target/release/pb login-link` in a checkout, `podman exec profanity-watch pb login-link` in the container) while the bot runs, and open the link it prints: it logs the bot's owner in once, within 10 minutes. Then fix the cause, e.g. the redirect address above |
 | Bot token or client secret reset in Fluxer (the bot is offline, logging in fails) | the log names a code (also `pb setup-code`): open `/setup`, enter it, then the new token and secret. The owner and all settings stay. A logged-in owner can also replace them under *System* |
 | "Record a clip" is greyed out | the page is not opened over HTTPS (see *HTTPS*) or on localhost; upload a file instead |
 | Exit code 78 | the log says why (configuration, model files, CPU); `pb doctor` checks everything |

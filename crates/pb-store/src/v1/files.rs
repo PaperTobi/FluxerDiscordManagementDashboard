@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
+use jiff::Timestamp;
 use pb_domain::GuildId;
 use pb_settings::{
     Change, FileError, SettingsTree, apply_to_document, file_of, new_document, parse_global, parse_server,
@@ -190,11 +191,13 @@ struct SecretsToml {
     setup: SetupState,
 }
 
-/// `secrets.toml` (0600) and `setup-code` (0600, only while setup is unfinished).
+/// `secrets.toml` (0600), `setup-code` (0600, only while setup is unfinished) and `login-code` (0600, from
+/// `pb login-link` until it is used: the code, then when it expires in Unix seconds).
 #[derive(Debug, Clone)]
 pub struct FsSecretsFile {
     path: PathBuf,
     code_path: PathBuf,
+    login_path: PathBuf,
 }
 
 impl FsSecretsFile {
@@ -202,7 +205,15 @@ impl FsSecretsFile {
         FsSecretsFile {
             path: data_dir.join("secrets.toml"),
             code_path: data_dir.join("setup-code"),
+            login_path: data_dir.join("login-code"),
         }
+    }
+}
+
+fn remove_if_there(path: &Path) -> std::io::Result<()> {
+    match fs::remove_file(path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
     }
 }
 
@@ -255,13 +266,31 @@ impl SecretsFile for FsSecretsFile {
         blocking(move || {
             match code {
                 Some(c) => write_atomic(&path, format!("{c}\n").as_bytes(), 0o600)?,
-                None => match fs::remove_file(&path) {
-                    Ok(()) => {}
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => return Err(e.into()),
-                },
+                None => remove_if_there(&path)?,
             }
             Ok(())
+        })
+        .await
+    }
+
+    async fn write_login_code(&self, code: &str, expires: Timestamp) -> Result<(), StoreError> {
+        let path = self.login_path.clone();
+        let text = format!("{code} {}\n", expires.as_second());
+        blocking(move || Ok(write_atomic(&path, text.as_bytes(), 0o600)?)).await
+    }
+
+    async fn take_login_code(&self) -> Result<Option<String>, StoreError> {
+        let path = self.login_path.clone();
+        blocking(move || {
+            let Some(text) = read_optional(&path)? else {
+                return Ok(None);
+            };
+            remove_if_there(&path)?;
+            let mut parts = text.split_whitespace();
+            let (Some(code), Some(expires)) = (parts.next(), parts.next().and_then(|e| e.parse::<i64>().ok())) else {
+                return Ok(None);
+            };
+            Ok((Timestamp::now().as_second() < expires).then(|| code.to_owned()))
         })
         .await
     }

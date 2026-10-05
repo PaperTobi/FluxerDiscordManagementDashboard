@@ -91,6 +91,14 @@ impl SecretsFile for EnvSecrets {
     async fn write_setup_code(&self, code: Option<&str>) -> Result<(), StoreError> {
         self.file.write_setup_code(code).await
     }
+
+    async fn write_login_code(&self, code: &str, expires: jiff::Timestamp) -> Result<(), StoreError> {
+        self.file.write_login_code(code, expires).await
+    }
+
+    async fn take_login_code(&self) -> Result<Option<String>, StoreError> {
+        self.file.take_login_code().await
+    }
 }
 
 #[cfg(test)]

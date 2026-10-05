@@ -13,6 +13,7 @@ async-trait.workspace = true
 bytes.workspace = true
 clap.workspace = true
 config.workspace = true
+jiff.workspace = true
 pb-audio.workspace = true
 pb-classifier-roblox.workspace = true
 pb-engine.workspace = true
@@ -57,7 +58,6 @@ pb-testkit = { workspace = true, features = ["livekit", "memvoice"] }
 secrecy.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
-jiff.workspace = true
 
 [lints]
 workspace = true

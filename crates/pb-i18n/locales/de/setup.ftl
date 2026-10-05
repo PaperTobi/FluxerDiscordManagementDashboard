@@ -50,4 +50,5 @@ login-repair = Fluxer nimmt Token oder Client-Secret des Bots nicht mehr an?
 login-repair-link = Mit dem Code aus dem Log des Bots ersetzen
 login-again = Bitte melde dich dafür erneut an.
 form-expired = Die Seite war veraltet. Bitte versuche es erneut.
-login-redirect-not-registered = Fluxer würde dich nicht hierher zurückschicken: Trage genau { $want } unter den Redirect-URIs der Anwendung des Bots ein (Fluxer: Benutzereinstellungen → Anwendungen). Eingetragen sind: { $registered }
+login-redirect-not-registered = Fluxer würde dich nicht hierher zurückschicken: Trage genau { $want } unter den Redirect-URIs der Anwendung des Bots ein (Fluxer: Benutzereinstellungen → Anwendungen). Eingetragen sind: { $registered }. Oder führe als Besitzer des Bots auf seinem Rechner `pb login-link` aus und öffne den Link, den es ausgibt.
+login-link-wrong = Dieser Anmeldelink funktioniert nicht (jeder gilt einmal, 10 Minuten lang): Führe `pb login-link` erneut aus, um einen neuen zu bekommen.

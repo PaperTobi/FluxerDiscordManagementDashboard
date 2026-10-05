@@ -20,4 +20,5 @@ mod util;
 mod voice;
 
 pub use auth::{Sessions, new_setup_code};
+pub use login::{LOGIN_LINK_FOR, new_login_code};
 pub use server::{WebConfig, WebParts, WebState, router, serve};

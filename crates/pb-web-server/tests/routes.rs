@@ -113,6 +113,41 @@ async fn unknown_host_names_are_refused() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_login_link_logs_the_owner_in_once() {
+    use pb_store_api::SecretsFile;
+    let w = Web::start(true).await;
+    let file = pb_store::FsSecretsFile::new(w.dir.path());
+    let code = pb_web_server::new_login_code(&file).await.unwrap();
+    // A wrong code uses the link up as well.
+    let wrong = w.send(w.http.get(w.url("/login/link?code=nope")), None).await;
+    assert_eq!(wrong.status, 303);
+    assert!(wrong.cookie("pb_session").is_none());
+    let late = w
+        .send(w.http.get(w.url(&format!("/login/link?code={code}"))), None)
+        .await;
+    assert!(late.cookie("pb_session").is_none(), "taken by the wrong try");
+    // A fresh one works once.
+    let code = pb_web_server::new_login_code(&file).await.unwrap();
+    let ok = w
+        .send(w.http.get(w.url(&format!("/login/link?code={code}"))), None)
+        .await;
+    let session = ok.cookie("pb_session").expect("a session");
+    let page = w.get("/system", Some(&format!("pb_session={session}"))).await;
+    assert_eq!(page.status, 200, "the owner's page");
+    let again = w
+        .send(w.http.get(w.url(&format!("/login/link?code={code}"))), None)
+        .await;
+    assert!(again.cookie("pb_session").is_none(), "only once");
+    // An expired one does not work.
+    file.write_login_code("old", jiff::Timestamp::now() - jiff::SignedDuration::from_secs(1))
+        .await
+        .unwrap();
+    let old = w.send(w.http.get(w.url("/login/link?code=old")), None).await;
+    assert!(old.cookie("pb_session").is_none());
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn who_may_log_in_and_what_each_login_sees() {
     let w = Web::start(true).await;
     // The owner: every community and the System page.

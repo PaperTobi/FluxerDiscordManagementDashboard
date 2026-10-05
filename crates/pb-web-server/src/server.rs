@@ -276,6 +276,7 @@ pub fn router(st: WebState) -> Router {
         .route("/healthz", get(healthz))
         .route("/login", get(super::login::start))
         .route("/auth/callback", get(super::login::callback))
+        .route("/login/link", get(super::login::link))
         .route("/auth/logout", post(super::login::logout))
         .route("/setup", post(super::setup::submit))
         .route("/settings", post(super::forms::settings))
