@@ -164,6 +164,9 @@ Then:
 3. Add people under **Track someone** (type a name, an ID, or paste a mention). To try it out silently first, switch
    on **Observe only (silent)**: the bot scores and records but says nothing.
 
+On the bot's own machine, opening **`http://localhost:<port>`** (without a container) logs you in as the bot's owner
+at once, no Fluxer login needed; `local_owner = false` under `[web]` in `config.toml` turns that off.
+
 Who may log in: the bot's owner (and *Extra bot owners* set under *System*), and anyone with **Manage community**,
 **Administrator** or one of the *Admin roles* in a community the bot is in; they see only their communities. Owners
 stay logged in for 12 hours, admins for 7 days; changing secrets needs a login from the last 15 minutes.
@@ -221,6 +224,7 @@ checkout, to the checkout (*Without a container*).
 bind = "0.0.0.0:8790"
 # site = "/opt/pb/site"                                              # the web page's files
 # tls = { cert = "/data/tls/cert.pem", key = "/data/tls/key.pem" }   # serve HTTPS (see below)
+# local_owner = true      # a browser on this machine at localhost is the owner (the image sets false)
 
 [inference]
 device = "auto"           # the GPU (Vulkan) when one can be used, else the CPU; "cpu" or "gpu" to choose
@@ -308,7 +312,7 @@ and which old settings no longer exist (the old caps).
 | The page does not open | container running (`podman ps`)? same network? firewall (`8790/tcp`)? open it by IP |
 | "This address is not one of the bot's web UI addresses" | open it by IP, then set *System → Web UI address* or *Extra host names* |
 | Login fails at Fluxer | the redirect address is not registered exactly (setup step 4; the login names the address), or the client secret is wrong (enter it again on the setup's last step, or *System → Client secret*) |
-| Can't log in at all (any reason) | run `pb login-link` on the bot's machine (`target/release/pb login-link` in a checkout, `podman exec profanity-watch pb login-link` in the container) while the bot runs, and open the link it prints: it logs the bot's owner in once, within 10 minutes. Then fix the cause, e.g. the redirect address above |
+| Can't log in at all (any reason) | on the bot's machine, open `http://localhost:<port>` (logs you in as the owner). Elsewhere, or in the container: run `pb login-link` on the bot's machine (`target/release/pb login-link` in a checkout, `podman exec profanity-watch pb login-link` in the container) while the bot runs, and open the link it prints: it logs the bot's owner in once, within 10 minutes. Then fix the cause, e.g. the redirect address above |
 | Bot token or client secret reset in Fluxer (the bot is offline, logging in fails) | the log names a code (also `pb setup-code`): open `/setup`, enter it, then the new token and secret. The owner and all settings stay. A logged-in owner can also replace them under *System* |
 | "Record a clip" is greyed out | the page is not opened over HTTPS (see *HTTPS*) or on localhost; upload a file instead |
 | Exit code 78 | the log says why (configuration, model files, CPU); `pb doctor` checks everything |

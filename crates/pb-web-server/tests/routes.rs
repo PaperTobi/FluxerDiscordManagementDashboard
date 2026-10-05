@@ -113,6 +113,45 @@ async fn unknown_host_names_are_refused() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn the_page_at_localhost_on_the_bots_machine_is_the_owner() {
+    let w = Web::start_full(true, false, true).await;
+    let port = w.base.rsplit(':').next().unwrap().to_owned();
+    // Opened at localhost from this machine: logged in as the owner, then the same page.
+    let first = w
+        .send(
+            w.http
+                .get(w.url("/system?x=1"))
+                .header(HOST, format!("localhost:{port}")),
+            None,
+        )
+        .await;
+    assert_eq!(first.location.as_deref(), Some("/system?x=1"));
+    let session = first.cookie("pb_session").expect("an owner session");
+    let page = w.get("/system", Some(&format!("pb_session={session}"))).await;
+    assert_eq!(page.status, 200);
+    assert!(
+        page.body.contains("Pause everywhere") || page.body.contains("System"),
+        "the owner's page"
+    );
+    // Opened by an address that is not this machine's name: the login page as usual.
+    let lan = w
+        .send(w.http.get(w.url("/")).header(HOST, format!("192.168.1.5:{port}")), None)
+        .await;
+    assert!(lan.cookie("pb_session").is_none());
+    // Forms and the API are not logged in this way.
+    let api = w
+        .send(
+            w.http
+                .get(w.url("/api/v1/communities"))
+                .header(HOST, format!("localhost:{port}")),
+            None,
+        )
+        .await;
+    assert!(api.cookie("pb_session").is_none());
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_login_link_logs_the_owner_in_once() {
     use pb_store_api::SecretsFile;
     let w = Web::start(true).await;

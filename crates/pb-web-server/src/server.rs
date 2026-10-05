@@ -43,6 +43,8 @@ pub struct WebConfig {
     pub client_secret_from_env: bool,
     /// Serve HTTPS with this configuration (`None`: plain HTTP, e.g. behind a reverse proxy).
     pub tls: Option<Arc<tokio_rustls::rustls::ServerConfig>>,
+    /// A browser on the bot's own machine that opens the page at localhost is the bot's owner (no Fluxer login).
+    pub local_owner: bool,
 }
 
 /// What the web server runs on.
@@ -324,6 +326,10 @@ pub fn router(st: WebState) -> Router {
             move || shell(opts.clone()),
         )
         .fallback(not_found)
+        .layer(axum::middleware::from_fn_with_state(
+            st.clone(),
+            super::login::local_owner,
+        ))
         .layer(axum::middleware::from_fn_with_state(st.clone(), super::hosts::guard))
         .layer(SetResponseHeaderLayer::if_not_present(
             header::X_CONTENT_TYPE_OPTIONS,

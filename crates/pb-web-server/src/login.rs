@@ -1,10 +1,12 @@
-//! Logging in with Fluxer (OAuth2 authorization code with PKCE, scope `identify`) and logging out.
+//! Logging in with Fluxer (OAuth2 authorization code with PKCE, scope `identify`), with a link from `pb login-link`,
+//! or by opening the page at localhost on the bot's own machine; and logging out.
 
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
 use axum::Form;
-use axum::extract::{Query, State};
+use axum::extract::{ConnectInfo, Query, Request, State};
+use axum::middleware::Next;
 use axum::response::Response;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
@@ -387,6 +389,13 @@ pub async fn link(State(st): State<WebState>, headers: HeaderMap, Query(q): Quer
             vec![st.notices.put(false, text(loc, "login-link-wrong", &[]), secure)],
         );
     }
+    let cookie = owner_session(&st, owner, secure).await;
+    tracing::info!(user = %owner, "the owner logged in with a login link");
+    redirect_with("/", vec![cookie])
+}
+
+/// Logs the bot's owner in (without Fluxer): the session cookie.
+async fn owner_session(st: &WebState, owner: UserId, secure: bool) -> http::HeaderValue {
     let name = {
         let gs = st.engine.guilds();
         gs.available()
@@ -413,16 +422,43 @@ pub async fn link(State(st): State<WebState>, headers: HeaderMap, Query(q): Quer
             owner: true,
         })])
         .await;
-    tracing::info!(user = %owner, "the owner logged in with a login link");
-    redirect_with(
-        "/",
-        vec![set_cookie(
-            SESSION_COOKIE,
-            &value,
-            Some(OWNER_LIFETIME.unsigned_abs()),
-            secure,
-        )],
-    )
+    set_cookie(SESSION_COOKIE, &value, Some(OWNER_LIFETIME.unsigned_abs()), secure)
+}
+
+/// The bot's own machine (`[web] local_owner`): a page opened at localhost by a browser there is the bot's owner,
+/// without logging in with Fluxer. Only page loads (GET, not the live socket, media, API or files), only when both the
+/// connection and the address are this machine's, and only after setup.
+pub(crate) async fn local_owner(State(st): State<WebState>, req: Request, next: Next) -> Response {
+    const NOT_PAGES: [&str; 8] = [
+        "/pkg/", "/api/", "/media/", "/live", "/healthz", "/auth/", "/login", "/setup",
+    ];
+    if !st.cfg.local_owner
+        || req.method() != http::Method::GET
+        || NOT_PAGES.iter().any(|p| req.uri().path().starts_with(p))
+        || st.sessions.lookup(req.headers()).is_some()
+    {
+        return next.run(req).await;
+    }
+    let from_here = req
+        .extensions()
+        .get::<ConnectInfo<super::tls::Peer>>()
+        .is_some_and(|c| c.0.0.ip().to_canonical().is_loopback());
+    let host = req
+        .headers()
+        .get(header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .map(super::hosts::host_name)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let at_here = host == "localhost" || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback());
+    let owner = st.secrets.get().setup.owner;
+    let (true, true, Some(owner)) = (from_here, at_here, owner) else {
+        return next.run(req).await;
+    };
+    let cookie = owner_session(&st, owner, https(req.headers())).await;
+    tracing::info!(user = %owner, "the owner opened the web UI on the bot's machine");
+    let back = req.uri().path_and_query().map_or("/", |p| p.as_str()).to_owned();
+    redirect_with(&back, vec![cookie])
 }
 
 /// Drops logins that never came back.

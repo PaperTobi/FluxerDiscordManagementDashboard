@@ -211,6 +211,7 @@ async fn run(data: &Path, cfg: Config) -> Result<(), Fail> {
             ),
             None => None,
         },
+        local_owner: cfg.web.local_owner,
     };
     let api = pb_api::Api::load(engine.clone(), index.clone(), Arc::new(pb_store::FsApiFile::new(data)))
         .await

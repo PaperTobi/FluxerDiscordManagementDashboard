@@ -79,7 +79,8 @@ COPY clips/ /opt/pb/clips/
 
 # /data holds everything the bot keeps (settings, secrets entered in the web UI, the event log, recordings, uploads):
 # mount a volume there. The web UI (setup wizard, management, /healthz) listens on 8790.
-ENV PB_DATA=/data PATH=/opt/pb/bin:$PATH
+# Port forwarding into a container can make other machines look like localhost: logins go through Fluxer here.
+ENV PB_DATA=/data PATH=/opt/pb/bin:$PATH PB__WEB__LOCAL_OWNER=false
 USER 10001:10001
 WORKDIR /data
 VOLUME /data

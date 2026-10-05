@@ -109,6 +109,11 @@ impl Web {
 
     /// The same, over HTTPS with the test certificate when `https`.
     pub async fn start_with(ready: bool, https: bool) -> Web {
+        Web::start_full(ready, https, false).await
+    }
+
+    /// The same; `local_owner`: a browser on this machine at localhost is the owner.
+    pub async fn start_full(ready: bool, https: bool, local_owner: bool) -> Web {
         let _ = tracing_subscriber::fmt()
             .with_env_filter("warn")
             .with_test_writer()
@@ -206,6 +211,7 @@ impl Web {
                 token_from_env: false,
                 client_secret_from_env: false,
                 tls: https.then(|| pb_tls::server_config(&cert, &key).unwrap()),
+                local_owner,
             },
             pb_web_server::WebParts {
                 api: api.clone(),

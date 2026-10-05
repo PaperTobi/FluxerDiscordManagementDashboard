@@ -25,6 +25,9 @@ pub struct Web {
     pub site: PathBuf,
     /// Serve HTTPS with this certificate (browsers record from the microphone only over HTTPS or on localhost).
     pub tls: Option<Tls>,
+    /// A browser on this machine that opens the web UI at localhost is the bot's owner, without logging in with
+    /// Fluxer. The image turns it off (port forwarding there can make other machines look like this one).
+    pub local_owner: bool,
 }
 
 impl Default for Web {
@@ -33,6 +36,7 @@ impl Default for Web {
             bind: SocketAddr::from(([0, 0, 0, 0], 8790)),
             site: crate::layout::here().site.clone(),
             tls: None,
+            local_owner: true,
         }
     }
 }
