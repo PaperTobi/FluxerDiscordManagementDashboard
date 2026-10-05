@@ -50,7 +50,6 @@ ui-off = Off
 ui-none = None
 ui-save = Save
 ui-use-inherited = Use inherited
-ui-set-here = set here
 ui-inherited = from { $from }
 ui-owner-only = bot owner only
 ui-duration = A duration like 20s, 5m or 1h
@@ -529,3 +528,25 @@ ui-nr-digest = Only used while the summary report is on.
 ui-nr-digest-weekly = Only used with a weekly summary report.
 ui-nr-actions = Only used while moderation actions are on (Escalation).
 ui-nr-modlog = Only used once a mod-log channel is chosen.
+
+## Where a setting's value comes from
+ui-default = Default
+ui-from-file = From the settings file
+ui-same-as-global = Same as for every community
+ui-same-as-community = Same as in { $community }
+ui-changed-default = Changed · default: { $value }
+ui-changed-file = Changed · settings file: { $value }
+ui-changed-community = Changed for { $community } · every community: { $value }
+ui-changed-person = Changed for { $person } · { $community }: { $value }
+ui-reset-to-default = Back to the default
+ui-use-global-value = Use the value for every community
+ui-use-community-value = Use { $community }'s value
+ui-changed-in = Changed in { $count ->
+        [one] one community:
+       *[other] { $count } communities:
+    }
+ui-settings-intro-person = Settings for { $person } in { $community }. What is not changed here follows { $community }'s settings.
+ui-steps = { $count ->
+        [one] one step
+       *[other] { $count } steps
+    }

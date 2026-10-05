@@ -312,9 +312,9 @@ async fn settings_forms_respect_scope_and_role() {
     assert_eq!(esc.as_array().map(Vec::len), Some(2), "{esc}");
     // The settings pages show where values come from.
     let page = w.get(&format!("/c/{G}/settings/escalation"), Some(&ada)).await.body;
-    assert!(page.contains("set here"), "badges");
+    assert!(page.contains("Changed for Alpha"), "where values come from");
     let page = w.get(&format!("/c/{G}/settings/detection"), Some(&ada)).await.body;
-    assert!(page.contains("from global"), "badges");
+    assert!(page.contains("Same as for every community"), "where values come from");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2206,5 +2206,59 @@ async fn sections_are_grouped_and_say_what_does_nothing_now() {
     let at = detection.find("id=\"set-strike_window\"").unwrap();
     let row = &detection[at..at + detection[at + 10..].find("id=\"set-").unwrap() + 10];
     assert!(row.contains("Only used with more than one strike"), "{row}");
+    w.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn each_setting_says_where_its_value_comes_from() {
+    let w = Web::start(true).await;
+    let owner = w.login(OWNER).await.unwrap();
+    let csrf = w.page_csrf(&owner).await;
+    for (scope, value) in [("global".to_owned(), "0.7"), (format!("server:{G}"), "0.4")] {
+        w.post(
+            "/settings",
+            Some(&owner),
+            &[
+                ("csrf", csrf.as_str()),
+                ("scope", scope.as_str()),
+                ("key", "threshold"),
+                ("value", value),
+                ("action", "set"),
+                ("back", "/"),
+            ],
+        )
+        .await;
+    }
+    let row = |page: &str, key: &str| {
+        let at = page.find(&format!("id=\"set-{key}\"")).expect("the setting");
+        let end = page[at + 10..].find("id=\"set-").map_or(page.len(), |e| at + 10 + e);
+        page[at..end].to_owned()
+    };
+    // For every community: changed, with the default to go back to, and the community that has its own value.
+    let global = row(&w.get("/settings/detection", Some(&owner)).await.body, "threshold");
+    assert!(
+        global.contains("Changed · default: 0.5") && global.contains("Back to the default"),
+        "{global}"
+    );
+    assert!(
+        global.contains("Changed in one community:")
+            && global.contains(&format!("href=\"/c/{G}/settings/detection#set-threshold\">Alpha</a>")),
+        "{global}"
+    );
+    // In Alpha: its own value, and what every community has.
+    let alpha = w.get(&format!("/c/{G}/settings/detection"), Some(&owner)).await.body;
+    let threshold = row(&alpha, "threshold");
+    assert!(
+        threshold.contains("Changed for Alpha · every community: 0.7")
+            && threshold.contains("Use the value for every community"),
+        "{threshold}"
+    );
+    assert!(row(&alpha, "strikes").contains("Same as for every community"));
+    // For a person: the same as in their community.
+    let person = w.get(&format!("/c/{G}/p/{MAX}/settings"), Some(&owner)).await.body;
+    assert!(row(&person, "threshold").contains("Same as in Alpha"));
+    // The community's summary lists what is changed there, with the value.
+    let home = w.get(&format!("/c/{G}/settings"), Some(&owner)).await.body;
+    assert!(home.contains("General threshold: <b>0.4</b>"), "{home}");
     w.stop().await;
 }

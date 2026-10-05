@@ -453,6 +453,121 @@ pub fn advanced(key: SettingKey) -> bool {
     )
 }
 
+/// Where a setting's value comes from, in words, with the value it would have otherwise; when it is changed here, a
+/// button of the section's form takes it back (the form's other changes are saved with it).
+fn inherit_line(key: SettingKey, scope: Scope, is_here: bool, disabled: bool, viewer: &Viewer) -> AnyView {
+    let loc = viewer.locale;
+    let tree = app().engine.settings().current();
+    let gs = app().engine.guilds();
+    let shown = |v: &Value| value_label(key, scope.guild(), v, loc);
+    // The value one scope up: the settings for every community, the community's, or (globally) the default.
+    let (above, from_file) = match scope {
+        Scope::Global => match tree.file_defaults.get_json(key) {
+            Some(v) => (v, true),
+            None => (key.meta().default, false),
+        },
+        Scope::Server { .. } => (effective_value(&tree, Scope::Global, key).0, false),
+        Scope::Person { guild, .. } => (effective_value(&tree, Scope::Server { guild }, key).0, false),
+    };
+    let (line, back) = match (scope, is_here) {
+        (Scope::Global, false) => (
+            text(loc, if from_file { "ui-from-file" } else { "ui-default" }, &[]),
+            None,
+        ),
+        (Scope::Server { .. }, false) => (text(loc, "ui-same-as-global", &[]), None),
+        (Scope::Person { guild, .. }, false) => (
+            text(
+                loc,
+                "ui-same-as-community",
+                &[("community", gs.guild_name(guild).into())],
+            ),
+            None,
+        ),
+        (Scope::Global, true) => (
+            text(
+                loc,
+                if from_file {
+                    "ui-changed-file"
+                } else {
+                    "ui-changed-default"
+                },
+                &[("value", shown(&above).into())],
+            ),
+            Some(text(loc, "ui-reset-to-default", &[])),
+        ),
+        (Scope::Server { guild }, true) => (
+            text(
+                loc,
+                "ui-changed-community",
+                &[
+                    ("community", gs.guild_name(guild).into()),
+                    ("value", shown(&above).into()),
+                ],
+            ),
+            Some(text(loc, "ui-use-global-value", &[])),
+        ),
+        (Scope::Person { guild, user }, true) => (
+            text(
+                loc,
+                "ui-changed-person",
+                &[
+                    ("person", gs.name(guild, user).into()),
+                    ("community", gs.guild_name(guild).into()),
+                    ("value", shown(&above).into()),
+                ],
+            ),
+            Some(text(
+                loc,
+                "ui-use-community-value",
+                &[("community", gs.guild_name(guild).into())],
+            )),
+        ),
+    };
+    // Lists change one entry at a time: their way back is "Use inherited" in the list itself.
+    let back = back.filter(|_| !disabled && !matches!(key.meta().kind, FieldKind::Ids { .. }));
+    view! {
+        <p class="muted small origin" class:changed=is_here>
+            {line}
+            {back.map(|label| view! { " · " <button class="link" name="clear" value=key.name()>{label}</button> })}
+        </p>
+    }
+    .into_any()
+}
+
+/// Globally: the communities this login sees that have their own value, with it, linked to it there.
+fn changed_in(key: SettingKey, viewer: &Viewer) -> Option<AnyView> {
+    let loc = viewer.locale;
+    let tree = app().engine.settings().current();
+    let gs = app().engine.guilds();
+    let own: Vec<(pb_domain::GuildId, Value)> = tree
+        .servers
+        .keys()
+        .filter(|g| viewer.may_see(**g))
+        .filter_map(|g| {
+            tree.overrides(Scope::Server { guild: *g })
+                .get_json(key)
+                .map(|v| (*g, v))
+        })
+        .collect();
+    if own.is_empty() {
+        return None;
+    }
+    let section = key.meta().section;
+    Some(
+        view! {
+            <p class="muted small changed-in">
+                {text(loc, "ui-changed-in", &[("count", own.len().into())])} " "
+                {own.into_iter().enumerate().map(|(i, (g, v))| {
+                    let href = format!("{}#set-{}", section_href(Scope::Server { guild: g }, section), key.name());
+                    let value = value_label(key, Some(g), &v, loc);
+                    view! { {(i > 0).then_some(", ")} <a href=href>{gs.guild_name(g)}</a> " (" {value} ")" }
+                }).collect_view()}
+            </p>
+        }
+        .into_any(),
+    )
+}
+
 /// Why a setting does nothing at the moment (a text id), from the settings in effect at its scope: it is still shown,
 /// with the reason, so the switch that brings it to life is easy to find.
 fn not_relevant(key: SettingKey, scope: Scope) -> Option<&'static str> {
@@ -486,6 +601,7 @@ pub(crate) fn value_label(key: SettingKey, guild: Option<pb_domain::GuildId>, va
         (_, Value::Null) => text(loc, "ui-not-set", &[]),
         (_, Value::String(s)) if s.is_empty() => text(loc, "ui-not-set", &[]),
         (_, Value::Bool(on)) => text(loc, if *on { "ui-on" } else { "ui-off" }, &[]),
+        (FieldKind::Escalation, Value::Array(steps)) => text(loc, "ui-steps", &[("count", steps.len().into())]),
         (FieldKind::Channel, v) => match (guild, shown(v).parse::<u64>()) {
             (Some(g), Ok(c)) => format!("#{}", app().engine.guilds().channel_name(g, pb_domain::ChannelId(c))),
             _ => shown(v),
@@ -571,7 +687,7 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
     let tree = app().engine.settings().current();
     let meta = key.meta();
     let here = tree.overrides(scope).get_json(key);
-    let (value, source) = effective_value(&tree, scope, key);
+    let (value, _) = effective_value(&tree, scope, key);
     // What the last save said about this setting; a refused value is shown again as typed.
     let note = crate::app::field_note(&key.name());
     let value = match note.as_ref().and_then(|n| n.typed.clone()) {
@@ -580,15 +696,10 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
     };
     let disabled = meta.who == Who::Owner && !viewer.owner;
     let is_here = here.is_some();
-    let badge = if is_here {
-        text(loc, "ui-set-here", &[])
-    } else {
-        text(
-            loc,
-            "ui-inherited",
-            &[("from", text(loc, source_id(source), &[]).into())],
-        )
-    };
+    let origin = inherit_line(key, scope, is_here, disabled, &viewer);
+    let elsewhere = (scope == Scope::Global && key.scopes().contains(&pb_domain::ScopeKind::Server))
+        .then(|| changed_in(key, &viewer))
+        .flatten();
     let partner = WORKS_WITH
         .iter()
         .find(|(k, _)| *k == key)
@@ -603,8 +714,8 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
                 <summary title=text(loc, "ui-help", &[])>"?"</summary>
                 <p>{setting_help(loc, key)}</p>
             </details>
-            <span class="badge" class:here=is_here>{badge}</span>
-            {(meta.who == Who::Owner).then(|| view! { <span class="badge owner">{text(loc, "ui-owner-only", &[])}</span> })}
+            // Only who cannot change it needs to be told why.
+            {disabled.then(|| view! { <span class="badge owner">{text(loc, "ui-owner-only", &[])}</span> })}
             {super::commands::setting_commands(key, scope, loc)}
         </div>
     };
@@ -613,6 +724,7 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
             <div class="setting list-setting" id=anchor.clone() class:here=is_here>
                 {head}
                 <super::lists::ListBody key scope value viewer back=format!("{back}#{anchor}") disabled is_here/>
+                {origin}
                 {partner}
             </div>
         }
@@ -623,11 +735,9 @@ fn SettingRow(key: SettingKey, scope: Scope, viewer: Viewer, back: String) -> im
             {head}
             <div class="row">
                 {input(key, scope, &value, loc, disabled)}
-                // Back to the inherited value: submits the section's form (its other changes are saved too).
-                {(is_here && !disabled).then(|| view! {
-                    <button class="link" name="clear" value=key.name()>{text(loc, "ui-use-inherited", &[])}</button>
-                })}
             </div>
+            {origin}
+            {elsewhere}
             {note.map(|n| view! {
                 <p class=if n.ok { "field-note ok" } else { "field-note error" } role=if n.ok { "status" } else { "alert" }>{n.text}</p>
             })}
@@ -810,7 +920,26 @@ pub fn SettingsForm(scope: Scope, back: String, #[prop(optional)] section: Optio
     let reset = section
         .is_none()
         .then(|| view! { <ResetCard scope back=back.clone()/> });
+    let loc = crate::app::locale();
+    let gs = app().engine.guilds();
+    let intro = match scope {
+        Scope::Global => text(loc, "ui-settings-intro-global", &[]),
+        Scope::Server { guild } => text(
+            loc,
+            "ui-settings-intro-server",
+            &[("community", gs.guild_name(guild).into())],
+        ),
+        Scope::Person { guild, user } => text(
+            loc,
+            "ui-settings-intro-person",
+            &[
+                ("person", gs.name(guild, user).into()),
+                ("community", gs.guild_name(guild).into()),
+            ],
+        ),
+    };
     view! {
+        <p class="muted">{intro}</p>
         {nav}
         {sections.into_iter().map(|s| view! { <SectionCard scope section=s back=back.clone()/> }).collect_view()}
         {reset}
@@ -832,14 +961,26 @@ pub fn SettingsHome(scope: Scope, back: String) -> impl IntoView {
         ),
         Scope::Person { .. } => String::new(),
     };
+    let tree = app().engine.settings().current();
     let rows = page_sections(scope)
         .into_iter()
         .map(|s| {
-            let n = set_here.iter().filter(|k| k.meta().section == s).count();
+            let mine: Vec<SettingKey> = set_here.iter().copied().filter(|k| k.meta().section == s).collect();
+            let n = mine.len();
+            // What is changed here, with its value.
+            let changes = mine
+                .into_iter()
+                .filter_map(|k| {
+                    let v = tree.overrides(scope).get_json(k)?;
+                    let value = value_label(k, scope.guild(), &v, loc);
+                    Some(view! { <li>{format!("{}: ", setting_name(loc, k))}<b>{value}</b></li> })
+                })
+                .collect_view();
             view! {
                 <li>
                     <a href=section_href(scope, s)>{section_name(loc, s)}</a>
                     {(n > 0).then(|| view! { <span class="muted small">{text(loc, "ui-settings-set-here", &[("count", n.into())])}</span> })}
+                    {(n > 0).then(|| view! { <ul class="changes small">{changes}</ul> })}
                 </li>
             }
         })
@@ -877,6 +1018,7 @@ pub fn GlobalSettingsPage() -> impl IntoView {
         <header class="page-head"><h1>{text(loc, "ui-settings-global-title", &[])}</h1></header>
         {match section {
             Some(s) => view! {
+                <p class="muted">{text(loc, "ui-settings-intro-global", &[])}</p>
                 <SectionNav scope=Scope::Global current=Some(s)/>
                 <SectionCard scope=Scope::Global section=s back/>
             }

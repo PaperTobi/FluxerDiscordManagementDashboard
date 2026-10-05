@@ -50,7 +50,6 @@ ui-off = Aus
 ui-none = Keiner
 ui-save = Speichern
 ui-use-inherited = Übernommenen Wert nutzen
-ui-set-here = hier gesetzt
 ui-inherited = von { $from }
 ui-owner-only = nur Bot-Besitzer
 ui-duration = Eine Dauer wie 20s, 5m oder 1h
@@ -529,3 +528,25 @@ ui-nr-digest = Nur, solange der zusammenfassende Bericht an ist.
 ui-nr-digest-weekly = Nur bei einem wöchentlichen Bericht.
 ui-nr-actions = Nur, solange Moderationsmaßnahmen an sind (Eskalation).
 ui-nr-modlog = Erst, wenn ein Mod-Log-Kanal gewählt ist.
+
+## Woher der Wert einer Einstellung kommt
+ui-default = Standardwert
+ui-from-file = Aus der Einstellungsdatei
+ui-same-as-global = Wie für jede Community
+ui-same-as-community = Wie in { $community }
+ui-changed-default = Geändert · Standardwert: { $value }
+ui-changed-file = Geändert · Einstellungsdatei: { $value }
+ui-changed-community = Geändert für { $community } · jede Community: { $value }
+ui-changed-person = Geändert für { $person } · { $community }: { $value }
+ui-reset-to-default = Zurück zum Standardwert
+ui-use-global-value = Den Wert für jede Community nutzen
+ui-use-community-value = Den Wert von { $community } nutzen
+ui-changed-in = Geändert in { $count ->
+        [one] einer Community:
+       *[other] { $count } Communitys:
+    }
+ui-settings-intro-person = Einstellungen für { $person } in { $community }. Was hier nicht geändert ist, folgt den Einstellungen von { $community }.
+ui-steps = { $count ->
+        [one] eine Stufe
+       *[other] { $count } Stufen
+    }
