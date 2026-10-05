@@ -2,6 +2,7 @@
 //! operator.
 
 mod config;
+mod layout;
 mod run;
 mod secrets;
 mod tools;
@@ -15,9 +16,9 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(name = "pb", version, about = "Profanity Watch: a voice moderation bot for Fluxer")]
 struct Cli {
-    /// The data directory.
-    #[arg(long, env = "PB_DATA", default_value = "/data", global = true)]
-    data: PathBuf,
+    /// The data directory (default: `data` in the source checkout the program was built in, else `/data`).
+    #[arg(long, env = "PB_DATA", global = true)]
+    data: Option<PathBuf>,
     /// The configuration file (default: <data>/config.toml; it may be missing).
     #[arg(long, env = "PB_CONFIG", global = true)]
     config: Option<PathBuf>,
@@ -101,10 +102,11 @@ pub enum Exit {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let file = cli.config.clone().unwrap_or_else(|| cli.data.join("config.toml"));
+    let data = cli.data.clone().unwrap_or_else(|| layout::here().data.clone());
+    let file = cli.config.clone().unwrap_or_else(|| data.join("config.toml"));
     let exit = match cli.cmd {
-        Cmd::Run => run::main(&cli.data, &file),
-        Cmd::SetupCode => match std::fs::read_to_string(cli.data.join("setup-code")) {
+        Cmd::Run => run::main(&data, &file),
+        Cmd::SetupCode => match std::fs::read_to_string(data.join("setup-code")) {
             Ok(code) => {
                 println!("{}", code.trim());
                 Exit::Ok
@@ -121,20 +123,20 @@ fn main() -> ExitCode {
                 Exit::Config
             }
         },
-        Cmd::ResetSetup => tools::reset_setup(&cli.data),
+        Cmd::ResetSetup => tools::reset_setup(&data),
         Cmd::FetchWeights { dest, check } => tools::fetch_weights(&file, dest.as_deref(), check),
-        Cmd::Import { from } => tools::import(&cli.data, &file, &from),
-        Cmd::Store { cmd: StoreCmd::Verify } => tools::store_verify(&cli.data),
+        Cmd::Import { from } => tools::import(&data, &file, &from),
+        Cmd::Store { cmd: StoreCmd::Verify } => tools::store_verify(&data),
         Cmd::Store {
             cmd: StoreCmd::RebuildIndex,
-        } => tools::store_rebuild_index(&cli.data),
+        } => tools::store_rebuild_index(&data),
         Cmd::Settings {
             cmd: SettingsCmd::Check,
-        } => tools::settings_check(&cli.data),
+        } => tools::settings_check(&data),
         Cmd::Settings {
             cmd: SettingsCmd::Docs { lang },
         } => tools::settings_docs(&lang),
-        Cmd::Doctor => tools::doctor(&cli.data, &file),
+        Cmd::Doctor => tools::doctor(&data, &file),
     };
     ExitCode::from(exit as u8)
 }

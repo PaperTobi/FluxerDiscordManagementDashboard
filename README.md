@@ -113,18 +113,15 @@ worked):
 cargo xtask espeak-ng                                         # the pinned espeak-ng (Piper's phonemizer)
 cargo xtask web                                               # the web page's browser bundle → target/site
 cargo build --release -p pb                                   # the bot → target/release/pb
-target/release/pb fetch-weights --dest target/weights         # models and voices, about 1.7 GB, resumable
-
-export PB_DATA=$PWD/data                                      # everything the bot keeps
-export PB__WEB__SITE=$PWD/target/site
-export PB__INFERENCE__WEIGHTS=$PWD/target/weights
-export PB__INFERENCE__ESPEAK_DATA=$PWD/target/espeak-ng/share
-export PB__INFERENCE__CLIPS=$PWD/clips
+target/release/pb fetch-weights                               # models and voices → target/weights, about 1.7 GB, resumable
 target/release/pb doctor                                      # checks all of the above
 target/release/pb run
 ```
 
-The same paths can go into `$PB_DATA/config.toml` instead (see *Settings*).
+Built in the checkout, the bot finds what these steps made on its own (`target/site`, `target/weights`,
+`target/espeak-ng/share`, `clips/`) and keeps its data in the checkout's `data/` directory (git ignores it). After a
+`git pull`, run the first three steps again. `PB_DATA=/elsewhere` moves the data; other paths can be set in
+`<data>/config.toml` or the environment (see *Settings*).
 
 ### Bot token and client secret from the environment (optional)
 
@@ -216,7 +213,8 @@ by hand, press *System → Read the settings files again* or send `SIGHUP`.
 ### `config.toml` and the environment
 
 `<data>/config.toml`, or `PB__<SECTION>__<KEY>` environment variables, set how the process runs. Everything is
-optional; the image sets the paths already.
+optional: the paths default to where the image installs the files (`/opt/pb/…`), or, for a program built in a source
+checkout, to the checkout (*Without a container*).
 
 ```toml
 [web]

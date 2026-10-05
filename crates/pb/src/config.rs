@@ -31,7 +31,7 @@ impl Default for Web {
     fn default() -> Self {
         Web {
             bind: SocketAddr::from(([0, 0, 0, 0], 8790)),
-            site: PathBuf::from("/opt/pb/site"),
+            site: crate::layout::here().site.clone(),
             tls: None,
         }
     }
@@ -89,9 +89,9 @@ pub struct Inference {
 impl Default for Inference {
     fn default() -> Self {
         Inference {
-            weights: PathBuf::from("/opt/pb/weights"),
-            espeak_data: PathBuf::from("/opt/pb/espeak"),
-            clips: PathBuf::from("/opt/pb/clips"),
+            weights: crate::layout::here().weights.clone(),
+            espeak_data: crate::layout::here().espeak_data.clone(),
+            clips: crate::layout::here().clips.clone(),
             device: Device::Auto,
         }
     }
