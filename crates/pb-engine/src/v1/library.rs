@@ -19,8 +19,36 @@ pub enum SayWhat {
     Preset(String),
 }
 
+/// Decodes an upload off the async threads and hands the audio to `then` (there too), with the file's size; a file
+/// that is not audio is removed again.
+pub(super) async fn decode_staged<T: Send + 'static>(
+    staged: &std::path::Path,
+    ext: Option<&str>,
+    then: impl FnOnce(pb_audio::Pcm) -> Result<T, pb_audio::AudioError> + Send + 'static,
+) -> Result<(T, u64), EngineError> {
+    let (path, ext) = (staged.to_owned(), ext.map(str::to_owned));
+    tokio::task::spawn_blocking(move || -> Result<(T, u64), EngineError> {
+        let done = pb_audio::decode_file(&path, ext.as_deref())
+            .and_then(then)
+            .map_err(EngineError::Unreadable)
+            .and_then(|out| {
+                Ok((
+                    out,
+                    std::fs::metadata(&path).map_err(pb_store_api::StoreError::from)?.len(),
+                ))
+            });
+        if done.is_err() {
+            let _ = std::fs::remove_file(&path);
+        }
+        done
+    })
+    .await
+    // The decoder crashed on this file.
+    .map_err(|e| EngineError::Unreadable(pb_audio::AudioError::Decode(e.to_string())))?
+}
+
 /// A media type for a file name's extension.
-fn media_type(ext: Option<&str>) -> String {
+pub(super) fn media_type(ext: Option<&str>) -> String {
     match ext.map(str::to_ascii_lowercase).as_deref() {
         Some("wav") => "audio/wav",
         Some("mp3") => "audio/mpeg",
@@ -51,28 +79,7 @@ impl Engine {
         lang: Option<Lang>,
         by: Actor,
     ) -> Result<ClipRecord, EngineError> {
-        // Decoded off the async threads; a file that is not audio is removed again.
-        let (decoded, size) = {
-            let (path, e) = (staged.clone(), ext.clone());
-            tokio::task::spawn_blocking(move || -> Result<(Vec<i16>, u64), EngineError> {
-                let done = pb_audio::decode_file(&path, e.as_deref())
-                    .and_then(|pcm| pb_audio::prepare_clip(&pcm))
-                    .map_err(EngineError::Unreadable)
-                    .and_then(|pcm| {
-                        Ok((
-                            pcm,
-                            std::fs::metadata(&path).map_err(pb_store_api::StoreError::from)?.len(),
-                        ))
-                    });
-                if done.is_err() {
-                    let _ = std::fs::remove_file(&path);
-                }
-                done
-            })
-            .await
-            // The decoder crashed on this file.
-            .map_err(|e| EngineError::Unreadable(pb_audio::AudioError::Decode(e.to_string())))??
-        };
+        let (decoded, size) = decode_staged(&staged, ext.as_deref(), |pcm| pb_audio::prepare_clip(&pcm)).await?;
         let blobs = &self.core.deps.blobs;
         let original = blobs.put_file(&staged).await?;
         let wav = pb_audio::wav16(&decoded, pb_audio::PLAY_RATE);

@@ -116,3 +116,38 @@ pub fn tts<T: TtsEngine>(engine: &mut T, voice: &str, sentence: &str) {
         Err(TtsError::Empty)
     ));
 }
+
+/// Checks voice cloning: a voice made from `sample` is listed, speaks `sentence`, and is gone once removed.
+pub fn tts_cloning<T: TtsEngine>(engine: &mut T, sample: &[f32], sample_rate: u32, transcript: &str, sentence: &str) {
+    assert!(engine.info().cloning, "the model says it clones");
+    let made = engine
+        .clone_voice(sample, sample_rate, Some(transcript))
+        .expect("makes a voice");
+    assert!(!made.data.is_empty(), "the voice has data to keep");
+    let info = engine.add_voice("contract", &made).expect("adds the voice");
+    assert_eq!(
+        (info.id.as_str(), info.model.as_str()),
+        ("contract", engine.info().model.as_str())
+    );
+    assert!(!info.languages.is_empty(), "it says which languages it speaks");
+    assert!(
+        engine.voices().iter().any(|v| v.id == "contract"),
+        "the voice is listed"
+    );
+    let speech = engine
+        .synthesize("contract", sentence, &SpeakOpts::default())
+        .expect("speaks in the voice");
+    assert!(
+        speech.samples.len() as f32 / speech.sample_rate as f32 > 0.3,
+        "some speech comes out"
+    );
+    // The same data makes the same voice again (as at the next start).
+    let again = engine.add_voice("contract-2", &made).expect("adds it again");
+    assert_eq!(again.languages, info.languages);
+    engine.remove_voice("contract").expect("removes the voice");
+    engine.remove_voice("contract-2").expect("removes the voice");
+    assert!(matches!(
+        engine.synthesize("contract", sentence, &SpeakOpts::default()),
+        Err(TtsError::NoVoice(_))
+    ));
+}

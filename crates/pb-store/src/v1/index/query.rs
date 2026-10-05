@@ -9,6 +9,7 @@ use pb_domain::{GuildId, Label, SentenceId, UserId};
 use pb_store_api::{
     AUDIT_KINDS, ActionRecord, AuditFilter, AuditRow, ClipRecord, ClipRow, CommunitySeen, Cursor, DayRow, DigestRow,
     Event, JarRow, LastDigest, Page, PersonName, SentenceFilter, SentenceKind, SentenceRecord, SentenceRow, StoreError,
+    VoiceRecord, VoiceRow,
 };
 use turso::Value;
 
@@ -329,6 +330,23 @@ pub async fn clips(db: &Db) -> Result<Vec<ClipRow>, StoreError> {
             seq: seq(&r[0]),
             added: ts(&r[1]),
             record: decode::<ClipRecord>(&r[2], "clip")?,
+        })
+    })
+    .collect()
+}
+
+pub async fn voices(db: &Db) -> Result<Vec<VoiceRow>, StoreError> {
+    db.rows(
+        "SELECT seq, added_ms, data FROM voices WHERE removed = 0 ORDER BY added_ms, model, id",
+        Vec::new(),
+    )
+    .await?
+    .iter()
+    .map(|r| {
+        Ok(VoiceRow {
+            seq: seq(&r[0]),
+            added: ts(&r[1]),
+            record: decode::<VoiceRecord>(&r[2], "voice")?,
         })
     })
     .collect()

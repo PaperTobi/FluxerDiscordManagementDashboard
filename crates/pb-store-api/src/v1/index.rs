@@ -6,7 +6,7 @@ use jiff::civil::Date;
 use pb_domain::{GuildId, Label, SentenceId, UserId};
 use serde::{Deserialize, Serialize};
 
-use super::events::{ActionRecord, ClipRecord, CommunitySeen, Event, SentenceRecord};
+use super::events::{ActionRecord, ClipRecord, CommunitySeen, Event, SentenceRecord, VoiceRecord};
 use super::log::StoreError;
 
 /// Where the next page starts (pages go back in time).
@@ -97,6 +97,8 @@ pub const AUDIT_KINDS: &[&str] = &[
     "blob.deleted",
     "clip.saved",
     "clip.removed",
+    "voice.saved",
+    "voice.removed",
     "login",
     "import.done",
     "audit.imported",
@@ -118,6 +120,13 @@ pub struct ClipRow {
     pub seq: u64,
     pub added: Timestamp,
     pub record: ClipRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoiceRow {
+    pub seq: u64,
+    pub added: Timestamp,
+    pub record: VoiceRecord,
 }
 
 /// The names Fluxer last reported for a person.
@@ -215,6 +224,9 @@ pub trait Index: Send + Sync + 'static {
 
     /// The clip library (removed clips left out), newest first.
     async fn clips(&self) -> Result<Vec<ClipRow>, StoreError>;
+
+    /// The voice library (removed voices left out), oldest first.
+    async fn voices(&self) -> Result<Vec<VoiceRow>, StoreError>;
 
     /// Names of people (nicknames from `guild` when given).
     async fn people(&self, users: &[UserId], guild: Option<GuildId>) -> Result<Vec<PersonName>, StoreError>;

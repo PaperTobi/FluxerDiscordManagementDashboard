@@ -197,6 +197,8 @@ pub fn engine_error(loc: Locale, e: &pb_engine::EngineError) -> String {
         E::NotSaid(P::Failed { error }) => with("err-said-failed", error),
         E::NotSaid(_) => text(loc, "err-said-nothing", &[]),
         E::NoSuchClip => text(loc, "ui-no-such-clip", &[]),
+        E::NoSuchVoice => text(loc, "err-no-such-voice", &[]),
+        E::Voice(error) => voice_error(loc, error),
         E::Unreadable(error) => with("ui-clip-unreadable", &error.to_string()),
         E::NoSuchSentence => text(loc, "err-no-such-sentence", &[]),
         E::NoRecording => text(loc, "err-no-recording", &[]),
@@ -213,6 +215,19 @@ pub fn engine_error(loc: Locale, e: &pb_engine::EngineError) -> String {
             }
         }
         E::Store(error) => store_error(loc, error),
+    }
+}
+
+#[cfg(feature = "ssr")]
+/// Why a voice could not be made from a sample, in the page's language.
+fn voice_error(loc: Locale, e: &pb_engine::VoiceError) -> String {
+    use pb_engine::VoiceError as V;
+    use pb_i18n::text;
+    match e {
+        V::NoCloning => text(loc, "err-voice-no-cloning", &[]),
+        V::NeedsTranscript => text(loc, "err-voice-needs-transcript", &[]),
+        V::NoModel(model) => text(loc, "err-voice-no-model", &[("model", model.clone().into())]),
+        V::Failed(error) => text(loc, "err-voice", &[("error", error.clone().into())]),
     }
 }
 

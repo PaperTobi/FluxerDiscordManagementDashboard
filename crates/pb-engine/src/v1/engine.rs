@@ -61,6 +61,7 @@ impl Engine {
             ctl: Published::default(),
             live,
             clips: Published::default(),
+            voices: Published::default(),
             rooms: Published::default(),
             sentence_no: Published::default(),
             speech: Mutex::default(),
@@ -116,6 +117,16 @@ impl Engine {
         for c in index.clips().await? {
             core.put_clip(c.record);
         }
+        let voices = index.voices().await?;
+        core.voices.update(|vs| {
+            vs.extend(
+                voices
+                    .into_iter()
+                    .map(|v| ((v.record.model.clone(), v.record.id.clone()), v.record)),
+            );
+        });
+        core.sup
+            .spawn_task("voice library", super::voices::register_library(core.clone()));
         // The names last seen, for communities and tracked people the gateway has not mentioned (yet).
         let communities = index.communities().await?;
         core.update_guilds(|gs| {

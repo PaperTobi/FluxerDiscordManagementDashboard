@@ -2,7 +2,7 @@
 
 mod queue;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc as smpsc};
@@ -10,8 +10,8 @@ use std::thread::JoinHandle;
 use std::time::Instant;
 
 use pb_models_api::{
-    Classifier, ClassifierInfo, FRAME, ModelError, RawScores, SpeakOpts, TtsEngine, TtsError, VadInfo, VadModel,
-    VadState, VoiceInfo, energy_gate,
+    Classifier, ClassifierInfo, ClonedVoice, FRAME, ModelError, RawScores, SpeakOpts, TtsEngine, TtsError, TtsInfo,
+    VadInfo, VadModel, VadState, VoiceInfo, energy_gate,
 };
 use tokio::sync::oneshot;
 
@@ -94,6 +94,8 @@ pub enum InferError {
     Tts(#[from] TtsError),
     #[error("text-to-speech is not available")]
     NoTts,
+    #[error("no speech model {0:?} is running")]
+    NoModel(String),
     /// The model failed inside (a bug in it or its library); the thread goes on with the next job.
     #[error("the model failed: {0}")]
     Panicked(String),
@@ -412,34 +414,95 @@ enum TtsJob {
         threads: usize,
         reply: oneshot::Sender<Result<Vec<VoiceInfo>, InferError>>,
     },
+    CloneVoice {
+        sample: Vec<f32>,
+        rate: u32,
+        transcript: Option<String>,
+        reply: oneshot::Sender<Result<ClonedVoice, InferError>>,
+    },
+    AddVoice {
+        id: String,
+        voice: ClonedVoice,
+        reply: oneshot::Sender<Result<VoiceInfo, InferError>>,
+    },
+    RemoveVoice {
+        id: String,
+        reply: oneshot::Sender<Result<(), InferError>>,
+    },
 }
 
-fn tts_thread(factory: TtsFactory, threads: usize, queue: Arc<Queue<TtsJob>>, voices: Arc<Mutex<Vec<VoiceInfo>>>) {
-    // `voices` is this engine's own list.
-    let set_voices = |list: Vec<VoiceInfo>| {
-        if let Ok(mut v) = voices.lock() {
-            *v = list;
+/// What a speech model's thread shows the handle: the model and its voices.
+#[derive(Default)]
+struct Shown {
+    info: Option<TtsInfo>,
+    voices: Vec<VoiceInfo>,
+}
+
+/// Runs `f` on the model, catching a panic inside it.
+fn on_model<T>(
+    engine: &mut Option<Box<dyn TtsEngine>>,
+    f: impl FnOnce(&mut dyn TtsEngine) -> Result<T, TtsError>,
+) -> Result<T, InferError> {
+    let e = engine.as_deref_mut().ok_or(InferError::NoTts)?;
+    guarded(|| f(e))
+        .map_err(InferError::Panicked)?
+        .map_err(InferError::from)
+}
+
+fn tts_thread(factory: TtsFactory, threads: usize, queue: Arc<Queue<TtsJob>>, shown: Arc<Mutex<Shown>>) {
+    // The voices made from samples it was given (given to the model again after a reload).
+    let mut added: BTreeMap<String, ClonedVoice> = BTreeMap::new();
+    let start = |threads: usize, added: &BTreeMap<String, ClonedVoice>| {
+        let mut e = factory(threads)?;
+        for (id, v) in added {
+            if let Err(err) = e.add_voice(id, v) {
+                tracing::warn!(voice = %id, error = %err, "a voice made from a sample could not be added again");
+            }
+        }
+        Ok::<_, TtsError>(e)
+    };
+    let show = |engine: &Option<Box<dyn TtsEngine>>| {
+        if let Ok(mut s) = shown.lock() {
+            s.info = engine.as_ref().map(|e| e.info());
+            s.voices = engine.as_ref().map(|e| e.voices()).unwrap_or_default();
         }
     };
-    let mut engine = match factory(threads) {
-        Ok(e) => {
-            set_voices(e.voices());
-            Some(e)
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "text-to-speech could not start");
-            None
-        }
-    };
+    let mut engine = start(threads, &added)
+        .inspect_err(|e| tracing::error!(error = %e, "text-to-speech could not start"))
+        .ok();
+    show(&engine);
     while let Some((job, _)) = queue.pop() {
         match job {
             TtsJob::Reload { threads, reply } => {
-                let result = factory(threads).map_err(InferError::from).map(|e| {
+                let result = start(threads, &added).map_err(InferError::from).map(|e| {
                     let list = e.voices();
-                    set_voices(list.clone());
                     engine = Some(e);
                     list
                 });
+                show(&engine);
+                let _ = reply.send(result);
+            }
+            TtsJob::CloneVoice {
+                sample,
+                rate,
+                transcript,
+                reply,
+            } => {
+                let result = on_model(&mut engine, |e| e.clone_voice(&sample, rate, transcript.as_deref()));
+                let _ = reply.send(result);
+            }
+            TtsJob::AddVoice { id, voice, reply } => {
+                let result = on_model(&mut engine, |e| e.add_voice(&id, &voice));
+                if result.is_ok() {
+                    added.insert(id, voice);
+                }
+                show(&engine);
+                let _ = reply.send(result);
+            }
+            TtsJob::RemoveVoice { id, reply } => {
+                added.remove(&id);
+                let result = on_model(&mut engine, |e| e.remove_voice(&id));
+                show(&engine);
                 let _ = reply.send(result);
             }
             TtsJob::Speak {
@@ -452,23 +515,17 @@ fn tts_thread(factory: TtsFactory, threads: usize, queue: Arc<Queue<TtsJob>>, vo
                     continue;
                 }
                 let t = Instant::now();
-                let result = match engine.as_mut() {
-                    None => Err(InferError::NoTts),
-                    Some(e) => guarded(|| e.synthesize(&voice, &text, &opts))
-                        .map_err(InferError::Panicked)
-                        .and_then(|r| r.map_err(InferError::from))
-                        .and_then(|s| {
-                            let mut at48 = pb_audio::resample(&s.samples, s.sample_rate, pb_audio::PLAY_RATE)
-                                .map_err(|e| InferError::Tts(TtsError::Failed(e.to_string())))?;
-                            // Piper normalises to full scale; 1 dB of headroom keeps the resampled peaks unclipped.
-                            pb_audio::limit_peak(&mut at48, -1.0);
-                            Ok(Speech48 {
-                                samples: pb_audio::to_i16(&at48),
-                                unknown_phonemes: s.unknown_phonemes,
-                                infer_ms: ms(t.elapsed()),
-                            })
-                        }),
-                };
+                let result = on_model(&mut engine, |e| e.synthesize(&voice, &text, &opts)).and_then(|s| {
+                    let mut at48 = pb_audio::resample(&s.samples, s.sample_rate, pb_audio::PLAY_RATE)
+                        .map_err(|e| InferError::Tts(TtsError::Failed(e.to_string())))?;
+                    // Piper normalises to full scale; 1 dB of headroom keeps the resampled peaks unclipped.
+                    pb_audio::limit_peak(&mut at48, -1.0);
+                    Ok(Speech48 {
+                        samples: pb_audio::to_i16(&at48),
+                        unknown_phonemes: s.unknown_phonemes,
+                        infer_ms: ms(t.elapsed()),
+                    })
+                });
                 let _ = reply.send(result);
             }
         }
@@ -488,15 +545,32 @@ struct Inner {
     threads: Mutex<Vec<(Worker, JoinHandle<()>)>>,
 }
 
-/// A speech model's queue and its voices (kept by its thread).
+/// A speech model's queue and what its thread shows.
 struct SpeechModel {
     queue: Arc<Queue<TtsJob>>,
-    voices: Arc<Mutex<Vec<VoiceInfo>>>,
+    shown: Arc<Mutex<Shown>>,
 }
 
 impl SpeechModel {
     fn voices(&self) -> Vec<VoiceInfo> {
-        self.voices.lock().map(|v| v.clone()).unwrap_or_default()
+        self.shown.lock().map(|s| s.voices.clone()).unwrap_or_default()
+    }
+
+    fn info(&self) -> Option<TtsInfo> {
+        self.shown.lock().ok().and_then(|s| s.info.clone())
+    }
+
+    /// Hands the model a job and waits for its answer.
+    async fn ask<R>(
+        &self,
+        prio: u8,
+        job: impl FnOnce(oneshot::Sender<Result<R, InferError>>) -> TtsJob,
+    ) -> Result<R, InferError> {
+        let (reply, rx) = oneshot::channel();
+        if !self.queue.push(prio, job(reply)) {
+            return Err(InferError::Stopped);
+        }
+        rx.await.map_err(|_| InferError::Stopped)?
     }
 }
 
@@ -541,10 +615,10 @@ impl Inference {
         let mut tts = Vec::new();
         for factory in models.tts {
             let q = Arc::new(Queue::default());
-            let voices = Arc::new(Mutex::new(Vec::new()));
-            let (q2, v2, n) = (q.clone(), voices.clone(), models.tts_threads);
-            threads.push((Worker::Speech, spawn("pb-tts", move || tts_thread(factory, n, q2, v2))?));
-            tts.push(SpeechModel { queue: q, voices });
+            let shown = Arc::new(Mutex::new(Shown::default()));
+            let (q2, s2, n) = (q.clone(), shown.clone(), models.tts_threads);
+            threads.push((Worker::Speech, spawn("pb-tts", move || tts_thread(factory, n, q2, s2))?));
+            tts.push(SpeechModel { queue: q, shown });
         }
         Ok(Inference {
             inner: Arc::new(Inner {
@@ -586,7 +660,7 @@ impl Inference {
         rx.await.map_err(|_| InferError::Stopped)?
     }
 
-    /// Speaks `text` with `voice`, at 48 kHz.
+    /// Speaks `text` with `voice` (an id, or `<model>:<id>`), at 48 kHz.
     pub async fn speak(
         &self,
         voice: &str,
@@ -594,41 +668,75 @@ impl Inference {
         opts: SpeakOpts,
         prio: SpeakPriority,
     ) -> Result<Speech48, InferError> {
-        if self.inner.tts.is_empty() {
-            return Err(InferError::NoTts);
-        }
-        // The engine that has the voice (the first one when none does: it says which voice is missing).
-        let q = &self
+        // The model that has the voice (the first one when none does: it says which voice is missing).
+        let (model, id) = self
             .inner
             .tts
             .iter()
-            .find(|m| m.voices().iter().any(|v| v.named(voice)))
-            .or_else(|| self.inner.tts.first())
-            .ok_or(InferError::NoTts)?
-            .queue;
-        let id = self
-            .voices()
-            .into_iter()
-            .find(|v| v.named(voice))
-            .map_or_else(|| voice.to_owned(), |v| v.id);
-        let (reply, rx) = oneshot::channel();
-        if !q.push(
-            prio as u8,
-            TtsJob::Speak {
+            .find_map(|m| Some((m, m.voices().into_iter().find(|v| v.named(voice))?.id)))
+            .or_else(|| Some((self.inner.tts.first()?, voice.to_owned())))
+            .ok_or(InferError::NoTts)?;
+        let text = text.to_owned();
+        model
+            .ask(prio as u8, |reply| TtsJob::Speak {
                 voice: id,
-                text: text.to_owned(),
+                text,
                 opts,
                 reply,
-            },
-        ) {
-            return Err(InferError::Stopped);
-        }
-        rx.await.map_err(|_| InferError::Stopped)?
+            })
+            .await
     }
 
     /// The installed voices of every speech model.
     pub fn voices(&self) -> Vec<VoiceInfo> {
         self.inner.tts.iter().flat_map(SpeechModel::voices).collect()
+    }
+
+    /// The speech models that run.
+    pub fn speech_models(&self) -> Vec<TtsInfo> {
+        self.inner.tts.iter().filter_map(SpeechModel::info).collect()
+    }
+
+    fn model(&self, name: &str) -> Result<&SpeechModel, InferError> {
+        self.inner
+            .tts
+            .iter()
+            .find(|m| m.info().is_some_and(|i| i.model == name))
+            .ok_or_else(|| InferError::NoModel(name.to_owned()))
+    }
+
+    /// Makes a voice with `model` from a sample (mono, in [-1, 1], at `rate`) and what is said in it, when known.
+    pub async fn clone_voice(
+        &self,
+        model: &str,
+        sample: Vec<f32>,
+        rate: u32,
+        transcript: Option<String>,
+    ) -> Result<ClonedVoice, InferError> {
+        self.model(model)?
+            .ask(SpeakPriority::Preview as u8, |reply| TtsJob::CloneVoice {
+                sample,
+                rate,
+                transcript,
+                reply,
+            })
+            .await
+    }
+
+    /// Gives `model` a voice made from a sample, as `id` (kept across reloads).
+    pub async fn add_voice(&self, model: &str, id: &str, voice: ClonedVoice) -> Result<VoiceInfo, InferError> {
+        let id = id.to_owned();
+        self.model(model)?
+            .ask(u8::MAX, |reply| TtsJob::AddVoice { id, voice, reply })
+            .await
+    }
+
+    /// Takes a voice made from a sample away from `model`.
+    pub async fn remove_voice(&self, model: &str, id: &str) -> Result<(), InferError> {
+        let id = id.to_owned();
+        self.model(model)?
+            .ask(u8::MAX, |reply| TtsJob::RemoveVoice { id, reply })
+            .await
     }
 
     /// Restarts every speech model with `threads` threads (and picks up newly installed voices).
@@ -638,11 +746,7 @@ impl Inference {
         }
         let mut all = Vec::new();
         for m in &self.inner.tts {
-            let (reply, rx) = oneshot::channel();
-            if !m.queue.push(u8::MAX, TtsJob::Reload { threads, reply }) {
-                return Err(InferError::Stopped);
-            }
-            all.extend(rx.await.map_err(|_| InferError::Stopped)??);
+            all.extend(m.ask(u8::MAX, |reply| TtsJob::Reload { threads, reply }).await?);
         }
         Ok(all)
     }

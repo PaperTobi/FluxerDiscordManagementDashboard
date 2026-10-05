@@ -7,7 +7,7 @@ mod tts;
 mod vad;
 
 pub use classifier::{Classifier, ClassifierInfo, ModelError, RawScores};
-pub use tts::{SpeakOpts, Speech, TtsEngine, TtsError, VoiceInfo};
+pub use tts::{ClonedVoice, SpeakOpts, Speech, TtsEngine, TtsError, TtsInfo, VoiceInfo};
 pub use vad::{FRAME, VadInfo, VadModel, VadState, energy_gate};
 
 /// The rate of all audio the VAD and the classifier take; frames of [`FRAME`] samples.

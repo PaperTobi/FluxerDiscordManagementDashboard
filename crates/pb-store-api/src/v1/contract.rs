@@ -144,7 +144,7 @@ use pb_domain::{ActionKind, ActionOutcome, Audience, ChannelId, ClfLang, Label, 
 use super::{
     ActionRecord, AuditFilter, BlobDeleted, ClipRecord, ClipRemoved, CommunitySeen, CutCause, DecisionRecord, Index,
     MessagePurpose, MessageSent, Page, PersonSeen, PlayOutcome, PlayRecord, SentenceFilter, SentenceKind,
-    SentenceRecord, SentenceSource, SettingsChanged,
+    SentenceRecord, SentenceSource, SettingsChanged, VoiceRecord, VoiceRemoved,
 };
 
 fn sentence(user: u64, at: &str, decision: DecisionRecord, jar: bool, audio: Option<BlobHash>) -> SentenceRecord {
@@ -567,6 +567,46 @@ where
         .unwrap();
     wait_for(&index, r[0].seq).await;
     assert!(index.clips().await.unwrap().is_empty());
+
+    // The voice library: added, renamed (keeping when it was added), removed.
+    let voice = |id: &str, name: &str| VoiceRecord {
+        model: "omnivoice".into(),
+        id: id.into(),
+        name: name.into(),
+        sample: hash(9),
+        data: hash(10),
+        transcript: Some("Hello there.".into()),
+        added_by: me.clone(),
+        by: me.clone(),
+    };
+    let r = log
+        .append(
+            [
+                (voice("anna", "Anna"), "2026-10-02T11:00:00Z"),
+                (voice("bob", "Bob"), "2026-10-02T11:01:00Z"),
+                (voice("anna", "Anna (calm)"), "2026-10-02T11:02:00Z"),
+            ]
+            .into_iter()
+            .map(|(v, t)| Event::VoiceSaved(Box::new(v)).to_new(at(t)).unwrap())
+            .chain(std::iter::once(
+                Event::VoiceRemoved(VoiceRemoved {
+                    model: "omnivoice".into(),
+                    id: "bob".into(),
+                    by: me.clone(),
+                })
+                .to_new(None)
+                .unwrap(),
+            ))
+            .collect(),
+        )
+        .await
+        .unwrap();
+    wait_for(&index, r[3].seq).await;
+    let voices = index.voices().await.unwrap();
+    assert_eq!(voices.len(), 1);
+    assert_eq!(voices[0].record.voice_id(), "omnivoice:anna");
+    assert_eq!(voices[0].record.name, "Anna (calm)");
+    assert_eq!(Some(voices[0].added), at("2026-10-02T11:00:00Z"));
 
     let people = index.people(&[UserId(5), UserId(404)], Some(GuildId(1))).await.unwrap();
     assert_eq!(people.len(), 1);

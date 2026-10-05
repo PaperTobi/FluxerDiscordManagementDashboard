@@ -20,7 +20,7 @@ tracing.workspace = true
 pb-classifier-roblox.workspace = true
 pb-domain.workspace = true
 pb-espeak.workspace = true
-pb-testkit.workspace = true
+pb-testkit = { workspace = true, features = ["fakemodels"] }
 pb-tts-piper.workspace = true
 pb-vad-silero.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

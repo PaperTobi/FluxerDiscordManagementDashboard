@@ -1,6 +1,7 @@
 //! Stand-in models for tests that run the whole bot without model weights. Speech is a plain tone and its pitch says
 //! what was said: [`ToneVad`] hears any tone as speech, [`ToneClassifier`] scores a low tone (about 440 Hz) as harmless
-//! and a high one (about 880 Hz) as profanity, and [`BeepTts`] answers every text with a beep as long as the text.
+//! and a high one (about 880 Hz) as profanity, and [`BeepTts`] answers every text with a beep as long as the text (and
+//! makes voices from samples: a voice made from a tone beeps at its pitch).
 //! [`tone`] makes the audio.
 
 use std::num::NonZeroUsize;
@@ -9,8 +10,8 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 
 use pb_domain::{ClfLang, Label};
 use pb_models_api::{
-    Classifier, ClassifierInfo, FRAME, ModelError, RawScores, SpeakOpts, Speech, TtsEngine, TtsError, VadInfo,
-    VadModel, VadState, VoiceInfo,
+    Classifier, ClassifierInfo, ClonedVoice, FRAME, ModelError, RawScores, SpeakOpts, Speech, TtsEngine, TtsError,
+    TtsInfo, VadInfo, VadModel, VadState, VoiceInfo,
 };
 
 /// The pitch of harmless speech.
@@ -216,10 +217,13 @@ pub struct Spoken {
 }
 
 /// Text-to-speech with an English and a German voice. Each says any text as a beep of 20 ms per character (at rate 1),
-/// at 660 Hz in English and 520 Hz in German. Every request is logged; clones share the log.
+/// at 660 Hz in English and 520 Hz in German. A voice made from a sample beeps at the sample's pitch and speaks both
+/// languages. Every request is logged; clones share the log.
 #[derive(Debug, Clone, Default)]
 pub struct BeepTts {
     log: Arc<Mutex<Vec<Spoken>>>,
+    /// Voices made from samples, and their pitch.
+    made: std::collections::BTreeMap<String, f32>,
 }
 
 impl BeepTts {
@@ -234,20 +238,60 @@ impl BeepTts {
     }
 }
 
+impl BeepTts {
+    fn voice(id: &str, languages: &[&str]) -> VoiceInfo {
+        VoiceInfo {
+            id: id.into(),
+            model: "beep".into(),
+            language: languages[0].into(),
+            languages: languages.iter().map(|&l| l.into()).collect(),
+            speakers: Vec::new(),
+            sample_rate: BeepTts::RATE,
+            quality: "medium".into(),
+        }
+    }
+}
+
 impl TtsEngine for BeepTts {
+    fn info(&self) -> TtsInfo {
+        TtsInfo {
+            model: "beep".into(),
+            cloning: true,
+        }
+    }
+
     fn voices(&self) -> Vec<VoiceInfo> {
-        [(BeepTts::EN, "en_US"), (BeepTts::DE, "de_DE")]
-            .into_iter()
-            .map(|(id, language)| VoiceInfo {
-                id: id.into(),
-                model: "beep".into(),
-                language: language.into(),
-                languages: vec![language.into()],
-                speakers: Vec::new(),
-                sample_rate: BeepTts::RATE,
-                quality: "medium".into(),
-            })
-            .collect()
+        let mut out = vec![
+            BeepTts::voice(BeepTts::EN, &["en_US"]),
+            BeepTts::voice(BeepTts::DE, &["de_DE"]),
+        ];
+        out.extend(self.made.keys().map(|id| BeepTts::voice(id, &["en", "de"])));
+        out
+    }
+
+    fn clone_voice(&mut self, sample: &[f32], sample_rate: u32, _: Option<&str>) -> Result<ClonedVoice, TtsError> {
+        let hz = pitch(sample, sample_rate);
+        if hz <= 0.0 {
+            return Err(TtsError::Failed("the sample is silent".into()));
+        }
+        Ok(ClonedVoice {
+            data: hz.to_le_bytes().to_vec(),
+        })
+    }
+
+    fn add_voice(&mut self, id: &str, voice: &ClonedVoice) -> Result<VoiceInfo, TtsError> {
+        let hz = <[u8; 4]>::try_from(voice.data.as_slice())
+            .map(f32::from_le_bytes)
+            .map_err(|_| TtsError::Load("not a beep voice".into()))?;
+        self.made.insert(id.to_owned(), hz);
+        Ok(BeepTts::voice(id, &["en", "de"]))
+    }
+
+    fn remove_voice(&mut self, id: &str) -> Result<(), TtsError> {
+        self.made
+            .remove(id)
+            .map(drop)
+            .ok_or_else(|| TtsError::NoVoice(id.to_owned()))
     }
 
     fn synthesize(&mut self, voice: &str, text: &str, opts: &SpeakOpts) -> Result<Speech, TtsError> {
@@ -259,7 +303,7 @@ impl TtsEngine for BeepTts {
         let freq = match voice {
             BeepTts::EN => 660.0,
             BeepTts::DE => 520.0,
-            other => return Err(TtsError::NoVoice(other.into())),
+            other => *self.made.get(other).ok_or_else(|| TtsError::NoVoice(other.into()))?,
         };
         if text.trim().is_empty() {
             return Err(TtsError::Empty);
@@ -294,6 +338,14 @@ mod tests {
         pb_models_api::contract::classifier(&mut ToneClassifier::default(), &speech(PROFANE_HZ));
         pb_models_api::contract::tts(&mut BeepTts::default(), BeepTts::EN, "Please keep it clean.");
         pb_models_api::contract::tts(&mut BeepTts::default(), BeepTts::DE, "Bitte nicht fluchen.");
+        let sample = speech(300.0);
+        pb_models_api::contract::tts_cloning(
+            &mut BeepTts::default(),
+            &sample,
+            pb_domain::LISTEN_RATE,
+            "Hallo.",
+            "Please keep it clean.",
+        );
     }
 
     #[test]
@@ -322,6 +374,15 @@ mod tests {
         assert!(!worker.is_finished());
         gate.open();
         assert!(worker.join().unwrap().is_ok());
+    }
+
+    #[test]
+    fn a_voice_made_from_a_tone_beeps_at_its_pitch() {
+        let mut tts = BeepTts::default();
+        let made = tts.clone_voice(&speech(300.0), pb_domain::LISTEN_RATE, None).unwrap();
+        tts.add_voice("low", &made).unwrap();
+        let said = tts.synthesize("low", "Hello there.", &SpeakOpts::default()).unwrap();
+        assert!((pitch(&said.samples, said.sample_rate) - 300.0).abs() < 5.0);
     }
 
     #[test]

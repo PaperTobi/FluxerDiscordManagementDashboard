@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use pb_infer::{InferError, Inference, Models, Priority, SpeakPriority, TtsFactory};
 use pb_models_api::{
-    Classifier, ClassifierInfo, FRAME, ModelError, RawScores, SpeakOpts, Speech, TtsEngine, TtsError, VadInfo,
+    Classifier, ClassifierInfo, FRAME, ModelError, RawScores, SpeakOpts, Speech, TtsEngine, TtsError, TtsInfo, VadInfo,
     VadModel, VadState, VoiceInfo,
 };
 
@@ -84,6 +84,13 @@ const FAKE: FakeTts = FakeTts {
 };
 
 impl TtsEngine for FakeTts {
+    fn info(&self) -> TtsInfo {
+        TtsInfo {
+            model: self.model.into(),
+            cloning: false,
+        }
+    }
+
     fn voices(&self) -> Vec<VoiceInfo> {
         vec![VoiceInfo {
             id: "v".into(),
@@ -273,5 +280,63 @@ async fn each_voice_goes_to_its_own_model() {
         secs("other:v").await,
         Err(InferError::Tts(TtsError::NoVoice(_)))
     ));
+    inf.shutdown();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn voices_made_from_samples_stay_across_reloads() {
+    let models = Models {
+        vad: Box::new(FakeVad(VadInfo {
+            model: "fake".into(),
+            context: 0,
+        })),
+        classifier: Box::new(FakeClassifier {
+            info: ClassifierInfo {
+                model: "fake".into(),
+                min_samples: 480,
+                max_samples: 480_000,
+                device: "cpu".into(),
+            },
+            log: Arc::default(),
+            delay: Duration::ZERO,
+        }),
+        tts: vec![
+            Box::new(|_| Ok(Box::new(FAKE) as Box<dyn TtsEngine>)),
+            Box::new(|_| Ok(Box::new(pb_testkit::models::BeepTts::default()) as Box<dyn TtsEngine>)),
+        ],
+        tts_threads: 1,
+    };
+    let inf = Inference::start(models).unwrap();
+    inf.reload_tts(1).await.unwrap();
+    let cloning: Vec<(String, bool)> = inf.speech_models().into_iter().map(|m| (m.model, m.cloning)).collect();
+    assert_eq!(cloning, [("fake".to_owned(), false), ("beep".to_owned(), true)]);
+    let tone: Vec<f32> = pb_testkit::models::tone(300.0, 1.0, 16_000, 0.3)
+        .iter()
+        .map(|&s| f32::from(s) / 32768.0)
+        .collect();
+    assert!(matches!(
+        inf.clone_voice("fake", tone.clone(), 16_000, None).await,
+        Err(InferError::Tts(TtsError::NoCloning))
+    ));
+    assert!(matches!(
+        inf.clone_voice("omni", tone.clone(), 16_000, None).await,
+        Err(InferError::NoModel(_))
+    ));
+    let made = inf
+        .clone_voice("beep", tone, 16_000, Some("Hello.".into()))
+        .await
+        .unwrap();
+    let info = inf.add_voice("beep", "low", made).await.unwrap();
+    assert_eq!(info.full_id(), "beep:low");
+    // Kept when the models are started again (new voices installed, another thread count).
+    inf.reload_tts(2).await.unwrap();
+    assert!(inf.voices().iter().any(|v| v.full_id() == "beep:low"));
+    inf.speak("beep:low", "hi", SpeakOpts::default(), SpeakPriority::Preview)
+        .await
+        .unwrap();
+    inf.remove_voice("beep", "low").await.unwrap();
+    assert!(!inf.voices().iter().any(|v| v.full_id() == "beep:low"));
+    inf.reload_tts(1).await.unwrap();
+    assert!(!inf.voices().iter().any(|v| v.full_id() == "beep:low"));
     inf.shutdown();
 }

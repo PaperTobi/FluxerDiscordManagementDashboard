@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pb_espeak::Espeak;
-use pb_models_api::{SpeakOpts, Speech, TtsEngine, TtsError, VoiceInfo};
+use pb_models_api::{SpeakOpts, Speech, TtsEngine, TtsError, TtsInfo, VoiceInfo};
 
 pub use voice::{Scales, Voice, VoiceConfig};
 
@@ -82,6 +82,13 @@ impl PiperEngine {
 }
 
 impl TtsEngine for PiperEngine {
+    fn info(&self) -> TtsInfo {
+        TtsInfo {
+            model: "piper".into(),
+            cloning: false,
+        }
+    }
+
     fn voices(&self) -> Vec<VoiceInfo> {
         self.found
             .iter()

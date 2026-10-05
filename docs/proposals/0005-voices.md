@@ -1,6 +1,6 @@
 # 0005 — Voices: several speech models, a voice library with cloned voices, a voice per kind of line
 
-Date: 2026-10-04. Status: decided by the user (quiz of 2026-10-04); step 1 built, the rest in the order below.
+Date: 2026-10-04. Status: decided by the user (quiz of 2026-10-04); steps 1 and 2 built, the rest in the order below.
 
 ## What the user asked for
 - Several text-to-speech models, each swappable everywhere: OmniVoice 0.6B, then Chatterbox, Qwen3-TTS 0.6B Base and
@@ -36,3 +36,20 @@ Date: 2026-10-04. Status: decided by the user (quiz of 2026-10-04); step 1 built
 2. The cloning API and the voice library (store, events, index, engine API) with a stand-in cloning engine in tests.
 3. The Voices page and the `line_voices` picker (after the web UI's settings restructure).
 4. OmniVoice as the first cloning engine (proposal 0006), then the others.
+
+## Step 2 in detail
+- **pb-models-api.** `TtsEngine::info() -> TtsInfo {model, cloning}`; default methods `clone_voice(sample, rate,
+  transcript) -> ClonedVoice {data: Vec<u8>}`, `add_voice(id, &ClonedVoice) -> VoiceInfo`, `remove_voice(id)`
+  (default: `TtsError::NoCloning`); `TtsError::NeedsTranscript` for models that need to know what the sample says.
+- **pb-infer.** Clone/add/remove jobs on the model's own queue (cloning at preview priority). The model's thread keeps
+  the voices it was given and gives them again after a reload. `speech_models()` lists the models and whether they
+  clone.
+- **pb-store-api.** `voice.saved` v1 (`VoiceRecord {model, id, name, sample, data, transcript, added_by, by}`; the
+  sample as uploaded and the model's data are blobs, role `voice`) and `voice.removed` v1; both audited. `Index::voices()`
+  (index schema 4).
+- **pb-engine.** `add_voice(file, name, model, transcript)` decodes the file, clones, stores the blobs and the record,
+  registers the voice; `rename_voice`, `remove_voice`, `library_voices()`. The id is made from the name once (`anna`,
+  `anna-2`) and never changes. At start every library voice is registered with its model (a model that is not
+  installed leaves it unusable, and lines fall back).
+- **Tests.** The test kit's beep voice learns to clone (its pitch comes from the sample); an engine scenario adds a
+  voice, uses it for warnings, restarts, and removes it.

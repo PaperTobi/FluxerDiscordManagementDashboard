@@ -22,6 +22,11 @@ pub enum EngineError {
     NotSaid(PlayOutcome),
     #[error("no such clip")]
     NoSuchClip,
+    #[error("no such voice")]
+    NoSuchVoice,
+    /// A voice could not be made from the sample or given to its model.
+    #[error("the voice could not be made: {0}")]
+    Voice(#[from] VoiceError),
     /// The file is not audio the bot can read.
     #[error("not audio the bot can read: {0}")]
     Unreadable(AudioError),
@@ -43,6 +48,30 @@ pub enum EngineError {
     Login(#[from] LoginError),
     #[error(transparent)]
     Store(#[from] StoreError),
+}
+
+/// Why a voice could not be made from a sample.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum VoiceError {
+    #[error("this speech model cannot make voices from samples")]
+    NoCloning,
+    #[error("this speech model needs to know what is said in the sample")]
+    NeedsTranscript,
+    #[error("the speech model {0:?} does not run")]
+    NoModel(String),
+    #[error("{0}")]
+    Failed(String),
+}
+
+impl From<InferError> for VoiceError {
+    fn from(e: InferError) -> Self {
+        match e {
+            InferError::Tts(pb_models_api::TtsError::NoCloning) => VoiceError::NoCloning,
+            InferError::Tts(pb_models_api::TtsError::NeedsTranscript) => VoiceError::NeedsTranscript,
+            InferError::NoModel(m) => VoiceError::NoModel(m),
+            other => VoiceError::Failed(other.to_string()),
+        }
+    }
 }
 
 /// Why speech or a clip could not be made ready to play.

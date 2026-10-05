@@ -85,6 +85,8 @@ pub struct Setup {
     pub gate: Option<Gate>,
     /// The language the classifier hears.
     pub heard: ClfLang,
+    /// The data of an earlier run (a restart), instead of a new directory.
+    pub dir: Option<tempfile::TempDir>,
 }
 
 impl Default for Setup {
@@ -94,6 +96,7 @@ impl Default for Setup {
             deny_speak: false,
             gate: None,
             heard: ClfLang::En,
+            dir: None,
         }
     }
 }
@@ -232,14 +235,22 @@ impl Rig {
             voice.deny_speak(GuildId(G), ChannelId(VOICE));
         }
 
-        let dir = tempfile::tempdir().unwrap();
+        let dir = setup.dir.unwrap_or_else(|| tempfile::tempdir().unwrap());
         let d = dir.path();
         let disk = DiskDelay::default();
         let log: Arc<dyn EventLog> = Arc::new(SlowLog {
             inner: JsonlLog::open(&d.join("log")).unwrap().0,
             delay: disk.clone(),
         });
-        let index = Arc::new(TursoIndex::open(&d.join("index/index.db"), log.clone()).await.unwrap());
+        // A new index every start: the one of an earlier start in this process stays open (it follows the log until
+        // the process ends). It is built from the log.
+        static STARTS: AtomicUsize = AtomicUsize::new(0);
+        let n = STARTS.fetch_add(1, Ordering::SeqCst);
+        let index = Arc::new(
+            TursoIndex::open(&d.join(format!("index/{n}.db")), log.clone())
+                .await
+                .unwrap(),
+        );
         let blobs = Arc::new(SlowBlobs {
             inner: FsBlobStore::open(&d.join("blobs"), &d.join("tmp")).await.unwrap(),
             delay: disk.clone(),
@@ -419,6 +430,12 @@ impl Rig {
             .reactions()
             .iter()
             .any(|(_, m, e)| *m == message && e == emoji)
+    }
+
+    /// Stops the bot and its models and keeps only its data (for a restart).
+    pub async fn stop_keeping_data(self) -> tempfile::TempDir {
+        self.stop().await;
+        self.dir
     }
 
     /// Stops the bot and its models.

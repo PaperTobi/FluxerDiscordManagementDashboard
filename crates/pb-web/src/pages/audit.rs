@@ -18,7 +18,16 @@ const GROUPS: &[(&str, &[&str])] = &[
     ("settings", &["settings.changed", "audit.imported"]),
     ("actions", &["action"]),
     ("jar", &["jar.reset", "jar.baseline"]),
-    ("library", &["clip.saved", "clip.removed", "blob.deleted"]),
+    (
+        "library",
+        &[
+            "clip.saved",
+            "clip.removed",
+            "voice.saved",
+            "voice.removed",
+            "blob.deleted",
+        ],
+    ),
     ("logins", &["login"]),
     ("messages", &["message.sent"]),
     ("bot", &["bot.started", "bot.stopped", "log.repaired", "import.done"]),
@@ -167,6 +176,19 @@ fn summary(loc: Locale, e: &Event) -> String {
             &[("by", actor(loc, &c.by).into()), ("name", c.name.clone().into())],
         ),
         Event::ClipRemoved(c) => text(loc, "audit-clip-removed", &[("by", actor(loc, &c.by).into())]),
+        Event::VoiceSaved(v) => text(
+            loc,
+            "audit-voice-saved",
+            &[("by", actor(loc, &v.by).into()), ("name", v.name.clone().into())],
+        ),
+        Event::VoiceRemoved(v) => text(
+            loc,
+            "audit-voice-removed",
+            &[
+                ("by", actor(loc, &v.by).into()),
+                ("voice", format!("{}:{}", v.model, v.id).into()),
+            ],
+        ),
         Event::Login(l) => text(loc, "audit-login", &[("name", l.name.clone().into())]),
         Event::MessageSent(m) => {
             let what = text(

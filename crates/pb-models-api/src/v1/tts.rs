@@ -73,12 +73,53 @@ pub enum TtsError {
     Failed(String),
     #[error("nothing to say")]
     Empty,
+    #[error("this speech model cannot make voices from samples")]
+    NoCloning,
+    #[error("this speech model needs to know what is said in the sample")]
+    NeedsTranscript,
+}
+
+/// A speech model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TtsInfo {
+    /// Its name in voice ids (`piper`, …).
+    pub model: String,
+    /// Whether it makes voices from samples.
+    pub cloning: bool,
+}
+
+/// A voice made from a sample: the model's own data (codes, embeddings, what the sample says, …), kept by the bot and
+/// given back to the model at every start.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClonedVoice {
+    pub data: Vec<u8>,
 }
 
 /// Text-to-speech engine. Owned by one thread.
 pub trait TtsEngine: Send + 'static {
+    fn info(&self) -> TtsInfo;
     /// Voices currently available.
     fn voices(&self) -> Vec<VoiceInfo>;
     /// Speaks `text` with `voice`.
     fn synthesize(&mut self, voice: &str, text: &str, opts: &SpeakOpts) -> Result<Speech, TtsError>;
+    /// Makes a voice from `sample` (mono, in [-1, 1], at `sample_rate`) and what is said in it, when known.
+    fn clone_voice(
+        &mut self,
+        sample: &[f32],
+        sample_rate: u32,
+        transcript: Option<&str>,
+    ) -> Result<ClonedVoice, TtsError> {
+        let _ = (sample, sample_rate, transcript);
+        Err(TtsError::NoCloning)
+    }
+    /// Adds a voice made by [`TtsEngine::clone_voice`] (now or at an earlier start) as `id`.
+    fn add_voice(&mut self, id: &str, voice: &ClonedVoice) -> Result<VoiceInfo, TtsError> {
+        let _ = (id, voice);
+        Err(TtsError::NoCloning)
+    }
+    /// Removes a voice added with [`TtsEngine::add_voice`].
+    fn remove_voice(&mut self, id: &str) -> Result<(), TtsError> {
+        let _ = id;
+        Err(TtsError::NoCloning)
+    }
 }

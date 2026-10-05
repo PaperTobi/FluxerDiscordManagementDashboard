@@ -314,6 +314,8 @@ pub enum BlobRole {
     Render,
     /// A recorded sentence (16 kHz WAV).
     Recording,
+    /// A speech model's data for a voice made from a sample.
+    Voice,
 }
 
 /// `blob.added` v1.
@@ -372,6 +374,50 @@ pub type ClipSaved = ClipRecord;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClipRemoved {
     pub render: BlobHash,
+    pub by: Actor,
+}
+
+/// A voice in the voice library: made by a speech model from a sample, usable wherever voices are chosen (as
+/// `<model>:<id>`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoiceRecord {
+    pub model: String,
+    /// Made from the name when the voice was added; it never changes.
+    pub id: String,
+    pub name: String,
+    /// The sample as it arrived.
+    pub sample: BlobHash,
+    /// The model's data for the voice.
+    pub data: BlobHash,
+    /// What is said in the sample.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<String>,
+    /// Who added the voice: they and the owner may rename or remove it.
+    pub added_by: Actor,
+    /// Who saved this version.
+    pub by: Actor,
+}
+
+impl VoiceRecord {
+    /// `<model>:<id>`.
+    pub fn voice_id(&self) -> String {
+        format!("{}:{}", self.model, self.id)
+    }
+
+    /// Whether `user` may rename or remove this voice.
+    pub fn editable_by(&self, user: UserId, owner: bool) -> bool {
+        owner || self.added_by.user == Some(user)
+    }
+}
+
+/// `voice.saved` v1: a voice added to the library or renamed.
+pub type VoiceSaved = VoiceRecord;
+
+/// `voice.removed` v1.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoiceRemoved {
+    pub model: String,
+    pub id: String,
     pub by: Actor,
 }
 
@@ -481,6 +527,8 @@ pub enum Event {
     BlobDeleted(BlobDeleted),
     ClipSaved(Box<ClipSaved>),
     ClipRemoved(ClipRemoved),
+    VoiceSaved(Box<VoiceSaved>),
+    VoiceRemoved(VoiceRemoved),
     PersonSeen(PersonSeen),
     CommunitySeen(CommunitySeen),
     MessageSent(MessageSent),
@@ -602,6 +650,8 @@ kinds! {
     BlobDeleted(BlobDeleted) = "blob.deleted" v 1;
     ClipSaved(ClipSaved) = "clip.saved" v 1 boxed x;
     ClipRemoved(ClipRemoved) = "clip.removed" v 1;
+    VoiceSaved(VoiceSaved) = "voice.saved" v 1 boxed x;
+    VoiceRemoved(VoiceRemoved) = "voice.removed" v 1;
     PersonSeen(PersonSeen) = "person.seen" v 1;
     CommunitySeen(CommunitySeen) = "community.seen" v 1;
     MessageSent(MessageSent) = "message.sent" v 1;

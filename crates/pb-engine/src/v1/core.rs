@@ -127,6 +127,8 @@ pub struct Core {
     pub live: Live,
     /// The clip library (removed clips left out).
     pub(super) clips: Published<BTreeMap<BlobHash, ClipRecord>>,
+    /// The voice library, by model and id (removed voices left out).
+    pub(super) voices: Published<BTreeMap<(String, String), pb_store_api::VoiceRecord>>,
     /// Rooms the bot is in.
     pub(super) rooms: Published<BTreeMap<Chan, RoomHandle>>,
     /// Running number of each person's sentences (for the conveyor).

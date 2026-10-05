@@ -189,6 +189,28 @@ pub async fn apply(db: &Db, stored: &StoredEvent) -> Result<(), StoreError> {
             )
             .await?;
         }
+        Event::VoiceSaved(v) => {
+            // A rename keeps the time the voice was added.
+            db.exec(
+                "INSERT INTO voices (model, id, seq, added_ms, removed, data) VALUES (?1, ?2, ?3, ?4, 0, ?5) \
+                 ON CONFLICT (model, id) DO UPDATE SET seq = excluded.seq, removed = 0, data = excluded.data",
+                vec![
+                    v.model.clone().into(),
+                    v.id.clone().into(),
+                    seq.into(),
+                    ts.into(),
+                    json(&*v).into(),
+                ],
+            )
+            .await?;
+        }
+        Event::VoiceRemoved(v) => {
+            db.exec(
+                "UPDATE voices SET removed = 1 WHERE model = ?1 AND id = ?2",
+                vec![v.model.clone().into(), v.id.clone().into()],
+            )
+            .await?;
+        }
         Event::PersonSeen(p) => {
             db.exec(
                 "INSERT INTO people (user, username, display_name, avatar) VALUES (?1, ?2, ?3, ?4) \

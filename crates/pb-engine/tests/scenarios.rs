@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use common::*;
 use pb_domain::{ActionKind, ActionOutcome, Audience, ChannelId, ClfLang, GuildId, Label, PlayPurpose, Scope, UserId};
-use pb_engine::{Connection, EngineError, SayWhat};
+use pb_engine::{Connection, EngineError, SayWhat, VoiceError};
 use pb_settings::SettingKey;
 use pb_store_api::{
     Actor, CutCause, DecisionRecord, Event, Index, MessagePurpose, PlayOutcome, SentenceRecord, Stopped, Via,
@@ -452,6 +452,156 @@ async fn say_now_speaks_in_the_call() {
         Err(EngineError::NotInCall)
     );
     rig.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_voice_made_from_a_sample_speaks_its_kind_of_line_until_removed() {
+    let rig = Rig::start(Setup::default()).await;
+    let _mic = rig.alice_joins().await;
+    let by = Actor {
+        user: Some(UserId(OWNER)),
+        name: Some("The Owner".into()),
+        via: Via::Web,
+    };
+    // A sample at 300 Hz: the beep model's voice made from it beeps at 300 Hz.
+    let staged = rig.engine.upload_dir().join("sample.wav");
+    std::fs::write(
+        &staged,
+        pb_audio::wav16(&tone(300.0, 1.5, LISTEN_RATE, 0.3), LISTEN_RATE),
+    )
+    .unwrap();
+    let rec = rig
+        .engine
+        .add_voice(
+            staged,
+            Some("wav".into()),
+            "Low one".into(),
+            "beep".into(),
+            None,
+            by.clone(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rec.voice_id(), "beep:low-one");
+    assert!(rig.engine.voices().iter().any(|v| v.full_id() == "beep:low-one"));
+    assert_eq!(rig.engine.library_voices(), std::slice::from_ref(&rec));
+    rig.wait_event(
+        "the voice is recorded",
+        5,
+        |e| matches!(e, Event::VoiceSaved(v) if v.id == "low-one"),
+    )
+    .await;
+    // Cloning needs a model that can.
+    let staged = rig.engine.upload_dir().join("again.wav");
+    std::fs::write(
+        &staged,
+        pb_audio::wav16(&tone(300.0, 1.0, LISTEN_RATE, 0.3), LISTEN_RATE),
+    )
+    .unwrap();
+    assert_eq!(
+        rig.engine
+            .add_voice(staged, Some("wav".into()), "X".into(), "piper".into(), None, by.clone())
+            .await,
+        Err(EngineError::Voice(VoiceError::NoModel("piper".into())))
+    );
+
+    // "Say now" lines speak in it; warnings keep the voice for their language.
+    rig.engine
+        .settings()
+        .change(by.clone(), |t| {
+            Ok(t.set(
+                Scope::Global,
+                SettingKey::LineVoices,
+                json!({"say": "beep:low-one"}),
+                true,
+            )?
+            .into_iter()
+            .collect())
+        })
+        .await
+        .unwrap();
+    let say = |text: &'static str| SayWhat::Text {
+        text: text.into(),
+        lang: None,
+    };
+    rig.engine
+        .say_to(GuildId(G), UserId(ALICE), say("In the new voice."), by.clone())
+        .await
+        .unwrap();
+    assert!(
+        rig.tts
+            .log()
+            .iter()
+            .any(|r| r.voice == "low-one" && r.text == "In the new voice.")
+    );
+
+    // A new name keeps the id; once removed, the line speaks in the voice for its language again.
+    let renamed = rig
+        .engine
+        .rename_voice("beep:low-one", "Deep".into(), by.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        (renamed.voice_id().as_str(), renamed.name.as_str()),
+        ("beep:low-one", "Deep")
+    );
+    rig.engine.remove_voice("beep:low-one", by.clone()).await.unwrap();
+    assert!(rig.engine.library_voices().is_empty());
+    assert!(!rig.engine.voices().iter().any(|v| v.full_id() == "beep:low-one"));
+    rig.engine
+        .say_to(GuildId(G), UserId(ALICE), say("Back to normal."), by.clone())
+        .await
+        .unwrap();
+    assert!(
+        rig.tts
+            .log()
+            .iter()
+            .any(|r| r.voice == BeepTts::EN && r.text == "Back to normal.")
+    );
+    assert_eq!(
+        rig.engine.remove_voice("beep:low-one", by).await,
+        Err(EngineError::NoSuchVoice)
+    );
+    rig.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_voice_library_is_back_after_a_restart() {
+    let rig = Rig::start(Setup::default()).await;
+    let by = Actor {
+        user: Some(UserId(OWNER)),
+        name: None,
+        via: Via::Web,
+    };
+    let staged = rig.engine.upload_dir().join("sample.wav");
+    std::fs::write(
+        &staged,
+        pb_audio::wav16(&tone(300.0, 1.0, LISTEN_RATE, 0.3), LISTEN_RATE),
+    )
+    .unwrap();
+    let rec = rig
+        .engine
+        .add_voice(
+            staged,
+            Some("wav".into()),
+            "Anna".into(),
+            "beep".into(),
+            Some("Hi.".into()),
+            by,
+        )
+        .await
+        .unwrap();
+    let again = Rig::start(Setup {
+        dir: Some(rig.stop_keeping_data().await),
+        ..Setup::default()
+    })
+    .await;
+    assert_eq!(again.engine.library_voices(), [rec]);
+    wait("the voice is given to its model again", 10, || {
+        again.engine.voices().iter().any(|v| v.full_id() == "beep:anna")
+    })
+    .await;
+    again.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
