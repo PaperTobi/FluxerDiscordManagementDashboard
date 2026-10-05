@@ -38,6 +38,7 @@ database.
 | (new) burn-cubecl, cubecl | — | 0.21.0, 0.10.0, in pb-classifier-roblox's `gpu` feature only | The classifier's own GPU kernels (`src/gpu.rs`: linear layers, layer normalisation, self-attention), which Burn's public tensor API cannot express. Same organisation (tracel-ai) and the same releases burn-wgpu already brings in (2026-09-22; burn 0.22 and cubecl 0.11 are still pre-releases), so the tree gains no crate. Confined to the classifier in `xtask/layers.toml`. |
 | rten-gemm (through rten) | 0.27.0 from crates.io | 0.27.0 patched in `third_party/rten-gemm` | rten packed the input of every convolution element by element; the patch copies whole rows where a unit-stride convolution reads consecutive samples (results bit for bit the same). The Piper voices synthesise about a third faster (third_party/rten-gemm/PATCHES.md). Drop it once rten-gemm ships an equivalent change (candidate upstream contribution for rten#1444). |
 | (new in pb-wordlist) unicode-normalization | — | 0.1.25 | NFKC for word lists (full-width and compatibility forms read as plain letters). By the unicode-rs organisation; already used by pb-tts-piper, so nothing new is compiled. |
+| (new) utoipa | — | 6.0.0 (2026-09-22) | The API's OpenAPI 3.1 document, from the same types the routes answer with (pb-api-proto's `openapi` feature, pb-api). Pure Rust, by its author since 2021, releases through 2026. |
 
 ### Kept, with low release activity
 

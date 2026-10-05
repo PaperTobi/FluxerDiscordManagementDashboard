@@ -300,11 +300,13 @@ pub fn router(st: WebState) -> Router {
         .route("/system/reconnect", post(super::system::reconnect))
         .route("/system/reload", post(super::system::reload))
         .route("/system/retry-log", post(super::system::retry_log))
+        .route("/system/api/create", post(super::system::api_create))
+        .route("/system/api/revoke", post(super::system::api_revoke))
         .route("/media/clip/{hash}", get(super::media::clip))
         .route("/media/sentence/{id}", get(super::media::sentence))
         .route("/media/preview", get(super::media::preview))
         .route("/api/members", get(super::media::members))
-        .nest(pb_api_proto::v1::BASE, st.api.router())
+        .nest_service(pb_api_proto::v1::BASE, st.api.router())
         .nest(
             "/pkg",
             Router::new()

@@ -243,6 +243,18 @@ which). Natively that needs the Vulkan driver of the GPU (Mesa's RADV for AMD, A
 has Mesa's drivers; give the container the GPU with the drop-in shown in `deploy/quadlet/profanity-watch.container`
 (or `--device /dev/dri --group-add keep-groups` with `podman run`).
 
+## API
+
+Other programs (a leaderboard website, a dashboard) read what the bot knows through its API at `/api/v1`. The bot
+owner makes a token under *System → API*: a name, what it may read (leaderboards, violations, details, statistics)
+and optionally which communities. The token is shown once; send it as `Authorization: Bearer pbk_…`. The API is
+described by `/api/v1/openapi.json` (OpenAPI 3.1):
+
+```bash
+curl -H "Authorization: Bearer pbk_…" http://<bot>:8790/api/v1/communities
+curl -H "Authorization: Bearer pbk_…" http://<bot>:8790/api/v1/communities/<id>/leaderboard
+```
+
 ## HTTPS
 
 Browsers record from the microphone only on secure pages, and logins are safer over HTTPS. Give the bot a certificate

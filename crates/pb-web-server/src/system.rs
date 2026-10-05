@@ -86,3 +86,46 @@ pub async fn reload(State(st): State<WebState>, headers: HeaderMap, Form(f): For
         Err(e) => st.done(&s, &f, false, super::forms::change_error(s.locale, &e)),
     }
 }
+
+/// `POST /system/api/create`: a new API token, shown once in the notice.
+pub async fn api_create(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
+    let s = match st.fresh_owner(&headers, &f) {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    let loc = s.locale;
+    let name = field(&f, "name").unwrap_or_default().trim().to_owned();
+    let scopes: Vec<pb_api_proto::v1::Scope> = super::forms::fields(&f, "scope")
+        .into_iter()
+        .filter_map(pb_api_proto::v1::Scope::parse)
+        .collect();
+    let communities: Vec<pb_domain::GuildId> = super::forms::fields(&f, "community")
+        .into_iter()
+        .filter_map(|g| g.parse().ok())
+        .collect();
+    if name.is_empty() || scopes.is_empty() {
+        return st.done(&s, &f, false, text(loc, "ui-api-incomplete", &[]));
+    }
+    match st
+        .api
+        .create_token(name, &scopes, communities, Some(s.login.record.user))
+        .await
+    {
+        Ok((_, token)) => st.done(&s, &f, true, text(loc, "ui-api-created", &[("token", token.into())])),
+        Err(e) => st.done(&s, &f, false, pb_web::fmt::store_error(loc, &e)),
+    }
+}
+
+/// `POST /system/api/revoke`
+pub async fn api_revoke(State(st): State<WebState>, headers: HeaderMap, Form(f): Form<Fields>) -> Response {
+    let s = match st.owner(&headers, &f) {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    let id = field(&f, "id").unwrap_or_default();
+    match st.api.revoke_token(id).await {
+        Ok(true) => st.done(&s, &f, true, text(s.locale, "ui-api-revoked", &[])),
+        Ok(false) => st.done(&s, &f, false, text(s.locale, "form-expired", &[])),
+        Err(e) => st.done(&s, &f, false, pb_web::fmt::store_error(s.locale, &e)),
+    }
+}

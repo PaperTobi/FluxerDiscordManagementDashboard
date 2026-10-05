@@ -1,6 +1,7 @@
 # 0009 — A documented read API, webhooks, and a leaderboard that runs elsewhere
 
-Date: 2026-10-05. Status: planned (the user chose "webhooks / API" in the quiz of 2026-10-04: "so the leaderboard can be
+Date: 2026-10-05. Status: step 1 built (tokens, the read routes, the OpenAPI document, the owner's token page); the
+rest in the order below (the user chose "webhooks / API" in the quiz of 2026-10-04: "so the leaderboard can be
 hosted somewhere else … everything should be separated so it has proper apis that could just swap something else in
 that uses the same apis, proper api docs … all in rust").
 

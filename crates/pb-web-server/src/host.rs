@@ -40,6 +40,22 @@ impl Host for PageHost {
         Some(self.st.engine.endpoints()?.invite_url(client, permissions))
     }
 
+    fn api_tokens(&self) -> Vec<pb_web::app::ApiTokenView> {
+        self.st
+            .api
+            .tokens()
+            .into_iter()
+            .map(|t| pb_web::app::ApiTokenView {
+                id: t.id,
+                name: t.name,
+                scopes: t.scopes,
+                communities: t.communities,
+                created_ms: t.created.as_millisecond(),
+                last_used_ms: t.last_used.map(|t| t.as_millisecond()),
+            })
+            .collect()
+    }
+
     fn secrets_from_env(&self) -> (bool, bool) {
         (self.st.cfg.token_from_env, self.st.cfg.client_secret_from_env)
     }

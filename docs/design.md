@@ -25,11 +25,11 @@ Layers (enforced by `cargo xtask deps`):
 
 | Layer | Crates | May depend on | Must not depend on |
 |---|---|---|---|
-| L0 pure core (sync, no I/O, wasm-safe) | pb-domain, pb-settings, pb-segment, pb-policy, pb-voicelines, pb-commands, pb-i18n, pb-live-proto, pb-wordlist | each other (DAG), serde, jiff, toml_edit, fluent, thiserror | tokio, futures, `async fn`, axum, burn, livekit, rten, turso |
+| L0 pure core (sync, no I/O, wasm-safe) | pb-domain, pb-settings, pb-segment, pb-policy, pb-voicelines, pb-commands, pb-i18n, pb-live-proto, pb-wordlist, pb-api-proto | each other (DAG), serde, jiff, toml_edit, fluent, thiserror | tokio, futures, `async fn`, axum, burn, livekit, rten, turso |
 | L1 interfaces | pb-models-api, pb-fluxer-api, pb-voice-api, pb-store-api | L0, `tokio::sync`, async-trait | concrete adapters |
 | L2 adapters / compute | pb-audio, pb-vad-silero, pb-classifier-roblox, pb-tts-piper, pb-infer, pb-fluxer, pb-voice-livekit, pb-store, pb-import, pb-weights | L0, L1, own third-party crates | pb-engine, web crates |
 | L3 application | pb-live, pb-engine | L0, L1, pb-infer, pb-audio | concrete adapters (pb-fluxer, pb-voice-livekit, pb-store) |
-| L4 delivery | pb-web (`ssr`/`hydrate`), pb-web-server | `hydrate`: L0 only; `ssr`/server: L3 handles + L1 | concrete adapters |
+| L4 delivery | pb-web (`ssr`/`hydrate`), pb-web-server, pb-api | `hydrate`: L0 only; `ssr`/server: L3 handles + L1 | concrete adapters |
 | L5 binaries and tooling | pb, xtask, pb-testkit (dev), pb-fluxer-fake (dev), tools/pb-fetch | everything | — |
 
 Extra rules: `livekit` only in pb-voice-livekit; `burn` only in pb-classifier-roblox; `rten` and `espeak-ng` only in
@@ -42,6 +42,7 @@ pb-import; only `pb` wires concrete implementations.
 | pb-settings | typed schema (one declaration), value newtypes, validation, layered resolution with source, TOML parse/edit (toml_edit, never `fmt()`), migrations, generated `SettingKey`, docs generator |
 | pb-segment | `FrameAssembler` (512-sample frames), `PcmRing`, hysteresis `Segmenter` (exact port of `vendor/roblox_vc/app/segmenter.py`), `EchoGuard`, 30 s windowing |
 | pb-policy | `Decider` (strikes, observe-only, late decisions, escalation step), `FollowMachine` (port of `follow.py`), desired-channel policy, action planning |
+| pb-api-proto | the read API's v1 types (what a client sees), scopes, webhook event kinds and signatures |
 | pb-wordlist | `WordList`: listed words and phrases in a text despite case, look-alikes, invisible, stretched and spaced-out letters |
 | pb-voicelines | line catalogue, slots, resolution, templates, `UtterancePlan`, no-repeat picker, next-utterance prediction |
 | pb-commands | `!pb` parser and permission levels → `CommandPlan` |
@@ -65,6 +66,7 @@ pb-import; only `pb` wires concrete implementations.
 | pb-engine | supervisor, Fluxer session lifecycle, voice world, follow driver, room/track/playback tasks, moderation actor, reports, commands, pre-render, `EngineApi` v1 |
 | pb-web | Leptos app (routes, SSR components, islands, server functions, stylance CSS) |
 | pb-web-server | axum assembly: host allowlist, CsrfLayer, sessions, OAuth, uploads, media routes, live websocket |
+| pb-api | the read API at `/api/v1`: tokens with scopes (`api.json`), the read routes, the OpenAPI document |
 | pb | clap binary: `run`, `fetch-weights`, `import`, `store verify|rebuild-index|compact`, `settings check|docs`, `setup-code`, `health`, `doctor`, `bench`, `tls generate`, `cache prune` |
 | xtask | CI gates: zero-C, shipped JS, deps rules, tokei, golden runner, container smoke |
 | pb-testkit | local livekit-server, HS256 token minting, scripted participants, golden loaders, browser harness |

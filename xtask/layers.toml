@@ -1,12 +1,12 @@
 # Architecture rules checked by `cargo xtask deps` (see docs/design.md §1).
 
 [layers]
-L0 = ["pb-domain", "pb-settings", "pb-segment", "pb-policy", "pb-voicelines", "pb-commands", "pb-i18n", "pb-live-proto", "pb-wordlist"]
+L0 = ["pb-domain", "pb-settings", "pb-segment", "pb-policy", "pb-voicelines", "pb-commands", "pb-i18n", "pb-live-proto", "pb-wordlist", "pb-api-proto"]
 L1 = ["pb-models-api", "pb-fluxer-api", "pb-voice-api", "pb-store-api"]
 L2 = ["pb-tls", "pb-audio", "pb-espeak", "pb-vad-silero", "pb-classifier-roblox", "pb-tts-piper", "pb-infer", "pb-fluxer", "pb-voice-livekit",
       "pb-store", "pb-import", "pb-weights"]
 L3 = ["pb-live", "pb-engine"]
-L4 = ["pb-web", "pb-web-server"]
+L4 = ["pb-web", "pb-web-server", "pb-api"]
 L5 = ["pb", "pb-testkit", "pb-fluxer-fake", "pb-devstack", "xtask"]
 
 # Which workspace crates a crate in each layer may depend on (normal and build dependencies). Entries are layer names
@@ -41,7 +41,7 @@ espeak-ng = ["pb-tts-piper"]  # dev-only parity tracking
 pb-espeak = ["pb-tts-piper", "pb-devstack"]  # the dev stack only reads where the build put espeak-ng's data
 turso = ["pb-store", "pb-import"]
 leptos = ["pb-web", "pb-web-server"]
-axum = ["pb-web", "pb-web-server", "pb-fluxer-fake", "pb-testkit"]
+axum = ["pb-web", "pb-web-server", "pb-api", "pb-fluxer-fake", "pb-testkit"]
 
 # Crates that L0 (pure, synchronous, wasm-safe) must never use directly.
 [l0_forbidden]

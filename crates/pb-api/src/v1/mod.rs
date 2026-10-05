@@ -27,6 +27,8 @@ pub struct Api {
     file: Arc<dyn ApiFile>,
     config: RwLock<ApiConfig>,
     write: tokio::sync::Mutex<()>,
+    /// When each token was last used (written to the file with the next change).
+    used: std::sync::Mutex<std::collections::HashMap<String, jiff::Timestamp>>,
 }
 
 impl std::fmt::Debug for Api {
@@ -109,7 +111,11 @@ impl IntoResponse for Answer {
 }
 
 impl Api {
-    pub async fn load(engine: Arc<Engine>, index: Arc<dyn Index>, file: Arc<dyn ApiFile>) -> Result<Arc<Api>, StoreError> {
+    pub async fn load(
+        engine: Arc<Engine>,
+        index: Arc<dyn Index>,
+        file: Arc<dyn ApiFile>,
+    ) -> Result<Arc<Api>, StoreError> {
         let config = file.load().await?;
         Ok(Arc::new(Api {
             engine,
@@ -117,6 +123,7 @@ impl Api {
             file,
             config: RwLock::new(config),
             write: tokio::sync::Mutex::new(()),
+            used: std::sync::Mutex::default(),
         }))
     }
 
@@ -124,9 +131,19 @@ impl Api {
         self.config.read().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    fn used(&self) -> std::sync::MutexGuard<'_, std::collections::HashMap<String, jiff::Timestamp>> {
+        self.used.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     async fn change(&self, f: impl FnOnce(&mut ApiConfig)) -> Result<(), StoreError> {
         let _w = self.write.lock().await;
         let mut next = self.config().clone();
+        let used = self.used().clone();
+        for t in &mut next.tokens {
+            if let Some(at) = used.get(&t.id) {
+                t.last_used = Some(*at);
+            }
+        }
         f(&mut next);
         self.file.save(&next).await?;
         *self.config.write().unwrap_or_else(std::sync::PoisonError::into_inner) = next;
@@ -135,7 +152,14 @@ impl Api {
 
     /// The tokens (their hashes stay inside).
     pub fn tokens(&self) -> Vec<ApiToken> {
-        self.config().tokens.clone()
+        let used = self.used().clone();
+        let mut out = self.config().tokens.clone();
+        for t in &mut out {
+            if let Some(at) = used.get(&t.id) {
+                t.last_used = Some(*at);
+            }
+        }
+        out
     }
 
     /// Makes a token; the token itself is returned once and only its hash is kept.
@@ -177,7 +201,13 @@ impl Api {
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "))
             .map(str::trim)
-            .ok_or_else(|| Answer::error(StatusCode::UNAUTHORIZED, "unauthorized", "send Authorization: Bearer <token>"))?;
+            .ok_or_else(|| {
+                Answer::error(
+                    StatusCode::UNAUTHORIZED,
+                    "unauthorized",
+                    "send Authorization: Bearer <token>",
+                )
+            })?;
         let h = hash(token);
         let config = self.config();
         let t = config
@@ -185,6 +215,7 @@ impl Api {
             .iter()
             .find(|t| t.hash == h)
             .ok_or_else(|| Answer::error(StatusCode::UNAUTHORIZED, "unauthorized", "unknown token"))?;
+        self.used().insert(t.id.clone(), jiff::Timestamp::now());
         Ok(Caller {
             scopes: t.scopes.iter().filter_map(|s| Scope::parse(s)).collect(),
             communities: t.communities.clone(),
@@ -244,6 +275,7 @@ impl Api {
     )),
     modifiers(&BearerAuth)
 )]
+#[derive(Debug)]
 pub struct ApiDoc;
 
 struct BearerAuth;
@@ -279,7 +311,11 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 async fn communities(State(api): State<Arc<Api>>, headers: HeaderMap) -> Result<Json<Vec<proto::Community>>, Answer> {
     let caller = api.caller(&headers)?;
     if !Scope::ALL.iter().any(|s| caller.scopes.contains(s)) {
-        return Err(Answer::error(StatusCode::FORBIDDEN, "forbidden", "this token may read nothing"));
+        return Err(Answer::error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "this token may read nothing",
+        ));
     }
     let mut out: Vec<proto::Community> = api
         .engine
@@ -289,7 +325,7 @@ async fn communities(State(api): State<Arc<Api>>, headers: HeaderMap) -> Result<
         .filter(|g| caller.sees(*g))
         .map(|g| api.community(g))
         .collect();
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|c| c.name.to_lowercase());
     Ok(Json(out))
 }
 
@@ -307,7 +343,7 @@ async fn leaderboard(
     let g = api.visible(&caller, &g)?;
     let mut rows = api.index.jar(Some(g)).await.map_err(|e| Answer::store(&e))?;
     rows.retain(|r| r.count > 0);
-    rows.sort_by(|a, b| b.count.cmp(&a.count));
+    rows.sort_by_key(|r| std::cmp::Reverse(r.count));
     let mut places = Vec::with_capacity(rows.len());
     let mut rank = 0u32;
     let mut last = None;
@@ -362,7 +398,11 @@ async fn violations(
     let cursor = match q.cursor.as_deref() {
         None | Some("") => None,
         Some(c) => Some(Cursor(c.parse().map_err(|_| {
-            Answer::error(StatusCode::BAD_REQUEST, "bad_request", "cursor is the next of an earlier page")
+            Answer::error(
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+                "cursor is the next of an earlier page",
+            )
         })?)),
     };
     // Both lists are ordered by the event log's numbers: merged, newest first, a page at a time.
@@ -381,7 +421,11 @@ async fn violations(
     let mut chat_cursor = cursor;
     // Chat pages hold strikes too: read on until there are enough violations or none are left.
     loop {
-        let page = api.index.chat(Some(g), chat_cursor, limit).await.map_err(|e| Answer::store(&e))?;
+        let page = api
+            .index
+            .chat(Some(g), chat_cursor, limit)
+            .await
+            .map_err(|e| Answer::store(&e))?;
         chat_rows.extend(page.items.into_iter().filter(|c| c.record.decision.is_violation()));
         match page.next {
             Some(n) if chat_rows.len() < limit as usize => chat_cursor = Some(n),
@@ -391,9 +435,13 @@ async fn violations(
     let mut merged: Vec<(u64, proto::Violation)> = sentences
         .iter()
         .filter_map(|s| from_sentence(&api, s).map(|v| (s.seq, v)))
-        .chain(chat_rows.iter().filter_map(|c| from_chat(&api, c, details).map(|v| (c.seq, v))))
+        .chain(
+            chat_rows
+                .iter()
+                .filter_map(|c| from_chat(&api, c, details).map(|v| (c.seq, v))),
+        )
         .collect();
-    merged.sort_by(|a, b| b.0.cmp(&a.0));
+    merged.sort_by_key(|(seq, _)| std::cmp::Reverse(*seq));
     merged.truncate(limit as usize);
     // A full page may have more after it (the next one is older than its last).
     let next = (merged.len() == limit as usize)

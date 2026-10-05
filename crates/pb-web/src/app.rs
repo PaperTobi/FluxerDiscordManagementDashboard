@@ -47,6 +47,21 @@ pub trait Host: Send + Sync {
     fn invite_url(&self, permissions: u64) -> Option<String>;
     /// Which secrets come from the bot's environment (bot token, client secret): they cannot be replaced here.
     fn secrets_from_env(&self) -> (bool, bool);
+    /// The read API's tokens (never the tokens themselves).
+    fn api_tokens(&self) -> Vec<ApiTokenView>;
+}
+
+/// An API token as the owner's page lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApiTokenView {
+    pub id: String,
+    pub name: String,
+    pub scopes: Vec<String>,
+    /// Community ids it is limited to (empty: all).
+    pub communities: Vec<GuildId>,
+    /// Milliseconds since 1970.
+    pub created_ms: i64,
+    pub last_used_ms: Option<i64>,
 }
 
 /// A message shown once at the top of the next page.
@@ -247,6 +262,7 @@ pub fn App() -> impl IntoView {
                 <Route path=StaticSegment("reports") view=|| view! { <Page><pages::reports::ReportsPage/></Page> }/>
                 <Route path=StaticSegment("audit") view=|| view! { <Page><pages::audit::AuditPage/></Page> }/>
                 <Route path=StaticSegment("system") view=|| view! { <Page><pages::system::SystemPage/></Page> }/>
+                <Route path=(StaticSegment("system"), StaticSegment("api")) view=|| view! { <Page><pages::api::ApiPage/></Page> }/>
                 <Route path=StaticSegment("settings") view=|| view! { <Page><pages::settings::GlobalSettingsPage/></Page> }/>
                 <Route path=(StaticSegment("settings"), ParamSegment("section")) view=|| view! { <Page><pages::settings::GlobalSettingsPage/></Page> }/>
                 <Route path=(StaticSegment("c"), ParamSegment("g"), StaticSegment("settings"), ParamSegment("section")) view=|| view! { <Page><pages::community::CommunityPage/></Page> }/>

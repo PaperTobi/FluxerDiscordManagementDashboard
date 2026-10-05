@@ -122,6 +122,10 @@ pub fn SystemPage() -> impl IntoView {
         </section>
         <Voices/>
         <section class="card">
+            <h2>{t("ui-api")}</h2>
+            <p class="muted">{t("ui-api-help")} " " <a href="/system/api">{t("ui-api-tokens")}</a></p>
+        </section>
+        <section class="card">
             <p>{t("ui-settings-moved")} " " <a href="/settings">{t("ui-settings-global-title")}</a></p>
         </section>
         <SectionCard scope=Scope::Global section=pb_settings::Section::System back="/system".to_string()/>
